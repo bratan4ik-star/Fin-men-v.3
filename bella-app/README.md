@@ -7,7 +7,21 @@
 Також: світла/темна тема, перемикач валюти, «приховати суми», скасування останньої зміни (до 20 кроків), збереження на пристрої.
 
 ## Збірка
-Потрібні JDK 17 і Android SDK 34. Відкрийте папку в Android Studio або: `gradle :app:assembleDebug` (Gradle wrapper не додано, згенеруйте `gradle wrapper`).
+Потрібні JDK 17 і Android SDK 34 (шлях до SDK: `ANDROID_HOME` або `sdk.dir` у `local.properties`). Відкрийте папку в Android Studio або з терміналу:
+
+```
+./gradlew :app:testDebugUnitTest   # юніт-тести
+./gradlew :app:assembleDebug       # debug APK  -> app/build/outputs/apk/debug/
+./gradlew :app:assembleRelease     # release APK -> app/build/outputs/apk/release/
+```
+
+### Підпис release
+Без налаштувань `assembleRelease` дає непідписаний `app-release-unsigned.apk`. Щоб Gradle підписував сам:
+
+1. Створіть ключ (один раз; **збережіть файл і паролі**, без них не оновити застосунок поверх встановленого):
+   `keytool -genkeypair -keystore bella-release.jks -alias bella -keyalg RSA -keysize 2048 -validity 10000`
+2. Скопіюйте `keystore.properties.example` у `keystore.properties` і заповніть (файл, `*.jks` та `*.keystore` ігноруються git). Або задайте змінні середовища `BELLA_KEYSTORE`, `BELLA_STORE_PASSWORD`, `BELLA_KEY_ALIAS`, `BELLA_KEY_PASSWORD` (зручно для CI).
+3. `./gradlew :app:assembleRelease` дасть підписаний APK.
 
 ## Відхилення від прототипу
 - Phosphor-іконки замінено на Material Icons (extended); шрифт Inter не вбудовано, використовується системний.
@@ -15,4 +29,3 @@
 - Відбиток пальця працює через системний `BiometricPrompt` (у прототипі імітувався).
 - Курси валют, «сьогодні» (2026-11-02) і sparkline на головній закладені як у прототипі (статичні).
 - Особисті дані карток (`ov` у прототипі) у код не перенесено; оверрайди рахунків накопичуються при редагуванні.
-- Код не збирався і не запускався в цьому середовищі (немає Android SDK), перевірте компіляцію першою.

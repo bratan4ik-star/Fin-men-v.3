@@ -2,3 +2,8 @@
 .gradle/
 build/
 local.properties
+
+# Підпис release: ніколи не комітити
+keystore.properties
+*.jks
+*.keystore
