@@ -1,0 +1,96 @@
+package ua.bella.finance
+
+import kotlinx.serialization.Serializable
+import java.util.Locale
+
+/** Курси та символи закладені в прототипі (не живі). */
+val RATES = mapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0)
+val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł")
+val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN")
+const val TODAY = "2026-11-02"
+const val CUR_MONTH = "2026-11"
+
+val MONTH_NAMES = listOf("Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень")
+
+/** Групи інвестицій і їхні кольори. */
+val GROUPS = listOf("ОВДП" to 0xFF9184D9, "Депозити" to 0xFF60A5FA, "ETF" to 0xFFFBBF24, "Крипто" to 0xFFC084FC)
+val LIMITS = linkedMapOf("Харчування" to 12000.0, "Житло" to 20000.0, "Транспорт" to 3000.0, "Розваги" to 2000.0, "Здоров'я" to 1500.0, "Інше" to 0.0)
+val CATEGORIES = listOf("Перекази", "Надходження", "Зняття готівки", "Послуги", "Поповнення мобільного", "Побутова техніка", "Харчування", "Житло", "Транспорт", "Розваги", "Здоров'я", "Зарплата", "Інше")
+
+@Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false)
+/** amt завжди в гривнях. type: income | expense | transfer. key використовується для пошуку повторів при імпорті. */
+@Serializable data class Tx(val desc: String, val cat: String, val type: String, val amt: Double, val date: String, val key: String = "")
+@Serializable data class Debt(val who: String, val owedToMe: Boolean, val amt: Double, val done: Boolean = false, val due: String = "")
+@Serializable data class CalcExtra(val isin: String, val nom: Double, val freq: Int, val sell: String, val sellD: String, val buy: String)
+@Serializable data class Pos(val group: String, val name: String, val qty: Double, val buy: Double, val now: Double, val mat: String = "", val rate: Double = 0.0, val next: String = "", val calc: CalcExtra? = null)
+@Serializable data class Goal(val name: String, val saved: Double, val target: Double, val icon: String, val step: Double)
+@Serializable data class Override(val name: String, val cur: String, val bal: Double, val sav: Boolean)
+@Serializable data class Security(val hash: String = "", val bio: Boolean = false, val autoMin: Int = 1)
+
+@Serializable
+data class AppData(
+    val txs: List<Tx> = DemoData.txs,
+    val accs: List<Account> = DemoData.accs,
+    val debts: List<Debt> = DemoData.debts,
+    val pos: List<Pos> = DemoData.pos,
+    val goals: List<Goal> = DemoData.goals,
+    val demo: Boolean = true,
+)
+
+@Serializable
+data class Persisted(
+    val data: AppData = AppData(),
+    val cur: String = "UAH",
+    val month: Int = 1,
+    val from: Int = 0,
+    val to: Int = 1,
+    val ov: Map<String, Override> = emptyMap(),
+    val light: Boolean = false,
+    val sec: Security = Security(),
+)
+
+object DemoData {
+    val accs = listOf(
+        Account("Monobank Біла", "UAH", 42180.0), Account("ПриватБанк", "UAH", 31640.0),
+        Account("Готівка USD", "USD", 480.0, cash = true), Account("Готівка EUR", "EUR", 300.0, cash = true),
+        Account("Готівка UAH", "UAH", 8600.0, cash = true), Account("Готівка PLN", "PLN", 400.0, cash = true),
+    )
+    val debts = listOf(Debt("Іван", true, 12300.0, false, "2026-12-20"), Debt("Оренда, листопад", false, 7500.0, false, "2026-12-05"))
+    val txs = listOf(
+        Tx("Зарплата", "Зарплата", "income", 65000.0, "2026-11-01"), Tx("Фріланс", "Зарплата", "income", 12000.0, "2026-11-02"),
+        Tx("Оренда", "Житло", "expense", 18000.0, "2026-11-02"), Tx("Сільпо", "Харчування", "expense", 2340.0, "2026-11-01"),
+        Tx("АТБ", "Харчування", "expense", 1860.0, "2026-11-02"), Tx("Uber", "Транспорт", "expense", 540.0, "2026-11-01"),
+        Tx("Netflix", "Розваги", "expense", 399.0, "2026-11-01"), Tx("Аптека", "Здоров'я", "expense", 820.0, "2026-11-02"),
+        Tx("Кіно", "Розваги", "expense", 650.0, "2026-11-02"),
+        Tx("Зарплата", "Зарплата", "income", 65000.0, "2026-10-01"), Tx("Оренда", "Житло", "expense", 18000.0, "2026-10-02"),
+        Tx("Супермаркети", "Харчування", "expense", 9800.0, "2026-10-15"), Tx("Таксі", "Транспорт", "expense", 1900.0, "2026-10-12"),
+        Tx("Розваги", "Розваги", "expense", 2400.0, "2026-10-20"),
+    )
+    val pos = listOf(
+        Pos("ОВДП", "ОВДП UA4000227045", 100.0, 960.0, 985.0, "2027-05-12", 15.5, "2026-12-10"),
+        Pos("ОВДП", "ОВДП UA4000225981", 50.0, 990.0, 1010.0, "2028-03-15", 16.0, "2027-01-20"),
+        Pos("Депозити", "Депозит Моно, 12 міс.", 1.0, 50000.0, 52100.0, "2027-03-01", 13.0, "2026-12-01"),
+        Pos("Депозити", "Депозит Приват, 6 міс.", 1.0, 25000.0, 26400.0, "2027-01-15", 12.5, "2026-12-15"),
+        Pos("ETF", "VWCE", 20.0, 2300.0, 2480.0, "", 2.0, "2026-12-20"),
+        Pos("Крипто", "BTC", 0.005, 3500000.0, 3900000.0, "", 0.0, ""),
+    )
+    val goals = listOf(
+        Goal("Подушка безпеки", 40000.0, 100000.0, "shield", 5000.0), Goal("Відпустка", 15000.0, 50000.0, "plane", 2000.0),
+        Goal("Ноутбук", 7000.0, 60000.0, "laptop", 1000.0),
+    )
+}
+
+// ---------- форматування ----------
+private fun clean(s: String) = s.replace(' ', ' ').replace(' ', ' ')
+fun fmtInt(v: Double): String = clean(String.format(Locale("uk", "UA"), "%,d", Math.round(v)))
+fun fmt2(v: Double): String = clean(String.format(Locale("uk", "UA"), "%,.2f", v))
+fun parseNum(s: String): Double = s.replace(" ", "").replace(',', '.').toDoubleOrNull() ?: 0.0
+fun ddmm(d: String) = if (d.length >= 10) d.substring(8, 10) + "." + d.substring(5, 7) else "—"
+fun ddmmyy(d: String) = if (d.length >= 10) d.substring(8, 10) + "." + d.substring(5, 7) + "." + d.substring(2, 4) else "—"
+fun ddmmyyyy(d: String) = d.substring(8, 10) + "." + d.substring(5, 7) + "." + d.substring(0, 4)
+fun monthLabel(k: String) = MONTH_NAMES[k.substring(5, 7).toInt() - 1] + " " + k.substring(0, 4)
+fun nativeLabel(a: Account, hide: Boolean): String {
+    if (hide) return "••••"
+    val v = fmtInt(a.bal)
+    return if (a.cur == "USD" || a.cur == "EUR") SYM[a.cur] + v else v + " " + SYM[a.cur]!!.trim()
+}
