@@ -99,8 +99,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         data = stack.removeLast(); undoN = stack.size; toastAt = 0; persist()
     }
 
-    fun setCur(c: String) { cur = c; curOpen = false; persist() }
-    fun setMonth(i: Int) { month = i.coerceIn(0, months.size - 1); persist() }
+    @JvmName("selectCurrency") fun setCur(c: String) { cur = c; curOpen = false; persist() }
+    @JvmName("selectMonth") fun setMonth(i: Int) { month = i.coerceIn(0, months.size - 1); persist() }
     fun toggleTheme() { light = !light; persist() }
     fun go(s: Screen) { screen = s; curOpen = false }
     fun openSheet(s: Sheet) { sheet = s }
