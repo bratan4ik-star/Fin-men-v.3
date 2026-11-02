@@ -198,9 +198,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val r = withContext(Dispatchers.IO) {
                 try {
-                    val ins = getApplication<Application>().contentResolver.openInputStream(uri)!!
-                    ins.use { if (name.endsWith(".xlsx", true)) Importer.parseXlsx(it) else Importer.parseCsv(it.readBytes().toString(Charsets.UTF_8), rate) }
-                } catch (e: Exception) { ImportResult(emptyList(), emptyList(), 0, "Не вдалося прочитати файл") }
+                    val ins = getApplication<Application>().contentResolver.openInputStream(uri)
+                        ?: return@withContext ImportResult(emptyList(), emptyList(), 0, "Не вдалося відкрити файл «$name» (немає доступу)")
+                    val bytes = ins.use { it.readBytes() }
+                    if (bytes.isEmpty()) ImportResult(emptyList(), emptyList(), 0, "Файл порожній")
+                    else Importer.parseBytes(bytes, rate)
+                } catch (e: Throwable) { ImportResult(emptyList(), emptyList(), 0, "Не вдалося прочитати файл (${e.javaClass.simpleName}: ${e.message?.take(80) ?: "—"})") }
             }
             impResult = r; impBusy = false
         }
