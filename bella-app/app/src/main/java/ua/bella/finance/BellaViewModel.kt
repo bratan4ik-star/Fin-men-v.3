@@ -447,7 +447,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun linkedTxCount(): Int = data.accs.getOrNull(form.editIdx)?.id?.let { id -> data.txs.count { it.acc == id || it.toAcc == id } } ?: 0
     fun deleteAcc() { if (!delAsk) { delAsk = true; return }; delAsk = false; val s = data; commit(s.copy(accs = s.accs.filterIndexed { i, _ -> i != form.editIdx })); form = form.copy(from = 0, to = 0); closeSheet() }
     fun deletePos() { if (!delAsk) { delAsk = true; return }; delAsk = false; val s = data; commit(s.copy(pos = s.pos.filterIndexed { i, _ -> i != form.editIdx })); closeSheet() }
-    fun toggleDebt(i: Int) { commit(data.copy(debts = data.debts.mapIndexed { j, d -> if (j == i) d.copy(done = !d.done) else d })) }
+    /** Галочка «повернено»: борг зникає зі списку (повернути його можна кнопкою «Скасувати» чи в «Відмінити останні дії»). */
+    fun toggleDebt(i: Int) { commit(data.copy(debts = settleDebt(data.debts, i))) }
     fun addToGoal(i: Int) { commit(data.copy(goals = data.goals.mapIndexed { j, g -> if (j == i) g.copy(saved = Math.min(g.target, g.saved + g.step)) else g })) }
     fun erase() {
         if (!eraseAsk) { eraseAsk = true; return }

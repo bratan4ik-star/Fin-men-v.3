@@ -21,3 +21,6 @@ fun groupDebts(debts: List<Debt>): List<DebtGroup> = listOf(true to "Мені в
 fun helpSectionFor(s: Screen): Int = when (s) {
     Screen.Home -> 0; Screen.Acc -> 2; Screen.Bud -> 4; Screen.Inv -> 7; Screen.Calc -> 8; Screen.Goals, Screen.Pass -> 9
 }
+
+/** Борг повернено: прибирає його зі списку (за індексом); інші не змінюються. */
+fun settleDebt(debts: List<Debt>, i: Int): List<Debt> = debts.filterIndexed { j, _ -> j != i }

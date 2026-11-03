@@ -34,4 +34,10 @@ class GroupingTest {
     @Test fun everyScreenHasHelpSection() {
         assertEquals(listOf(0, 2, 4, 7, 9, 9, 8), Screen.values().map { helpSectionFor(it) }.let { listOf(it[0], it[1], it[2], it[3], it[4], it[5], it[6]) })
     }
+
+    @Test fun returnedDebtIsRemoved() {
+        val d = listOf(Debt("A", true, 1.0), Debt("B", false, 2.0), Debt("C", true, 3.0))
+        assertEquals(listOf("A", "C"), settleDebt(d, 1).map { it.who })
+        assertEquals(d, settleDebt(d, 9))
+    }
 }
