@@ -1,0 +1,72 @@
+name: bella-app — тести й збірка APK
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["bella-app/**", ".github/workflows/bella-app.yml"]
+  pull_request:
+    paths: ["bella-app/**", ".github/workflows/bella-app.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bella-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bella-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Юніт-тести
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      - name: Debug-APK
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      # Підписаний release збирається, лише коли задано секрети BELLA_KEYSTORE_BASE64, BELLA_STORE_PASSWORD, BELLA_KEY_ALIAS
+      # (і за потреби BELLA_KEY_PASSWORD). Без них цей крок пропускається.
+      - name: Release-APK (підписаний)
+        env:
+          KEYSTORE_B64: ${{ secrets.BELLA_KEYSTORE_BASE64 }}
+          BELLA_STORE_PASSWORD: ${{ secrets.BELLA_STORE_PASSWORD }}
+          BELLA_KEY_ALIAS: ${{ secrets.BELLA_KEY_ALIAS }}
+          BELLA_KEY_PASSWORD: ${{ secrets.BELLA_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "Секрети підпису не задано, release пропущено"; exit 0; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/bella-release.jks"
+          BELLA_KEYSTORE="$RUNNER_TEMP/bella-release.jks" ./gradlew --no-daemon :app:assembleRelease
+          rm -f "$RUNNER_TEMP/bella-release.jks"
+
+      - name: Завантажити APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bella-app-apk
+          path: |
+            bella-app/app/build/outputs/apk/debug/*.apk
+            bella-app/app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn
+
+      - name: Звіт тестів
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bella-app-test-report
+          path: bella-app/app/build/reports/tests/
+          if-no-files-found: ignore
