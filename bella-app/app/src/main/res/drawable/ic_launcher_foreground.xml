@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Передній план іконки: фіолетова монета (акцент #9184D9) з кільцем і літерою «B» (Bella). У межах безпечної зони 66dp. -->
+<!-- Передній план іконки: фіолетова монета (акцент #9184D9) з кільцем і літерою «F» (Finance). У межах безпечної зони 66dp. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
     <path android:fillColor="#9184D9" android:pathData="M54,24a30,30 0 1,0 0.001,0z" />
     <path android:strokeColor="#161826" android:strokeWidth="1.6" android:fillColor="#00000000" android:pathData="M54,27.5a26.5,26.5 0 1,0 0.001,0z" />
-    <path android:fillColor="#161826" android:fillType="evenOdd" android:pathData="M44,40 H56 A6.5,6.5 0 0 1 56,53 H57 A7.5,7.5 0 0 1 57,68 H44 Z M49.5,45 H55 A3,3 0 0 1 55,51 H49.5 Z M49.5,56 H56.5 A3.5,3.5 0 0 1 56.5,63 H49.5 Z" />
+    <path android:fillColor="#161826" android:pathData="M45.5,40 H64 V45.5 H51 V52 H60.5 V57.5 H51 V68 H45.5 Z" />
 </vector>
