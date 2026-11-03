@@ -3,6 +3,7 @@ package ua.bella.finance
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -25,10 +26,10 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.Cats to "Ліміти й категорії",
 )
 private const val EDIT_NOTE = "Щоб побачити, що було, очистіть поле: старе значення з'явиться сірим. Порожнє поле під час збереження лишається як було."
-private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти")
+private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.Cats to "Зберегти")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,7 +42,7 @@ fun SheetHost(vm: BellaViewModel) {
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (sh) {
-                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true)
+                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
                     Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
@@ -121,7 +122,7 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
         val opts = listOf("Без рахунку") + accs.map { "${it.name} · ${it.cur}" }
         Dropdown("Рахунок", opts, accs.indexOfFirst { it.id == f.tAcc } + 1) { vm.form = f.copy(tAcc = if (it == 0) "" else accs[it - 1].id) }
         Field("Сума (${acc?.cur ?: vm.cur})", f.tAmt, hint = vm.was { it.tAmt }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(tAmt = it) }
-        val cats = (CATEGORIES.filter { it != "Зарплата" || f.tType == "income" } + f.tCat).distinct()
+        val cats = (vm.data.cats.filter { it != "Зарплата" || f.tType == "income" } + f.tCat).distinct()
         Dropdown("Категорія", cats, cats.indexOf(f.tCat)) { vm.form = f.copy(tCat = cats[it]) }
     }
     Field("Опис", f.tDesc, hint = vm.was { it.tDesc }.ifEmpty { if (f.tType == "transfer") "необов'язково" else "напр. Сільпо" }) { vm.form = f.copy(tDesc = it) }
@@ -135,6 +136,27 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     if (edit) T(EDIT_NOTE, 11.sp, C.n500)
     if (edit) T(if (vm.txDelAsk) "Натисніть ще раз, щоб видалити (баланс рахунку повернеться)" else "Видалити операцію", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteTx() }.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun CatsForm(vm: BellaViewModel) {
+    T("Місячний ліміт витрат у ${vm.sym}. Порожньо — без ліміту.", 12.sp, C.n500)
+    val lc = limitCats(vm.catsEdit)
+    vm.catsEdit.forEach { c ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Ico(catIcon(c), C.accent, 18.dp)
+            T(c, 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
+            if (c in lc) Field("", vm.limEdit[c] ?: "", Modifier.width(120.dp), hint = "без ліміту", numeric = true) { vm.setLim(c, it) }
+            else T("без ліміту", 11.sp, C.n500)
+            if (c !in SYSTEM_CATS) IconBtn(Icons.Outlined.Delete, C.n500) { vm.removeCat(c) } else Spacer(Modifier.width(36.dp))
+        }
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+        Field("Нова категорія", vm.newCat, Modifier.weight(1f), hint = "напр. Діти") { vm.newCat = it }
+        Btn("Додати", false, icon = Icons.Outlined.Add) { vm.addCat() }
+    }
+    T("Службові категорії (Перекази, Надходження, Зарплата, Інше) не видаляються. Операції з видаленою категорією зберігають її назву.", 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
 }
 
 @Composable
@@ -194,7 +216,7 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
     if (edit) {
         T(EDIT_NOTE, 11.sp, C.n500)
         if (f.group == "ОВДП") Row(Modifier.clickable { vm.posToCalc() }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Ico(Icons.Outlined.Calculate, C.accent400, 16.dp); T("Відкрити в калькуляторі ОВДП", 13.sp, C.accent400) }
-        T("Видалити позицію", 13.sp, C.neg, modifier = Modifier.clickable { vm.deletePos() }.padding(vertical = 4.dp))
+        T(if (vm.delAsk) "Натисніть ще раз, щоб видалити позицію" else "Видалити позицію", 13.sp, C.neg, modifier = Modifier.clickable { vm.deletePos() }.padding(vertical = 4.dp))
     }
 }
 
@@ -212,7 +234,7 @@ private fun AccEditForm(vm: BellaViewModel) {
     Row(Modifier.clickable { vm.form = f.copy(cashF = !f.cashF) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Ico(if (f.cashF) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Готівка (показувати в портфелі)", 13.sp)
     }
-    T("Видалити рахунок", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteAcc() }.padding(vertical = 4.dp))
+    T(if (vm.delAsk) "Натисніть ще раз, щоб видалити рахунок" + vm.linkedTxCount().let { if (it > 0) " ($it прив'язаних операцій стануть «Без рахунку»)" else "" } else "Видалити рахунок", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteAcc() }.padding(vertical = 4.dp))
 }
 
 @Composable
@@ -226,7 +248,19 @@ private fun SettingRow(icon: ImageVector, title: String, sub: String, color: and
 
 @Composable
 private fun SettingsList(vm: BellaViewModel) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Ico(Icons.Outlined.Lock, C.n500, 16.dp); T("Дані зберігаються автоматично на цьому пристрої", 11.sp, C.n500) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Ico(Icons.Outlined.Lock, C.n500, 16.dp); T("Дані зберігаються автоматично на цьому пристрої" + fmtSavedAt(vm.savedAt).let { if (it.isEmpty()) "" else " · останнє збереження $it" }, 11.sp, C.n500) }
+    val saveCopy = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
+    val openCopy = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.readBackup(uri) }
+    SettingRow(Icons.Outlined.Backup, "Зберегти резервну копію", "Файл JSON з усіма даними (без PIN, не шифрується)", trailing = true) { saveCopy.launch(backupFileName(TODAY)) }
+    SettingRow(Icons.Outlined.Restore, "Відновити з копії", "Замінює поточні дані даними з файлу", trailing = true) { openCopy.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+    vm.pendingRestore?.let { b ->
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            T("Відновити дані з копії" + (if (b.createdAt.isNotEmpty()) " від ${b.createdAt.replace('T', ' ')}" else "") + "?", 13.sp, weight = FontWeight.Medium)
+            T("У копії: операцій ${b.state.data.txs.size}, рахунків ${b.state.data.accs.size}, позицій ${b.state.data.pos.size}. Поточні дані можна буде повернути кнопкою «Скасувати». PIN не зміниться.", 11.sp, C.n500)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Не відновлювати", false, Modifier.weight(1f)) { vm.cancelRestore() }; Btn("Відновити", true, Modifier.weight(1f)) { vm.confirmRestore() } }
+        }
+    }
+    if (vm.backupMsg.isNotEmpty()) T(vm.backupMsg, 12.sp, if (vm.backupMsg.startsWith("Не ") || vm.backupMsg.startsWith("Це не")) C.neg else C.n500)
     SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
     SettingRow(Icons.Outlined.VerifiedUser, "Безпека", if (vm.sec.hash.isNotEmpty()) "PIN-код" + (if (vm.sec.bio) " · відбиток пальця" else "") else "Захист вимкнено", trailing = true) { vm.openSheet(Sheet.Security) }
     SettingRow(Icons.Outlined.ContentCopy, "Прибрати повтори операцій", if (vm.dupInStore > 0) "Знайдено повторів: ${vm.dupInStore}" else "Повторів немає") { vm.dedupeStore() }

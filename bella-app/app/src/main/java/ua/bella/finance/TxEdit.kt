@@ -84,3 +84,16 @@ fun buildTx(inp: TxInput, accs: List<Account>, rates: Map<String, Double>, viewR
     val uah = if (acc != null) inp.amount * (rates[acc.cur] ?: 1.0) else inp.amount * viewRate
     return Tx(inp.desc.ifBlank { inp.cat }, inp.cat, inp.type, uah, inp.date, inp.key, acc?.id ?: "", if (acc != null) inp.amount else 0.0) to ""
 }
+
+/**
+ * Рахунки після імпорту виписки: картки з виписки оновлюють назву, валюту й залишок свого рахунку
+ * (збіг за id, назвою або останніми 4 символами) або додаються як нові; решта рахунків
+ * (готівка, створені вручну) лишаються разом із позначками «Готівка» і «Заощадження».
+ */
+fun mergeImportedAccs(old: List<Account>, imported: List<Account>): List<Account> {
+    val withIds = carryAccIds(old, imported)
+    val byId = withIds.filter { it.id.isNotEmpty() }.associateBy { it.id }
+    val kept = old.map { o -> byId[o.id]?.let { n -> o.copy(name = n.name, cur = n.cur, bal = n.bal) } ?: o }
+    val oldIds = old.map { it.id }.toSet()
+    return kept + withIds.filter { it.id.isEmpty() || it.id !in oldIds }
+}

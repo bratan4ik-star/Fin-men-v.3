@@ -31,4 +31,12 @@ class FormHintsTest {
         assertEquals("Дата повернення у форматі РРРР-ММ-ДД", posDatesError("", "2027-13-01"))
         assertEquals("Дата виплати не може бути пізніше дати повернення", posDatesError("2027-04-01", "2027-03-01"))
     }
+
+    @Test fun savedAtIsFormatted() {
+        val kyiv = java.time.ZoneId.of("Europe/Kyiv")
+        // 2026-11-03 12:05 UTC = 14:05 за Києвом (зимовий час, UTC+2)
+        val ms = java.time.Instant.parse("2026-11-03T12:05:00Z").toEpochMilli()
+        assertEquals("03.11.2026 о 14:05", fmtSavedAt(ms, kyiv))
+        assertEquals("", fmtSavedAt(0L, kyiv))
+    }
 }

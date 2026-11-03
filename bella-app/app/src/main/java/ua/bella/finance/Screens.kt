@@ -65,7 +65,7 @@ fun HomeScreen(vm: BellaViewModel) {
     val t = Totals(vm)
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Column(Modifier.weight(1f)) { T("BELLA FINANCE", 11.sp, C.n500, letter = 1.1.sp); T("Листопад 2026", 18.sp, weight = FontWeight.Medium) }
+            Column(Modifier.weight(1f)) { T("BELLA FINANCE", 11.sp, C.n500, letter = 1.1.sp); T(monthLabel(CUR_MONTH), 18.sp, weight = FontWeight.Medium) }
             CurPicker(vm)
             IconBtn(if (vm.hide) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility) { vm.hide = !vm.hide }
             IconBtn(Icons.Outlined.Undo, if (vm.undoN > 0) C.accent else C.n600) { vm.undo() }
@@ -76,8 +76,8 @@ fun HomeScreen(vm: BellaViewModel) {
                 BigMoney("ЗАГАЛЬНИЙ КАПІТАЛ", vm.m(t.net), vm.sym)
                 val dl = if (vm.hide) "•••• ${vm.sym}" else (if (t.novNet >= 0) "+" else "−") + fmtInt(vm.cv(Math.abs(t.novNet))) + " " + vm.sym
                 T("$dl за місяць", 13.sp, if (t.novNet >= 0) C.pos else C.neg, modifier = Modifier.padding(top = 2.dp))
-                Sparkline()
-                Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("$" to "USD", "€" to "EUR", "zł" to "PLN").forEach { (sy, c) -> RateChip(sy + " " + String.format(java.util.Locale.US, "%.2f", RATES[c] ?: 0.0)) } }
+                Sparkline(vm)
+                Box(Modifier.padding(top = 14.dp)) { RatesSection(vm) }
             }
             Btn("Нова операція", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) { vm.openTx() }
             Column {
@@ -98,7 +98,6 @@ fun HomeScreen(vm: BellaViewModel) {
     }
 }
 
-@Composable private fun RateChip(s: String) = Box(Modifier.clip(RoundedCornerShape(14.dp)).background(Color.Transparent).padding(horizontal = 10.dp, vertical = 5.dp)) { T(s, 12.sp, C.n400, maxLines = 1) }
 
 @Composable
 private fun SectionRow(icon: ImageVector, color: Color, title: String, sub: String, metric: String, onClick: () -> Unit) {
@@ -112,15 +111,19 @@ private fun SectionRow(icon: ImageVector, color: Color, title: String, sub: Stri
 
 /** Декоративний графік з макета (статичні точки, не реальна історія). */
 @Composable
-private fun Sparkline() {
-    val pts = listOf(46f, 36f, 39f, 30f, 20f, 23f, 12f, 7f, 2f); val acc = C.accent
+private fun Sparkline(vm: BellaViewModel) {
+    val h = vm.hist.takeLast(90); val acc = C.accent
+    if (h.size < 2) { T("Графік капіталу з'явиться, коли накопичиться історія: знімок зберігається щодня.", 11.sp, C.n500, modifier = Modifier.padding(top = 12.dp)); return }
+    val pts = normalize(h.map { it.v })
     Canvas(Modifier.fillMaxWidth().padding(top = 12.dp).height(56.dp)) {
-        val dx = size.width / (pts.size - 1); val sy = size.height / 56f
-        val line = Path().apply { pts.forEachIndexed { i, y -> if (i == 0) moveTo(0f, y * sy) else lineTo(i * dx, y * sy) } }
+        val dx = size.width / (pts.size - 1); val top = 4.dp.toPx(); val hh = size.height - 2 * top
+        fun y(v: Double) = top + (1 - v.toFloat()) * hh
+        val line = Path().apply { pts.forEachIndexed { i, v -> if (i == 0) moveTo(0f, y(v)) else lineTo(i * dx, y(v)) } }
         val fill = Path().apply { addPath(line); lineTo(size.width, size.height); lineTo(0f, size.height); close() }
         drawPath(fill, Brush.verticalGradient(listOf(acc.copy(alpha = .28f), Color.Transparent)))
         drawPath(line, acc, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
+    T("${ddmm(h.first().d)} – ${ddmm(h.last().d)} · ${h.size} дн.", 10.sp, C.n500, modifier = Modifier.padding(top = 2.dp))
 }
 
 // ================= КАПІТАЛ ТА РАХУНКИ =================
@@ -213,7 +216,8 @@ fun BudgetScreen(vm: BellaViewModel) {
     val s = vm.data; val mos = vm.months; val mi = vm.month.coerceIn(0, mos.size - 1); val mk = mos[mi]
     val mt = s.txs.filter { it.date.startsWith(mk) }
     val inc = mt.filter { it.type == "income" }.sumOf { it.amt }; val exp = mt.filter { it.type == "expense" }.sumOf { it.amt }; val nb = inc - exp
-    val isLast = mi == mos.size - 1; val daysLeft = if (isLast) 29 else 30
+    val isLast = mk == CUR_MONTH; val dim = java.time.YearMonth.parse(mk).lengthOfMonth()
+    val daysLeft = if (isLast) dim - TODAY.substring(8, 10).toInt() + 1 else dim
     val cats = mt.filter { it.type == "expense" }.groupBy { it.cat }.mapValues { e -> e.value.sumOf { it.amt } }
     val savePct = if (inc > 0) Math.max(0.0, nb / inc * 100) else 0.0
     Column(Modifier.fillMaxSize()) {
@@ -231,7 +235,7 @@ fun BudgetScreen(vm: BellaViewModel) {
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Stat("Доходи", "+" + vm.m(inc), C.pos, Modifier.weight(1f)); Stat("Витрати", "−" + vm.m(exp), C.neg, Modifier.weight(1f))
-                    Stat(if (isLast) "Вільно на день" else "Витрати на день", "≈ " + vm.m(if (isLast) (if (nb > 0) nb / daysLeft else 0.0) else exp / 30) + " " + vm.sym, C.text, Modifier.weight(1f))
+                    Stat(if (isLast) "Вільно на день" else "Витрати на день", "≈ " + vm.m(if (isLast) (if (nb > 0) nb / daysLeft else 0.0) else exp / dim) + " " + vm.sym, C.text, Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     T("Норма заощаджень", 12.sp, C.n500, maxLines = 1); Bar((savePct / 100).toFloat(), C.pos, 4.dp, Modifier.weight(1f)); T("%.1f%%".format(savePct), 12.sp, C.n500)
@@ -261,7 +265,10 @@ fun BudgetScreen(vm: BellaViewModel) {
                         }
                     }
                 }
-                else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { LIMITS.forEach { (c, l) ->
+                else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Btn("Налаштувати ліміти й категорії", false, Modifier.fillMaxWidth(), Icons.Outlined.Tune) { vm.openCats() }
+                    if (s.limits.isEmpty()) T("Лімітів ще немає. Задайте місячний ліміт для потрібних категорій.", 12.sp, C.n500)
+                    s.limits.forEach { (c, l) ->
                     val sp = cats[c] ?: 0.0; val over = l > 0 && sp > l
                     Column {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -348,11 +355,11 @@ fun InvScreen(vm: BellaViewModel) {
                             Column(Modifier.fillMaxWidth().clickable { vm.editPos(ix) }.padding(start = 18.dp, top = 8.dp, bottom = 8.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(p.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(vm.m(value) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    T("${fmtQty(p.qty)} шт. · куплено по " + if (fxp) "${fmt2(p.pxBuy)} ${p.cur}" else vm.m(p.buy), 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
+                                    T("${fmtQty(p.qty)} шт. · куплено по " + if (fxp) "${if (vm.hide) "••••" else fmt2(p.pxBuy)} ${p.cur}" else vm.m(p.buy), 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
                                 }
                                 if (fxp) {
                                     val sp = plSplit(p, RATES); fun sg(v: Double) = (if (v >= 0) "+" else "−") + vm.m(Math.abs(v)) + " " + vm.sym
-                                    T("${fmt2(p.pxNow)} ${p.cur}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
+                                    T("${if (vm.hide) "••••" else fmt2(p.pxNow)} ${p.cur}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
                                 } else if (p.ticker.isNotEmpty()) T(p.ticker, 11.sp, C.n500)
                                 T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
                             }

@@ -1,13 +1,20 @@
 package ua.bella.finance
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -51,10 +58,14 @@ fun SmartAnalyticsSection(vm: BellaViewModel, periodTxs: List<Tx>) {
     }
 }
 
-/** Курси НБУ з датою, кнопка оновлення і конвертер між UAH, USD, EUR, PLN. */
+/**
+ * Курси НБУ і конвертер у полі, що розгортається: згорнуте показує короткі курси,
+ * дотик відкриває курси з датою, «Оновити курси» і конвертер між UAH, USD, EUR, PLN (з кнопкою «⇄»).
+ */
 @Composable
-fun RatesSection(vm: BellaViewModel) {
+fun RatesSection(vm: BellaViewModel, startOpen: Boolean = false) {
     @Suppress("UNUSED_VARIABLE") val subscribe = vm.ratesTick // перемальовка після оновлення курсів
+    var open by remember { mutableStateOf(startOpen) }
     var amount by remember { mutableStateOf("100") }
     var from by remember { mutableStateOf(CURRENCIES.indexOf("USD")) }
     var to by remember { mutableStateOf(0) }
@@ -65,25 +76,37 @@ fun RatesSection(vm: BellaViewModel) {
         else -> "Показано орієнтовні курси: оновлення з НБУ ще не було."
     }
     val failed = vm.ratesMsg.startsWith("Не вдалося")
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHead("Курси НБУ і конвертер", if (vm.ratesBusy) "Оновлення…" else "Оновити курси") { vm.refreshRates() }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf("USD", "EUR", "PLN").forEach { c ->
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(C.surface).padding(10.dp)) {
-                    T("$c → UAH", 11.sp, C.n500, maxLines = 1)
-                    T(fmt2(RATES[c] ?: 0.0), 16.sp, weight = FontWeight.Medium, maxLines = 1)
+    val shape = RoundedCornerShape(10.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).border(1.dp, C.divider, shape)) {
+        Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            T("Курси НБУ", 13.sp, weight = FontWeight.Medium, maxLines = 1)
+            T(listOf("$" to "USD", "€" to "EUR", "zł" to "PLN").joinToString("  ") { (sy, c) -> sy + " " + fmt2(RATES[c] ?: 0.0) }, 12.sp, C.n400, modifier = Modifier.weight(1f), maxLines = 1)
+            Ico(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n500, 18.dp)
+        }
+        if (open) Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("USD", "EUR", "PLN").forEach { c ->
+                    Column(Modifier.weight(1f).clip(shape).background(C.surface).padding(10.dp)) {
+                        T("$c → UAH", 11.sp, C.n500, maxLines = 1)
+                        T(fmt2(RATES[c] ?: 0.0), 16.sp, weight = FontWeight.Medium, maxLines = 1)
+                    }
                 }
             }
-        }
-        T(note, 11.sp, if (failed) C.neg else C.n500)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = androidx.compose.ui.Alignment.Bottom) {
-            Field("Сума", amount, Modifier.weight(1.2f), numeric = true) { amount = it }
-            Dropdown("З", CURRENCIES, from, Modifier.weight(1f)) { from = it }
-            Dropdown("У", CURRENCIES, to, Modifier.weight(1f)) { to = it }
-        }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp)) {
-            Label("РЕЗУЛЬТАТ")
-            T(fmt2(convertAmount(parseNum(amount), CURRENCIES[from], CURRENCIES[to], RATES)) + " " + CURRENCIES[to], 22.sp, C.accent300, FontWeight.Medium, Modifier.padding(top = 4.dp), maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                T(note, 11.sp, if (failed) C.neg else C.n500, modifier = Modifier.weight(1f))
+                T(if (vm.ratesBusy) "Оновлення…" else "↻ Оновити", 12.sp, C.accent400, modifier = Modifier.clickable { vm.refreshRates() }.padding(4.dp), maxLines = 1)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                Field("Сума", amount, Modifier.weight(1.2f), numeric = true) { amount = it }
+                Dropdown("З", CURRENCIES, from, Modifier.weight(1f)) { from = it }
+                Box(Modifier.padding(bottom = 6.dp)) { IconBtn(Icons.Outlined.SwapHoriz) { val x = from; from = to; to = x } }
+                Dropdown("У", CURRENCIES, to, Modifier.weight(1f)) { to = it }
+            }
+            Column(Modifier.fillMaxWidth().clip(shape).background(C.surface).padding(12.dp)) {
+                Label("РЕЗУЛЬТАТ")
+                T(fmt2(convertAmount(parseNum(amount), CURRENCIES[from], CURRENCIES[to], RATES)) + " " + CURRENCIES[to], 22.sp, C.accent300, FontWeight.Medium, Modifier.padding(top = 4.dp), maxLines = 1)
+                if (from != to) T("1 ${CURRENCIES[from]} = ${fmt2(convertAmount(1.0, CURRENCIES[from], CURRENCIES[to], RATES))} ${CURRENCIES[to]}", 11.sp, C.n500, modifier = Modifier.padding(top = 2.dp))
+            }
         }
     }
 }

@@ -16,7 +16,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Cats, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -82,8 +82,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var entry by mutableStateOf("")
     var tmp = ""
     var kerr by mutableStateOf("")
-    private var fails = 0
-    private var until = 0L
+    // лічильник помилок PIN і час блокування зберігаються, тож перезапуск застосунку блокування не знімає
+    private var fails = prefs.getInt("pinFails", 0)
+    private var until = prefs.getLong("pinUntil", 0L)
+    private fun saveLock() { prefs.edit().putInt("pinFails", fails).putLong("pinUntil", until).apply() }
     var hiddenAt = 0L
 
     /** Читає ratesTick, щоб екрани перемальовувались після оновлення курсів. */
@@ -94,10 +96,63 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun m(v: Double) = if (hide) "••••" else fmtInt(cv(v))
     fun base(a: Account) = a.bal * r(a.cur)
 
-    val months: List<String> get() = data.txs.map { it.date.take(7) }.distinct().sorted().ifEmpty { listOf(CUR_MONTH) }
+    /** Місяці з операціями плюс поточний (щоб бюджет поточного місяця був доступний і без операцій). */
+    val months: List<String> get() = (data.txs.map { it.date.take(7) } + CUR_MONTH).distinct().sorted()
+
+    /** Час останнього успішного збереження на пристрої (мс), 0 — ще не зберігалось. */
+    var savedAt by mutableStateOf(prefs.getLong("savedAt", 0L)); private set
+    /** Щоденні знімки чистого капіталу (оновлюються під час кожного збереження). */
+    var hist by mutableStateOf(loaded.hist); private set
+
+    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist)
+
+    // ---------- резервна копія ----------
+    var backupMsg by mutableStateOf(""); private set
+    /** Копія, прочитана з файлу й готова до відновлення (чекає підтвердження). */
+    var pendingRestore by mutableStateOf<Backup?>(null); private set
+
+    fun exportBackup(uri: Uri) {
+        val text = makeBackup(snapshot(), java.time.LocalDateTime.now().withNano(0).toString())
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } != null } catch (_: Exception) { false }
+            }
+            backupMsg = if (ok) "Копію збережено: операцій ${data.txs.size}, рахунків ${data.accs.size}" else "Не вдалося записати файл копії"
+        }
+    }
+    fun readBackup(uri: Uri) {
+        pendingRestore = null
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                try { getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } } catch (_: Exception) { null }
+            }
+            val b = text?.let { parseBackup(it) }
+            if (b == null) backupMsg = "Це не копія Bella Finance або файл пошкоджено"
+            else { pendingRestore = b; backupMsg = "" }
+        }
+    }
+    fun cancelRestore() { pendingRestore = null }
+    /** Замінює дані копією. Поточні дані лишаються в «Скасувати», PIN цього телефону не змінюється. */
+    fun confirmRestore() {
+        val b = pendingRestore ?: return
+        val p = b.state
+        p.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
+        ratesDate = p.ratesDate; ratesAt = p.ratesAt; ratesTick++
+        cur = p.cur; ov = p.ov; light = p.light; hist = p.hist
+        month = p.month.coerceAtLeast(0)
+        commit(p.data)
+        pendingRestore = null
+        backupMsg = "Дані відновлено з копії" + if (b.createdAt.isNotEmpty()) " від ${b.createdAt.replace('T', ' ')}" else ""
+        persist()
+    }
 
     private fun persist() {
-        try { prefs.edit().putString("state", json.encodeToString(Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt))).apply() } catch (_: Exception) {}
+        try {
+            val t = System.currentTimeMillis()
+            hist = upsertHist(hist, TODAY, Totals(this).net)
+            prefs.edit().putString("state", json.encodeToString(snapshot())).putLong("savedAt", t).apply()
+            savedAt = t
+        } catch (_: Exception) {}
     }
 
     init {
@@ -105,6 +160,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (System.currentTimeMillis() - loaded.ratesAt > 6 * 3600_000L) refreshRates()
         // щомісячні виплати депозитів, що настали (зокрема пропущені, поки застосунок не відкривали)
         processDepositPayouts(data, todayIso(), RATES).let { if (it !== data) { data = it; persist() } }
+        // знімок капіталу за сьогодні, навіть якщо змін не було
+        if (hist.lastOrNull()?.d != TODAY) persist()
     }
 
     /** Завантажує курси USD, EUR, PLN з НБУ. Без інтернету лишає попередні курси й показує повідомлення. */
@@ -140,7 +197,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleTheme() { light = !light; persist() }
     fun go(s: Screen) { screen = s; curOpen = false }
     fun openSheet(s: Sheet) { sheet = s }
-    fun closeSheet() { sheet = Sheet.None; formOrig = null; formErr = "" }
+    fun closeSheet() { sheet = Sheet.None; formOrig = null; formErr = ""; delAsk = false }
 
     /** Значення форми на момент відкриття редагування; null для нових записів. */
     var formOrig by mutableStateOf<Form?>(null); private set
@@ -298,6 +355,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 commit(addTx(s, t)); closeSheet()
                 setMonth(months.indexOf(t.date.take(7)).coerceAtLeast(0))
             }
+            Sheet.Cats -> {
+                val (lim, e) = buildLimits(catsEdit, limEdit, rate); formErr = e
+                if (lim != null) { commit(s.copy(cats = catsEdit, limits = lim)); closeSheet() }
+            }
             Sheet.TxE -> {
                 val old = s.txs.getOrNull(f.txIdx) ?: run { closeSheet(); return }
                 val t = txFromForm(f, old.key) ?: return
@@ -306,8 +367,24 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             else -> {}
         }
     }
-    fun deleteAcc() { val s = data; commit(s.copy(accs = s.accs.filterIndexed { i, _ -> i != form.editIdx })); form = form.copy(from = 0, to = 0); closeSheet() }
-    fun deletePos() { val s = data; commit(s.copy(pos = s.pos.filterIndexed { i, _ -> i != form.editIdx })); closeSheet() }
+    // ---------- ліміти й категорії ----------
+    var catsEdit by mutableStateOf(listOf<String>()); private set
+    var limEdit by mutableStateOf(mapOf<String, String>()); private set
+    var newCat by mutableStateOf("")
+    fun openCats() {
+        fun s2(v: Double) = (Math.round(v / rate * 100) / 100.0).let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }
+        catsEdit = data.cats; limEdit = data.limits.mapValues { s2(it.value) }; newCat = ""; formErr = ""; sheet = Sheet.Cats
+    }
+    fun setLim(c: String, v: String) { limEdit = limEdit + (c to v) }
+    fun addCat() { val (l, e) = addCategory(catsEdit, newCat); formErr = e; if (l != null) { catsEdit = l; newCat = "" } }
+    fun removeCat(c: String) { catsEdit = removeCategory(catsEdit, c); limEdit = limEdit - c }
+
+    /** Видалення рахунку чи позиції: перший дотик просить підтвердження, другий видаляє. */
+    var delAsk by mutableStateOf(false); private set
+    /** Скільки операцій прив'язано до рахунку, що редагується. */
+    fun linkedTxCount(): Int = data.accs.getOrNull(form.editIdx)?.id?.let { id -> data.txs.count { it.acc == id || it.toAcc == id } } ?: 0
+    fun deleteAcc() { if (!delAsk) { delAsk = true; return }; delAsk = false; val s = data; commit(s.copy(accs = s.accs.filterIndexed { i, _ -> i != form.editIdx })); form = form.copy(from = 0, to = 0); closeSheet() }
+    fun deletePos() { if (!delAsk) { delAsk = true; return }; delAsk = false; val s = data; commit(s.copy(pos = s.pos.filterIndexed { i, _ -> i != form.editIdx })); closeSheet() }
     fun toggleDebt(i: Int) { commit(data.copy(debts = data.debts.mapIndexed { j, d -> if (j == i) d.copy(done = !d.done) else d })) }
     fun addToGoal(i: Int) { commit(data.copy(goals = data.goals.mapIndexed { j, g -> if (j == i) g.copy(saved = Math.min(g.target, g.saved + g.step)) else g })) }
     fun erase() {
@@ -370,7 +447,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val txs = r.txs + keep
         var nd = s.copy(txs = txs, demo = s.demo && !rep)
         if (rep) nd = nd.copy(pos = emptyList(), goals = emptyList(), debts = emptyList())
-        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = carryAccIds(s.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
+        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(s.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
         commit(nd); tab = 1; sheet = Sheet.None
         month = data.txs.map { it.date.take(7) }.distinct().sorted().size - 1
         persist()
@@ -396,13 +473,14 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         entry = v; val h = hashPin(v); val m = kmode
         when (m) {
             KMode.Unlock, KMode.Old -> if (h == sec.hash) {
-                fails = 0
+                fails = 0; until = 0L; saveLock()
                 if (m == KMode.Unlock) { kmode = KMode.None; entry = ""; kerr = "" }
                 else if (kact == "disable") { saveSec(Security("", false, sec.autoMin)); kmode = KMode.None; entry = ""; kerr = "" }
                 else { kmode = KMode.New; entry = ""; kerr = "" }
             } else {
                 fails++; entry = ""
                 if (fails >= 5) { kerr = "Забагато спроб. Зачекайте 30 с"; until = now + 30000; fails = 0 } else kerr = "Невірний PIN. Спроба $fails з 5"
+                saveLock()
             }
             KMode.New -> { tmp = v; kmode = KMode.Confirm; entry = ""; kerr = "" }
             KMode.Confirm -> if (v == tmp) { saveSec(sec.copy(hash = h)); kmode = KMode.None; entry = ""; kerr = ""; tmp = "" } else { kmode = KMode.New; entry = ""; tmp = ""; kerr = "PIN не збігається. Створіть заново" }
