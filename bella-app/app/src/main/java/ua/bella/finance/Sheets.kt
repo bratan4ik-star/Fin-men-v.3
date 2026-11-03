@@ -15,6 +15,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -304,11 +306,31 @@ private fun SettingsList(vm: BellaViewModel) {
     if (vm.backupMsg.isNotEmpty()) T(vm.backupMsg, 12.sp, if (vm.backupMsg.startsWith("Не ") || vm.backupMsg.startsWith("Це не")) C.neg else C.n500)
     SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
     SettingRow(Icons.Outlined.VerifiedUser, "Безпека", if (vm.sec.hash.isNotEmpty()) "PIN-код" + (if (vm.sec.bio) " · відбиток пальця" else "") else "Захист вимкнено", trailing = true) { vm.openSheet(Sheet.Security) }
+    UndoList(vm)
     SettingRow(Icons.Outlined.ContentCopy, "Прибрати повтори операцій", if (vm.dupInStore > 0) "Знайдено повторів: ${vm.dupInStore}" else "Повторів немає") { vm.dedupeStore() }
     SettingRow(Icons.Outlined.HelpOutline, "Довідка", "Як користуватися функціями", trailing = true) { vm.openHelp(-1) }
     SettingRow(if (vm.light) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Тема", if (vm.light) "Світла" else "Темна") { vm.toggleTheme() }
     SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
     T("Bella Finance ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_DATE}", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
+}
+
+/** «Відмінити останні дії» — список, що розгортається: до 10 останніх змін, дотик відміняє її й усі новіші. */
+@Composable
+private fun UndoList(vm: BellaViewModel) {
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val items = vm.recentActions()
+    Column {
+        SettingRow(Icons.Outlined.Undo, "Відмінити останні дії", if (items.isEmpty()) "Немає дій для відміни" else "Останніх дій: ${items.size}. Дотик розгортає список", trailing = false) { if (items.isNotEmpty()) open = !open }
+        if (open && items.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(start = 32.dp)) {
+            items.forEach { (k, label) ->
+                Row(Modifier.fillMaxWidth().clickable { vm.undoLast(k); if (vm.recentActions().isEmpty()) open = false }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    T("$k.", 12.sp, C.n500, modifier = Modifier.width(22.dp)); T(label, 13.sp, modifier = Modifier.weight(1f), maxLines = 2)
+                    T(if (k == 1) "Відмінити" else "Відмінити $k", 12.sp, C.accent400, maxLines = 1)
+                }
+            }
+            T("Відміна дії скасовує і всі новіші: «Відмінити 3» повертає стан до третьої дії зверху.", 11.sp, C.n500, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
 }
 
 @Composable

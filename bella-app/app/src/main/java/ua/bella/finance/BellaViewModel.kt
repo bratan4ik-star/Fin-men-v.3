@@ -78,6 +78,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     // undo
     private val stack = ArrayDeque<AppData>()
+    private val labels = ArrayDeque<String>()
     var undoN by mutableStateOf(0); private set
     var toastAt by mutableStateOf(0L); private set
 
@@ -187,14 +188,23 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun commit(raw: AppData) {
         val nd = ensureAccIds(raw)
         if (nd == data) return
-        stack.addLast(data); if (stack.size > 20) stack.removeFirst()
+        stack.addLast(data); labels.addLast(describeChange(data, nd)); if (stack.size > 20) { stack.removeFirst(); labels.removeFirst() }
         data = nd; undoN = stack.size; persist()
         val t = System.currentTimeMillis(); toastAt = t
         viewModelScope.launch { delay(6000); if (toastAt == t) toastAt = 0 }
     }
     fun undo() {
         if (stack.isEmpty()) return
-        data = stack.removeLast(); undoN = stack.size; toastAt = 0; persist()
+        data = stack.removeLast(); labels.removeLastOrNull(); undoN = stack.size; toastAt = 0; persist()
+    }
+
+    /** Останні дії (найновіша перша), до 10: текст і скільки дій треба відмінити, щоб скасувати саме її разом з новішими. */
+    fun recentActions(): List<Pair<Int, String>> = labels.toList().asReversed().take(10).mapIndexed { i, l -> (i + 1) to l }
+    /** Відміняє k останніх дій одразу (повертає стан до k-ї дії). */
+    fun undoLast(k: Int) {
+        val (restored, rest) = undoSteps(stack.toList(), k) ?: return
+        stack.clear(); stack.addAll(rest); repeat(k) { labels.removeLastOrNull() }
+        data = restored; undoN = stack.size; toastAt = 0; persist()
     }
 
     @JvmName("selectCurrency") fun setCur(c: String) { cur = c; curOpen = false; persist() }
