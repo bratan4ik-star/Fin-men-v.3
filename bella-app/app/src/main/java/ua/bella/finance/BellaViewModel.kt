@@ -31,6 +31,8 @@ data class Form(
     // операція: дата, рахунок, для переказу — рахунок і сума зарахування; txIdx — індекс операції, що редагується
     val tDate: String = "", val tAcc: String = "", val tToAcc: String = "", val tToAmt: String = "", val txIdx: Int = -1,
     val pMonthly: Boolean = false, val pPayAcc: String = "", val cashF: Boolean = false,
+    // ETF: валюта ціни, тікер Yahoo, курс купівлі (₴ за 1 одиницю валюти)
+    val pCur: String = "UAH", val pTicker: String = "", val pFx: String = "",
 )
 
 data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
@@ -184,17 +186,72 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (t.type == "transfer") { val b = data.accs.firstOrNull { it.id == t.toAcc }?.name ?: ""; return if (a.isEmpty() && b.isEmpty()) "" else "$a → $b" }
         return a
     }
+    /** Будує позицію з форми. ETF у валюті: ціни у валюті фонду, курс купівлі — введений або поточний курс НБУ. */
+    private fun posFromForm(f: Form, q: Double, monthly: Boolean, old: Pos?): Pos {
+        val fx = f.group == "ETF" && f.pCur != "UAH" && RATES.containsKey(f.pCur)
+        val ticker = f.pTicker.trim().uppercase()
+        if (fx) {
+            val rateNow = RATES[f.pCur]!!; val pxB = parseNum(f.pBuy); val pxN = parseNum(f.pNow).takeIf { it > 0 } ?: pxB
+            val bfx = parseNum(f.pFx).takeIf { it > 0 } ?: rateNow
+            return Pos(f.group, f.pName.trim(), q, pxB * bfx, pxN * rateNow, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc,
+                cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L)
+        }
+        val b = parseNum(f.pBuy) * rate; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * rate
+        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker)
+    }
+
+    // ---------- котирування ETF ----------
+    var quoteBusy by mutableStateOf(false); private set
+    var quoteMsg by mutableStateOf(""); private set
+    /** Оновлює ціни всіх позицій із тікером. Без мережі лишає попередні ціни й показує повідомлення. */
+    fun refreshQuotes() {
+        if (quoteBusy) return
+        val targets = data.pos.withIndex().filter { it.value.ticker.isNotBlank() }; if (targets.isEmpty()) { quoteMsg = "Немає позицій із тікером"; return }
+        quoteBusy = true; quoteMsg = ""
+        viewModelScope.launch {
+            val quotes = withContext(Dispatchers.IO) { targets.map { (i, p) -> i to (try { fetchQuote(p.ticker) } catch (_: Exception) { null }) } }
+            var pos = data.pos; val errs = mutableListOf<String>(); var ok = 0
+            quotes.forEach { (i, q) ->
+                val p = pos[i]
+                if (q == null) errs += "${p.ticker}: немає котирування"
+                else { val (np, e) = applyQuote(p, q, RATES, System.currentTimeMillis()); if (np != null) { pos = pos.mapIndexed { j, x -> if (j == i) np else x }; ok++ } else errs += e }
+            }
+            if (ok > 0) { data = data.copy(pos = pos); persist() }
+            quoteMsg = (if (ok > 0) "Оновлено цін: $ok" else "Ціни не оновлено") + if (errs.isNotEmpty()) ". " + errs.joinToString("; ") else ""
+            quoteBusy = false
+        }
+    }
+    /** «Підтягнути ціну» у формі позиції: ставить поточну ціну й валюту котирування. */
+    fun quoteIntoForm() {
+        val t = form.pTicker.trim(); if (t.isEmpty()) { quoteMsg = "Вкажіть тікер"; return }
+        if (quoteBusy) return
+        quoteBusy = true; quoteMsg = ""
+        viewModelScope.launch {
+            val q = withContext(Dispatchers.IO) { try { fetchQuote(t) } catch (_: Exception) { null } }
+            quoteBusy = false
+            if (q == null) { quoteMsg = "Не вдалося отримати ціну для ${t.uppercase()}. Перевірте тікер (напр. VWCE.DE, SPY) та інтернет."; return@launch }
+            if (q.currency !in RATES.keys) { quoteMsg = "Валюта ${q.currency} не підтримується (лише UAH, USD, EUR, PLN). Введіть ціну вручну."; return@launch }
+            val px = (Math.round(q.price * 10000) / 10000.0).toString()
+            form = if (sheet == Sheet.PosE) form.copy(pCur = q.currency, pNow = px) else form.copy(pCur = q.currency, pBuy = form.pBuy.ifBlank { px }, pNow = px)
+            quoteMsg = "Ціна ${q.price} ${q.currency}"
+        }
+    }
+
     /** Для депозиту кількість не вводиться: 1, якщо поле порожнє. */
     private fun posQty(f: Form): Double = parseNum(f.pQty).let { if (it <= 0 && f.group == "Депозити" && f.pQty.isBlank()) 1.0 else it }
     private fun txFromForm(f: Form, key: String): Tx? {
         val (t, err) = buildTx(TxInput(f.tType, parseNum(f.tAmt), if (f.tType == "transfer") "Перекази" else f.tCat, f.tDesc.trim(), f.tDate.trim(), f.tAcc, f.tToAcc, parseNum(f.tToAmt), key), data.accs, RATES, rate)
         formErr = err; return t
     }
-    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: ""); sheet = Sheet.Pos }
+    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pTicker = "", pFx = ""); quoteMsg = ""; sheet = Sheet.Pos }
     fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, cashF = a.cash, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); formOrig = form; sheet = Sheet.AccE }
     fun editPos(i: Int) {
         val p = data.pos[i]; fun c(v: Double) = ((v / rate) * 100).let { Math.round(it) / 100.0 }.toString()
-        form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(), pBuy = c(p.buy), pNow = c(p.now), pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; sheet = Sheet.PosE
+        fun r2(v: Double) = (Math.round(v * 10000) / 10000.0).toString()
+        val fx = isFxPos(p)
+        form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(),
+            pBuy = if (fx) r2(p.pxBuy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else c(p.now), pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx) p.cur else "UAH", pTicker = p.ticker,
+            pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; quoteMsg = ""; sheet = Sheet.PosE
     }
     fun openSettings() { eraseAsk = false; sheet = Sheet.Settings }
     fun openImport() { impResult = null; sheet = Sheet.Import }
@@ -222,20 +279,18 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             }
             Sheet.Import -> importCommit()
             Sheet.PosE -> {
-                val q = posQty(f); val b = parseNum(f.pBuy) * rate; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * rate
                 val o = s.pos.getOrNull(f.editIdx) ?: run { closeSheet(); return }
-                val monthly = f.group == "Депозити" && f.pMonthly
-                formErr = posFormError(f.group, f.pName, q, b, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
+                val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
+                val np = posFromForm(f, q, monthly, o)
+                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
                 open = open + f.group
-                val np = Pos(f.group, f.pName.trim(), q, b, nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), o.calc, monthly, if (monthly) f.pPayAcc else "")
                 commit(processDepositPayouts(s.copy(pos = s.pos.mapIndexed { i, x -> if (i == f.editIdx) np else x }), todayIso(), RATES)); closeSheet()
             }
             Sheet.Pos -> {
-                val q = posQty(f); val b = parseNum(f.pBuy) * rate
-                val monthly = f.group == "Депозити" && f.pMonthly
-                formErr = posFormError(f.group, f.pName, q, b, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
+                val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
+                val np = posFromForm(f, q, monthly, null)
+                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
                 open = open + f.group
-                val np = Pos(f.group, f.pName.trim(), q, b, b, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), null, monthly, if (monthly) f.pPayAcc else "")
                 commit(processDepositPayouts(s.copy(pos = s.pos + np), todayIso(), RATES)); closeSheet()
             }
             Sheet.Tx -> {
@@ -353,5 +408,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             KMode.Confirm -> if (v == tmp) { saveSec(sec.copy(hash = h)); kmode = KMode.None; entry = ""; kerr = ""; tmp = "" } else { kmode = KMode.New; entry = ""; tmp = ""; kerr = "PIN не збігається. Створіть заново" }
             else -> {}
         }
+    }
+
+    // Наприкінці класу: на цей момент усі поля (зокрема quoteBusy/quoteMsg) уже ініціалізовані.
+    init {
+        // ціни ETF за тікером — не частіше ніж раз на 6 годин
+        val lastQuote = data.pos.filter { it.ticker.isNotBlank() }.maxOfOrNull { it.pxAt }
+        if (lastQuote != null && System.currentTimeMillis() - lastQuote > 6 * 3600_000L) refreshQuotes()
     }
 }

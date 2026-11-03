@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.sp
 class Totals(val vm: BellaViewModel) {
     val d = vm.data
     val invGroups = GROUPS.map { (g, c) ->
-        val ps = d.pos.filter { it.group == g }; val v = ps.sumOf { it.qty * it.now }
-        val rt = if (v > 0) ps.sumOf { it.qty * it.now * it.rate } / v else 0.0
+        val ps = d.pos.filter { it.group == g }; val v = ps.sumOf { posValueUah(it, RATES) }
+        val rt = if (v > 0) ps.sumOf { posValueUah(it, RATES) * it.rate } / v else 0.0
         Triple(g, c, Triple(v, rt, ps.size))
     }
     val invT = invGroups.sumOf { it.third.first }
@@ -338,14 +338,22 @@ fun InvScreen(vm: BellaViewModel) {
                         T("${sharePct(v.first, total)}%", 12.sp, C.n500); T(vm.m(v.first) + " " + vm.sym, 14.sp, weight = FontWeight.Medium, maxLines = 1)
                         Ico(if (isOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
                     }
+                    if (isOpen && g == "ETF") Column(Modifier.padding(start = 18.dp, top = 4.dp)) {
+                        T(if (vm.quoteBusy) "Оновлення цін…" else "↻ Оновити ціни з біржі", 13.sp, C.accent400, modifier = Modifier.clickable { vm.refreshQuotes() }.padding(vertical = 4.dp))
+                        if (vm.quoteMsg.isNotEmpty() && vm.sheet == Sheet.None) T(vm.quoteMsg, 11.sp, C.n500)
+                    }
                     if (isOpen) vm.data.pos.forEachIndexed { ix, p ->
                         if (p.group == g) {
-                            val pl = (p.now - p.buy) / p.buy * 100
+                            val value = posValueUah(p, RATES); val cost = posCostUah(p); val pl = if (cost > 0) (value - cost) / cost * 100 else 0.0; val fxp = isFxPos(p)
                             Column(Modifier.fillMaxWidth().clickable { vm.editPos(ix) }.padding(start = 18.dp, top = 8.dp, bottom = 8.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(p.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(vm.m(p.qty * p.now) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(p.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(vm.m(value) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    T("${fmtQty(p.qty)} шт. · куплено по ${vm.m(p.buy)}", 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
+                                    T("${fmtQty(p.qty)} шт. · куплено по " + if (fxp) "${fmt2(p.pxBuy)} ${p.cur}" else vm.m(p.buy), 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
                                 }
+                                if (fxp) {
+                                    val sp = plSplit(p, RATES); fun sg(v: Double) = (if (v >= 0) "+" else "−") + vm.m(Math.abs(v)) + " " + vm.sym
+                                    T("${fmt2(p.pxNow)} ${p.cur}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
+                                } else if (p.ticker.isNotEmpty()) T(p.ticker, 11.sp, C.n500)
                                 T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
                             }
                         }

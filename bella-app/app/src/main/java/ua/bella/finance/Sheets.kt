@@ -149,6 +149,24 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
             if (edit) Field("Поточна сума (${vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }
             Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) }
         }
+    } else if (f.group == "ETF") {
+        Seg(CURRENCIES.map { it to it }, f.pCur) { vm.form = f.copy(pCur = it) }
+        val cs = if (f.pCur == "UAH") vm.sym else f.pCur
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+            Field("Тікер (Yahoo)", f.pTicker, Modifier.weight(1f), hint = vm.was { it.pTicker }.ifEmpty { "VWCE.DE, SPY" }) { vm.form = f.copy(pTicker = it) }
+            Btn(if (vm.quoteBusy) "…" else "Ціна з біржі", false, icon = Icons.Outlined.Sync) { vm.quoteIntoForm() }
+        }
+        if (vm.quoteMsg.isNotEmpty()) T(vm.quoteMsg, 11.sp, if (vm.quoteMsg.startsWith("Ціна ")) C.n500 else C.neg)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }
+            Field("Ціна купівлі ($cs)", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Field("Поточна ціна ($cs)", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }.ifEmpty { if (edit) "" else "= ціна купівлі" }, numeric = true) { vm.form = f.copy(pNow = it) }
+            if (f.pCur != "UAH") Field("Курс купівлі, ₴ за 1 ${f.pCur}", f.pFx, Modifier.weight(1f), hint = vm.was { it.pFx }.ifEmpty { "НБУ: " + fmt2(RATES[f.pCur] ?: 0.0) }, numeric = true) { vm.form = f.copy(pFx = it) }
+        }
+        Field("Дивідендна дохідність, % річних", f.pRate, hint = vm.was { it.pRate }.ifEmpty { "0 для накопичувальних" }, numeric = true) { vm.form = f.copy(pRate = it) }
+        if (f.pCur != "UAH") T("Ціни у ${f.pCur}; вартість у гривнях іде за курсом НБУ, тож прибуток показується окремо: від ціни фонду і від курсу. Курс купівлі порожній — береться поточний.", 11.sp, C.n500)
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки (${vm.sym})", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }
         if (edit) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Поточна ціна (${vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }; Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) } }
@@ -215,6 +233,7 @@ private fun SettingsList(vm: BellaViewModel) {
     SettingRow(Icons.Outlined.HelpOutline, "Довідка", "Як користуватися функціями", trailing = true) { vm.help = -1; vm.openSheet(Sheet.Help) }
     SettingRow(if (vm.light) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Тема", if (vm.light) "Світла" else "Темна") { vm.toggleTheme() }
     SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
+    T("Bella Finance ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_DATE}", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
 }
 
 @Composable

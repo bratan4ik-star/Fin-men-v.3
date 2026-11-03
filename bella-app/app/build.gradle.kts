@@ -1,3 +1,4 @@
+import java.time.LocalDate
 import java.util.Properties
 
 plugins {
@@ -15,6 +16,13 @@ val keystoreProps = Properties().apply {
 }
 fun signing(prop: String, env: String): String? = keystoreProps.getProperty(prop) ?: System.getenv(env)
 
+// Версія: назву (1.1.0) піднімаємо вручну разом зі змінами. Номер збірки = кількість комітів у git:
+// росте з кожною зміною і однаковий локально й у CI, тож новіший APK завжди встановлюється поверх старішого.
+// Можна перевизначити змінною BELLA_BUILD_NUMBER.
+val appVersionName = "1.1.0"
+val buildNumber: Int = System.getenv("BELLA_BUILD_NUMBER")?.toIntOrNull()
+    ?: try { providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }.standardOutput.asText.get().trim().toInt() } catch (e: Exception) { 1 }
+
 android {
     namespace = "ua.bella.finance"
     compileSdk = 34
@@ -22,8 +30,9 @@ android {
         applicationId = "ua.bella.finance"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = buildNumber
+        versionName = appVersionName
+        buildConfigField("String", "BUILD_DATE", "\"${LocalDate.now()}\"")
     }
     signingConfigs {
         val storePath = signing("storeFile", "BELLA_KEYSTORE")
@@ -46,7 +55,7 @@ android {
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 dependencies {
     val bom = platform("androidx.compose:compose-bom:2024.09.00")
