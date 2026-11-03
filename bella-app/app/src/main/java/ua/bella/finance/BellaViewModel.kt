@@ -68,6 +68,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var filters by mutableStateOf(Filters())
     var open by mutableStateOf(setOf<String>())
     var help by mutableStateOf(-1)
+    /** Розділ довідки, що показується першим (-1 — звичайний порядок). */
+    var helpTop by mutableStateOf(-1)
     var eraseAsk by mutableStateOf(false)
     var calcIn by mutableStateOf(CalcInput())
     var impResult by mutableStateOf<ImportResult?>(null); private set
@@ -313,6 +315,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             pBuy = if (fx) r2(p.pxBuy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else c(p.now), pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx) p.cur else "UAH", pTicker = p.ticker,
             pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; quoteMsg = ""; sheet = Sheet.PosE
     }
+    /** Довідка з будь-якого екрана: відкривається на розділі, що відповідає поточному екрану. */
+    fun openHelp(section: Int = helpSectionFor(screen)) { help = section; helpTop = section; sheet = Sheet.Help }
     fun openSettings() { eraseAsk = false; sheet = Sheet.Settings }
     fun openImport() { impResult = null; sheet = Sheet.Import }
 

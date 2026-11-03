@@ -305,7 +305,7 @@ private fun SettingsList(vm: BellaViewModel) {
     SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
     SettingRow(Icons.Outlined.VerifiedUser, "Безпека", if (vm.sec.hash.isNotEmpty()) "PIN-код" + (if (vm.sec.bio) " · відбиток пальця" else "") else "Захист вимкнено", trailing = true) { vm.openSheet(Sheet.Security) }
     SettingRow(Icons.Outlined.ContentCopy, "Прибрати повтори операцій", if (vm.dupInStore > 0) "Знайдено повторів: ${vm.dupInStore}" else "Повторів немає") { vm.dedupeStore() }
-    SettingRow(Icons.Outlined.HelpOutline, "Довідка", "Як користуватися функціями", trailing = true) { vm.help = -1; vm.openSheet(Sheet.Help) }
+    SettingRow(Icons.Outlined.HelpOutline, "Довідка", "Як користуватися функціями", trailing = true) { vm.openHelp(-1) }
     SettingRow(if (vm.light) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Тема", if (vm.light) "Світла" else "Темна") { vm.toggleTheme() }
     SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
     T("Bella Finance ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_DATE}", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
@@ -335,19 +335,22 @@ private val HELP = listOf(
     Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату."),
     Icons.Outlined.Search to ("Пошук і фільтри" to "У вкладці «Операції» є пошук за описом чи категорією, кнопки сортування за датою та сумою, фільтри за діапазоном дат і сум, а також вибір типу: усі, витрати, доходи, перекази."),
     Icons.Outlined.FileUpload to ("Імпорт виписки" to "Налаштування, Імпорт виписки. Підтримує Excel (.xlsx) з банку та CSV. Перекази між власними картками не рахуються доходом чи витратою. Якщо у файлі є повтори, з'явиться кнопка «Прибрати повтори». Файл читається лише на вашому пристрої."),
-    Icons.Outlined.TrendingUp to ("Інвестиції" to "Групи ОВДП, Депозити, ETF та Крипто розгортаються по натисканню. Кнопка «Позиція» додає нову. Натисніть на позицію, щоб змінити кількість, ціну, ставку, дати чи видалити її."),
-    Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Побачите дохідність до погашення, графік виплат зі статусом і розрахунок продажу. «Додати в інвестиції» створює позицію. ОВДП для фізичних осіб не оподатковуються."),
-    Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "У «Цілях» кнопка з сумою додає внесок до накопичення. «Пасивний дохід» показує місячний дохід з інвестицій, для депозитів після податку 23%."),
+    Icons.Outlined.TrendingUp to ("Інвестиції" to "Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. Внизу — калькулятор складного відсотка."),
+    Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються."),
+    Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),
     Icons.Outlined.VerifiedUser to ("Безпека" to "Налаштування, Безпека: PIN-код із 4 цифр, відбиток пальця, автоблокування та ручне блокування. Після 5 хибних спроб потрібно зачекати 30 секунд."),
     Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Стерти дані видаляє все без можливості відновлення."),
 )
 
 @Composable
 private fun HelpList(vm: BellaViewModel) {
-    HELP.forEachIndexed { i, (ic, tt) ->
+    // розділ, що відповідає поточному екрану, показується першим
+    val order = HELP.indices.sortedBy { if (it == vm.helpTop) -1 else it }
+    order.forEach { i ->
+        val (ic, tt) = HELP[i]
         Column {
             Row(Modifier.fillMaxWidth().clickable { vm.help = if (vm.help == i) -1 else i }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Ico(ic, C.accent, 20.dp); T(tt.first, 14.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f)); Ico(if (vm.help == i) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n500, 16.dp)
+                Ico(ic, C.accent, 20.dp); T(tt.first, 14.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f)); Ico(if (vm.help == i) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
             }
             if (vm.help == i) T(tt.second, 12.sp, C.n400, modifier = Modifier.padding(start = 32.dp, bottom = 8.dp))
             Div()

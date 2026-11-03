@@ -30,4 +30,8 @@ class GroupingTest {
         assertEquals(120.0, g[0].openTotal, 1e-9); assertEquals(3, g[0].items.size); assertEquals(1, g[1].items.size)
         assertEquals(listOf("Мені винні"), groupDebts(listOf(Debt("A", true, 1.0))).map { it.title })
     }
+
+    @Test fun everyScreenHasHelpSection() {
+        assertEquals(listOf(0, 2, 4, 7, 9, 9, 8), Screen.values().map { helpSectionFor(it) }.let { listOf(it[0], it[1], it[2], it[3], it[4], it[5], it[6]) })
+    }
 }

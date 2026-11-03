@@ -117,6 +117,7 @@ fun TopBar(title: String, vm: BellaViewModel, trailing: @Composable RowScope.() 
         IconBtn(Icons.Outlined.ArrowBack, C.text) { vm.go(Screen.Home) }
         T(title, 18.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f).padding(start = 4.dp), maxLines = 1)
         trailing()
+        IconBtn(Icons.Outlined.HelpOutline, C.n500) { vm.openHelp() }
     }
 }
 

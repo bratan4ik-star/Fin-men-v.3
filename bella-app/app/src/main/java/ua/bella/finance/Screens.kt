@@ -71,6 +71,7 @@ fun HomeScreen(vm: BellaViewModel) {
             CurPicker(vm)
             IconBtn(if (vm.hide) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility) { vm.hide = !vm.hide }
             IconBtn(Icons.Outlined.Undo, if (vm.undoN > 0) C.accent else C.n600) { vm.undo() }
+            IconBtn(Icons.Outlined.HelpOutline, C.n500) { vm.openHelp() }
             IconBtn(Icons.Outlined.Settings, C.n500) { vm.openSettings() }
         }
         Page {
