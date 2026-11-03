@@ -17,6 +17,8 @@ fun describeChange(a: AppData, b: AppData): String {
     if (a.debts != b.debts) return "Зміна боргу: ${b.debts.firstOrNull { it !in a.debts }?.who ?: ""}".trim()
     if (a.pos != b.pos) return "Зміна позиції: ${b.pos.firstOrNull { it !in a.pos }?.name ?: ""}".trim()
     if (a.accs != b.accs) return "Зміна рахунку: ${b.accs.firstOrNull { it !in a.accs }?.name ?: ""}".trim()
+    if (a.recurring.size != b.recurring.size) return if (b.recurring.size > a.recurring.size) "Додано повторювану операцію: ${b.recurring.first { it !in a.recurring }.desc}" else "Видалено повторювану операцію: ${a.recurring.first { it !in b.recurring }.desc}"
+    if (a.recurring != b.recurring) return "Зміна повторюваної операції: ${b.recurring.firstOrNull { it !in a.recurring }?.desc ?: ""}".trim()
     if (a.limits != b.limits || a.cats != b.cats) return "Зміна лімітів і категорій"
     return "Зміна даних"
 }

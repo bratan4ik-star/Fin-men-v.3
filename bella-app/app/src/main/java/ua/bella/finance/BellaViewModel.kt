@@ -14,9 +14,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.time.LocalDate
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Rec, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -36,6 +37,8 @@ data class Form(
     // ціль: поля форми, індекс цілі; внесок/зняття — напрям, рахунок, сума
     val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1, val gMonthly: String = "",
     val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
+    // повторювана операція: галочка в новій операції; редагування шаблону (індекс, число місяця, активність)
+    val tRepeat: Boolean = false, val rIdx: Int = -1, val rDay: String = "", val rActive: Boolean = true,
 )
 
 data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
@@ -166,6 +169,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (System.currentTimeMillis() - loaded.ratesAt > 6 * 3600_000L) refreshRates()
         // щомісячні виплати депозитів, що настали (зокрема пропущені, поки застосунок не відкривали)
         processDepositPayouts(data, todayIso(), RATES).let { if (it !== data) { data = it; persist() } }
+        processRecurring(data, TODAY, RATES).let { if (it !== data) { data = it; persist() } }
         // знімок капіталу за сьогодні, навіть якщо змін не було
         if (hist.lastOrNull()?.d != TODAY) persist()
     }
@@ -230,7 +234,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openTx() {
         formErr = ""; txDelAsk = false
-        form = form.copy(tAmt = "", tDesc = "", tType = "expense", tCat = "Харчування", tDate = todayIso(), tAcc = data.accs.firstOrNull()?.id ?: "", tToAcc = data.accs.getOrNull(1)?.id ?: "", tToAmt = "", txIdx = -1)
+        form = form.copy(tAmt = "", tDesc = "", tType = "expense", tCat = "Харчування", tRepeat = false, tDate = todayIso(), tAcc = data.accs.firstOrNull()?.id ?: "", tToAcc = data.accs.getOrNull(1)?.id ?: "", tToAmt = "", txIdx = -1)
         sheet = Sheet.Tx
     }
     /** Відкриває операцію на редагування. Рахунок, якого вже немає, показується як «Без рахунку». */
@@ -332,7 +336,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- сабміти ----------
     fun submit() {
-        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE || sheet == Sheet.GoalE
+        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE || sheet == Sheet.GoalE || sheet == Sheet.Rec
         val f = if (edit && o != null) fillBlanks(form, o) else form; val s = data
         when (sheet) {
             Sheet.Transfer -> {
@@ -369,8 +373,22 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             }
             Sheet.Tx -> {
                 val t = txFromForm(f, "") ?: return
-                commit(addTx(s, t)); closeSheet()
+                var nd = addTx(s, t)
+                if (f.tRepeat && t.type != "transfer") nd = nd.copy(recurring = nd.recurring + recurringFrom(t, t.date.substring(8, 10).toInt()))
+                commit(nd); closeSheet()
                 setMonth(months.indexOf(t.date.take(7)).coerceAtLeast(0))
+            }
+            Sheet.Rec -> {
+                val r = s.recurring.getOrNull(f.rIdx) ?: run { closeSheet(); return }
+                val amt = parseNum(f.tAmt); val day = f.rDay.trim().toIntOrNull()
+                formErr = when { amt <= 0 -> "Вкажіть суму більше нуля"; day == null || day !in 1..31 -> "Число місяця від 1 до 31"; else -> "" }
+                if (formErr.isNotEmpty()) return
+                // сума у валюті рахунку, якщо він є й існує; інакше у валюті перегляду
+                val acc = s.accs.firstOrNull { it.id == r.acc }
+                val uah = amt * (if (acc != null) RATES[acc.cur] ?: 1.0 else rate)
+                val nr = r.copy(desc = f.tDesc.trim().ifEmpty { r.cat }, amt = uah, accAmt = if (acc != null) amt else 0.0, day = day!!, active = f.rActive,
+                    next = if (day != r.day) clampDay(java.time.YearMonth.from(LocalDate.parse(r.next)), day).let { d -> if (d.isBefore(LocalDate.parse(TODAY))) nextMonthly(d, day) else d }.toString() else r.next)
+                commit(s.copy(recurring = s.recurring.mapIndexed { i, x -> if (i == f.rIdx) nr else x })); closeSheet()
             }
             Sheet.Goal -> { val g = goalFromForm(f) ?: return; commit(s.copy(goals = s.goals + g)); closeSheet() }
             Sheet.GoalE -> {
@@ -417,6 +435,19 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         formErr = ""; form = form.copy(gName = g.name, gTarget = v2(g.target), gSaved = v2(g.saved), gStep = v2(g.step), gDeadline = g.deadline, gIcon = g.icon, gIdx = i, gMonthly = if (g.monthly > 0) v2(g.monthly) else ""); formOrig = form; sheet = Sheet.GoalE
     }
     fun openGoalMove(i: Int) { if (data.goals.getOrNull(i) == null) return; formErr = ""; formOrig = null; form = form.copy(gIdx = i, gIn = true, gAcc = data.accs.firstOrNull { !it.sav }?.id ?: "", gAmt = ""); sheet = Sheet.GoalMove }
+    // ---------- повторювані операції ----------
+    fun openRec(i: Int) {
+        val r = data.recurring.getOrNull(i) ?: return
+        fun s2(v: Double) = (Math.round(v / rate * 100) / 100.0).let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }
+        formErr = ""; form = form.copy(rIdx = i, tDesc = r.desc, tAmt = s2(r.amt), rDay = r.day.toString(), rActive = r.active, tCat = r.cat); formOrig = form; sheet = Sheet.Rec
+    }
+    fun deleteRec() {
+        if (!delAsk) { delAsk = true; return }; delAsk = false
+        val i = form.rIdx; if (data.recurring.getOrNull(i) == null) { closeSheet(); return }
+        commit(data.copy(recurring = data.recurring.filterIndexed { j, _ -> j != i })); closeSheet()
+    }
+    /** Створює настали повторювані операції; викликається під час запуску й повернення в застосунок. */
+    fun runRecurring() { processRecurring(data, TODAY, RATES).let { if (it !== data) commit(it) } }
     fun deleteGoal() {
         if (!delAsk) { delAsk = true; return }; delAsk = false
         val i = form.gIdx; if (data.goals.getOrNull(i) == null) { closeSheet(); return }
@@ -525,7 +556,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelPin() { kmode = KMode.None; entry = ""; kerr = ""; tmp = "" }
     fun unlockByBio() { kmode = KMode.None; entry = ""; kerr = "" }
     fun onStopped() { hiddenAt = System.currentTimeMillis() }
-    fun onStarted() { if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
+    fun onStarted() { runRecurring(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
     fun backspace() { entry = entry.dropLast(1) }
     fun press(d: String) {
         if (kmode == KMode.None) return

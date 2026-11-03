@@ -28,10 +28,10 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.Rec to "Повторювана операція", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
 )
 private const val EDIT_NOTE = "Щоб побачити, що було, очистіть поле: старе значення з'явиться сірим. Порожнє поле під час збереження лишається як було."
-private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
+private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.Rec to "Зберегти", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,7 +44,7 @@ fun SheetHost(vm: BellaViewModel) {
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (sh) {
-                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
+                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Rec -> RecForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
                     Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
@@ -129,6 +129,10 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
     }
     Field("Опис", f.tDesc, hint = vm.was { it.tDesc }.ifEmpty { if (f.tType == "transfer") "необов'язково" else "напр. Сільпо" }) { vm.form = f.copy(tDesc = it) }
     Field("Дата", f.tDate, hint = vm.was { it.tDate }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(tDate = it) }
+    if (!edit && f.tType != "transfer") Row(Modifier.clickable { vm.form = f.copy(tRepeat = !f.tRepeat) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Ico(if (f.tRepeat) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Повторювати щомісяця (того ж числа)", 13.sp)
+    }
+    if (!edit && f.tRepeat && f.tType != "transfer") T("Така сама операція створюватиметься щомісяця в це число; пропущені місяці дорахуються під час запуску. Керувати — «Бюджет → Ліміти → Повторювані».", 11.sp, C.n500)
     val note = when {
         f.tType == "transfer" -> "Баланси обох рахунків зміняться автоматично. Переказ не потрапляє в доходи й витрати."
         acc != null -> "Баланс «${acc.name}» зміниться автоматично."
@@ -138,6 +142,24 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     if (edit) T(EDIT_NOTE, 11.sp, C.n500)
     if (edit) T(if (vm.txDelAsk) "Натисніть ще раз, щоб видалити (баланс рахунку повернеться)" else "Видалити операцію", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteTx() }.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun RecForm(vm: BellaViewModel) {
+    val f = vm.form; val r = vm.data.recurring.getOrNull(f.rIdx) ?: return
+    val acc = vm.data.accs.firstOrNull { it.id == r.acc }
+    T((if (r.type == "income") "Дохід" else "Витрата") + " · ${r.cat}" + if (acc != null) " · ${acc.name}" else " · без рахунку", 12.sp, C.n500)
+    Field("Опис", f.tDesc, hint = vm.was { it.tDesc }) { vm.form = f.copy(tDesc = it) }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Field("Сума (${acc?.cur ?: vm.cur})", f.tAmt, Modifier.weight(1f), hint = vm.was { it.tAmt }, numeric = true) { vm.form = f.copy(tAmt = it) }
+        Field("Число місяця", f.rDay, Modifier.weight(1f), hint = vm.was { it.rDay }, numeric = true) { vm.form = f.copy(rDay = it) }
+    }
+    Row(Modifier.clickable { vm.form = f.copy(rActive = !f.rActive) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Ico(if (f.rActive) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Активна (створювати щомісяця)", 13.sp)
+    }
+    T("Наступна: ${ddmmyyyy(r.next)}. Уже створені операції не змінюються. " + EDIT_NOTE, 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+    T(if (vm.delAsk) "Натисніть ще раз, щоб видалити шаблон" else "Видалити шаблон (створені операції лишаться)", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteRec() }.padding(vertical = 4.dp))
 }
 
 @Composable

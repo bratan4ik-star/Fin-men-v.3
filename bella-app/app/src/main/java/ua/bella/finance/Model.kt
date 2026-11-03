@@ -54,6 +54,8 @@ data class AppData(
     /** Місячні ліміти витрат за категоріями (у гривнях) і список категорій — редагуються в «Бюджет → Ліміти». */
     val limits: Map<String, Double> = LIMITS.filterValues { it > 0 },
     val cats: List<String> = CATEGORIES,
+    /** Повторювані щомісячні операції (оренда, підписки). */
+    val recurring: List<Recurring> = emptyList(),
 )
 
 @Serializable

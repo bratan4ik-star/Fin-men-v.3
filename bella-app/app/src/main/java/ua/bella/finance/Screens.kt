@@ -289,6 +289,21 @@ fun BudgetScreen(vm: BellaViewModel) {
                 }
                 else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Btn("Налаштувати ліміти й категорії", false, Modifier.fillMaxWidth(), Icons.Outlined.Tune) { vm.openCats() }
+                    Column {
+                        SectionHead("Повторювані операції", "${s.recurring.size}", C.n500)
+                        if (s.recurring.isEmpty()) T("Немає. Під час додавання операції поставте «Повторювати щомісяця» — для оренди, підписок, зарплати.", 12.sp, C.n500)
+                        s.recurring.forEachIndexed { i, r ->
+                            Div()
+                            Row(Modifier.fillMaxWidth().clickable { vm.openRec(i) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Ico(catIcon(r.cat), if (r.active) C.accent else C.n600, 20.dp)
+                                Column(Modifier.weight(1f)) {
+                                    T(r.desc, 14.sp, if (r.active) C.text else C.n500, FontWeight.Medium, maxLines = 1)
+                                    T(if (r.active) "щомісяця, ${r.day}-го · наступна ${ddmm(r.next)}" else "призупинено", 11.sp, C.n500, maxLines = 1)
+                                }
+                                T((if (r.type == "income") "+" else "−") + vm.m(r.amt) + " " + vm.sym, 14.sp, if (r.type == "income") C.pos else C.text, FontWeight.Medium, maxLines = 1)
+                            }
+                        }
+                    }
                     if (s.limits.isEmpty()) T("Лімітів ще немає. Задайте місячний ліміт для потрібних категорій.", 12.sp, C.n500)
                     s.limits.forEach { (c, l) ->
                     val sp = cats[c] ?: 0.0; val over = l > 0 && sp > l
