@@ -314,13 +314,18 @@ private fun OpsTab(vm: BellaViewModel) {
 @Composable
 fun InvScreen(vm: BellaViewModel) {
     val t = Totals(vm)
+    val cashAccs = vm.data.accs.withIndex().filter { it.value.cash }
+    val cashT = cashAccs.sumOf { vm.base(it.value) }
+    val total = t.invT + cashT
     Column(Modifier.fillMaxSize()) {
         TopBar("Інвестиції", vm)
         Page {
             Column {
-                BigMoney("ПОРТФЕЛЬ", vm.m(t.invT), vm.sym)
+                BigMoney("ПОРТФЕЛЬ", vm.m(total), vm.sym)
+                if (cashT > 0) T("Інвестиції ${vm.m(t.invT)} · готівка ${vm.m(cashT)} ${vm.sym}", 12.sp, C.n500, modifier = Modifier.padding(top = 2.dp))
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp).height(8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     t.invGroups.forEach { (_, c, v) -> if (v.first > 0) Box(Modifier.weight(v.first.toFloat()).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(Color(c))) }
+                    if (cashT > 0) Box(Modifier.weight(cashT.toFloat()).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(CashC))
                 }
             }
             Column {
@@ -330,7 +335,7 @@ fun InvScreen(vm: BellaViewModel) {
                     Row(Modifier.fillMaxWidth().clickable { vm.open = if (isOpen) vm.open - g else vm.open + g }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(c)))
                         Column(Modifier.weight(1f)) { T(g, 14.sp, weight = FontWeight.Medium); T("${v.third} поз. · " + if (v.second > 0) "%.1f%% річних".format(v.second) else "без виплат", 11.sp, C.n500, maxLines = 1) }
-                        T("${Math.round(v.first / (if (t.invT > 0) t.invT else 1.0) * 100)}%", 12.sp, C.n500); T(vm.m(v.first) + " " + vm.sym, 14.sp, weight = FontWeight.Medium, maxLines = 1)
+                        T("${sharePct(v.first, total)}%", 12.sp, C.n500); T(vm.m(v.first) + " " + vm.sym, 14.sp, weight = FontWeight.Medium, maxLines = 1)
                         Ico(if (isOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
                     }
                     if (isOpen) vm.data.pos.forEachIndexed { ix, p ->
@@ -347,10 +352,31 @@ fun InvScreen(vm: BellaViewModel) {
                     }
                 }
             }
+            Column {
+                val g = "Готівка"; val isOpen = g in vm.open
+                Div()
+                Row(Modifier.fillMaxWidth().clickable { vm.open = if (isOpen) vm.open - g else vm.open + g }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(CashC))
+                    Column(Modifier.weight(1f)) { T(g, 14.sp, weight = FontWeight.Medium); T(if (cashAccs.isEmpty()) "немає готівкових рахунків" else "${cashAccs.size} рах. · за курсом НБУ", 11.sp, C.n500, maxLines = 1) }
+                    T("${sharePct(cashT, total)}%", 12.sp, C.n500); T(vm.m(cashT) + " " + vm.sym, 14.sp, weight = FontWeight.Medium, maxLines = 1)
+                    Ico(if (isOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
+                }
+                if (isOpen) {
+                    cashAccs.forEach { (ix, a) ->
+                        Column(Modifier.fillMaxWidth().clickable { vm.editAcc(ix) }.padding(start = 18.dp, top = 8.dp, bottom = 8.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(a.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(vm.m(vm.base(a)) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
+                            T(nativeLabel(a, vm.hide) + if (a.cur != "UAH") " · 1 ${a.cur} = ${fmt2(RATES[a.cur] ?: 0.0)} ₴" else "", 11.sp, C.n500, maxLines = 1)
+                        }
+                    }
+                    T("+ Додати готівку", 13.sp, C.accent400, modifier = Modifier.clickable { vm.openCash() }.padding(start = 18.dp, top = 8.dp, bottom = 8.dp))
+                    T("Суми беруться з рахунків «Капітал та Рахунки» і в капіталі не дублюються. Позначка «Готівка» — у формі рахунку.", 11.sp, C.n500, modifier = Modifier.padding(start = 18.dp))
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Позиція", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openPos() }; Btn("ОВДП", false, Modifier.weight(1f), Icons.Outlined.Calculate) { vm.go(Screen.Calc) } }
         }
     }
 }
+private val CashC = Color(0xFF4ADE80)
 private fun fmtQty(q: Double) = if (q == Math.floor(q)) q.toLong().toString() else q.toString()
 
 // ================= ЦІЛІ =================
