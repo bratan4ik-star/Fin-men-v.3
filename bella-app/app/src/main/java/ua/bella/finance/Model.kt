@@ -29,7 +29,12 @@ val CATEGORIES = listOf("Перекази", "Надходження", "Знят�
 )
 @Serializable data class Debt(val who: String, val owedToMe: Boolean, val amt: Double, val done: Boolean = false, val due: String = "")
 @Serializable data class CalcExtra(val isin: String, val nom: Double, val freq: Int, val sell: String, val sellD: String, val buy: String)
-@Serializable data class Pos(val group: String, val name: String, val qty: Double, val buy: Double, val now: Double, val mat: String = "", val rate: Double = 0.0, val next: String = "", val calc: CalcExtra? = null)
+@Serializable data class Pos(val group: String, val name: String, val qty: Double, val buy: Double, val now: Double, val mat: String = "", val rate: Double = 0.0, val next: String = "", val calc: CalcExtra? = null,
+    /** Депозит: щомісячна виплата відсотків у дохід на рахунок payAcc («» = без рахунку). */
+    val monthly: Boolean = false, val payAcc: String = "",
+    /** ETF: валюта ціни, ціни купівлі й поточна у ній, курс купівлі, тікер Yahoo і час котирування (див. Etf.kt). */
+    val cur: String = "UAH", val pxBuy: Double = 0.0, val pxNow: Double = 0.0, val buyFx: Double = 0.0, val ticker: String = "", val pxAt: Long = 0L,
+)
 @Serializable data class Goal(val name: String, val saved: Double, val target: Double, val icon: String, val step: Double)
 @Serializable data class Override(val name: String, val cur: String, val bal: Double, val sav: Boolean)
 @Serializable data class Security(val hash: String = "", val bio: Boolean = false, val autoMin: Int = 1)
