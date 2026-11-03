@@ -96,8 +96,15 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     val months: List<String> get() = data.txs.map { it.date.take(7) }.distinct().sorted().ifEmpty { listOf(CUR_MONTH) }
 
+    /** Час останнього успішного збереження на пристрої (мс), 0 — ще не зберігалось. */
+    var savedAt by mutableStateOf(prefs.getLong("savedAt", 0L)); private set
+
     private fun persist() {
-        try { prefs.edit().putString("state", json.encodeToString(Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt))).apply() } catch (_: Exception) {}
+        try {
+            val t = System.currentTimeMillis()
+            prefs.edit().putString("state", json.encodeToString(Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt))).putLong("savedAt", t).apply()
+            savedAt = t
+        } catch (_: Exception) {}
     }
 
     init {

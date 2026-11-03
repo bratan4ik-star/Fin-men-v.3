@@ -37,3 +37,10 @@ fun posFormError(group: String, name: String, qty: Double, buy: Double, monthly:
     }
     return ""
 }
+
+/** «03.11.2026 о 14:05» для часу збереження; порожньо, якщо ще не зберігалось. */
+fun fmtSavedAt(ms: Long, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
+    if (ms <= 0) return ""
+    val t = java.time.Instant.ofEpochMilli(ms).atZone(zone)
+    return t.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy")) + " о " + t.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+}
