@@ -77,7 +77,7 @@ fun HomeScreen(vm: BellaViewModel) {
                 val dl = if (vm.hide) "•••• ${vm.sym}" else (if (t.novNet >= 0) "+" else "−") + fmtInt(vm.cv(Math.abs(t.novNet))) + " " + vm.sym
                 T("$dl за місяць", 13.sp, if (t.novNet >= 0) C.pos else C.neg, modifier = Modifier.padding(top = 2.dp))
                 Sparkline()
-                Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("$" to "USD", "€" to "EUR", "zł" to "PLN").forEach { (sy, c) -> RateChip(sy + " " + String.format(java.util.Locale.US, "%.2f", RATES[c] ?: 0.0)) } }
+                Box(Modifier.padding(top = 14.dp)) { RatesSection(vm) }
             }
             Btn("Нова операція", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) { vm.openTx() }
             Column {
@@ -98,7 +98,6 @@ fun HomeScreen(vm: BellaViewModel) {
     }
 }
 
-@Composable private fun RateChip(s: String) = Box(Modifier.clip(RoundedCornerShape(14.dp)).background(Color.Transparent).padding(horizontal = 10.dp, vertical = 5.dp)) { T(s, 12.sp, C.n400, maxLines = 1) }
 
 @Composable
 private fun SectionRow(icon: ImageVector, color: Color, title: String, sub: String, metric: String, onClick: () -> Unit) {
