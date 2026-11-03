@@ -57,4 +57,13 @@ class EtfTest {
         assertEquals("VWCE: валюта котирування GBp не підтримується", applyQuote(vwce, Quote(1.0, "GBp"), r40, 1L).second)
         assertEquals("VWCE: котирування в USD, а позиція в EUR", applyQuote(vwce, Quote(1.0, "USD"), r40, 1L).second)
     }
+
+    @Test fun fundCurrencyDisplay() {
+        assertEquals("€", curSign("EUR")); assertEquals("$", curSign("USD")); assertEquals("zł", curSign("PLN"))
+        assertEquals(1600.0, posValueCur(vwce), 1e-9); assertEquals(1500.0, posCostCur(vwce), 1e-9)
+        assertEquals(100.0 / 15, plCurPct(vwce), 1e-9) // 150 → 160 €: +6,67% без впливу курсу
+        assertTrue(fxMoney(1600.0, "EUR").endsWith(" €"))
+        val uah = Pos("ETF", "Old", 1.0, 100.0, 120.0)
+        assertEquals(0.0, posValueCur(uah), 1e-9); assertEquals(0.0, plCurPct(uah), 1e-9)
+    }
 }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +71,7 @@ fun HomeScreen(vm: BellaViewModel) {
             CurPicker(vm)
             IconBtn(if (vm.hide) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility) { vm.hide = !vm.hide }
             IconBtn(Icons.Outlined.Undo, if (vm.undoN > 0) C.accent else C.n600) { vm.undo() }
+            IconBtn(Icons.Outlined.HelpOutline, C.n500) { vm.openHelp() }
             IconBtn(Icons.Outlined.Settings, C.n500) { vm.openSettings() }
         }
         Page {
@@ -159,10 +162,11 @@ fun AccScreen(vm: BellaViewModel) {
             }
             Column {
                 SectionHead("Рахунки та картки", "${vm.data.accs.size} рахунків", C.n500)
-                vm.data.accs.forEachIndexed { i, a -> if (!a.sav) AccRow(vm, i, a, t.cash) }
-                if (t.savT > 0) {
-                    Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) { T("Заощадження", 13.sp, weight = FontWeight.Medium); T(vm.m(t.savT) + " " + vm.sym, 13.sp, TealC, FontWeight.Medium) }
-                    vm.data.accs.forEachIndexed { i, a -> if (a.sav) AccRow(vm, i, a, t.savT) }
+                groupAccounts(vm.data.accs).forEach { (g, items) ->
+                    val total = items.sumOf { vm.base(it.value) }
+                    GroupBlock(g.title, "${items.size} · " + vm.m(total) + " " + vm.sym) {
+                        items.forEach { (ix, a) -> AccRow(vm, ix, a, total) }
+                    }
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Btn("Рахунок", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openAcc() }
@@ -171,20 +175,38 @@ fun AccScreen(vm: BellaViewModel) {
             }
             Column {
                 SectionHead("Борги та позики", "+ Додати") { vm.openDebt() }
-                vm.data.debts.forEachIndexed { i, d ->
-                    Div()
-                    val col = if (d.done) C.n500 else if (d.owedToMe) C.pos else C.neg
-                    Row(Modifier.fillMaxWidth().clickable { vm.toggleDebt(i) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(if (d.done) C.accent else Color.Transparent).then(Modifier.androidBorder(C.n700)), contentAlignment = Alignment.Center) { if (d.done) Ico(Icons.Outlined.Check, C.bg, 12.dp) }
-                        Column(Modifier.weight(1f)) {
-                            T(d.who, 14.sp, strike = d.done); T((if (d.owedToMe) "Мені винні" else "Я винен") + if (d.due.length >= 10) " · до ${ddmm(d.due)}" else "", 11.sp, col)
+                groupDebts(vm.data.debts).forEach { g ->
+                    GroupBlock(g.title, (if (g.owedToMe) "+" else "−") + vm.m(g.openTotal) + " " + vm.sym, if (g.owedToMe) C.pos else C.neg) {
+                        g.items.forEach { (i, d) ->
+                            Div()
+                            val col = if (d.done) C.n500 else if (d.owedToMe) C.pos else C.neg
+                            Row(Modifier.fillMaxWidth().clickable { vm.toggleDebt(i) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(if (d.done) C.accent else Color.Transparent).then(Modifier.androidBorder(C.n700)), contentAlignment = Alignment.Center) { if (d.done) Ico(Icons.Outlined.Check, C.bg, 12.dp) }
+                                Column(Modifier.weight(1f)) {
+                                    T(d.who, 14.sp, strike = d.done); T((if (d.done) "Повернено" else if (d.owedToMe) "Мені винні" else "Я винен") + if (d.due.length >= 10) " · до ${ddmm(d.due)}" else "", 11.sp, col)
+                                }
+                                T(vm.m(d.amt) + " " + vm.sym, 14.sp, col, FontWeight.Medium)
+                            }
                         }
-                        T(vm.m(d.amt) + " " + vm.sym, 14.sp, col, FontWeight.Medium)
                     }
                 }
             }
             RatesSection(vm)
         }
+    }
+}
+
+/** Група рядків, що згортається: заголовок із підсумком; за замовчуванням розгорнута. */
+@Composable
+private fun GroupBlock(title: String, summary: String, summaryColor: Color = C.n500, content: @Composable ColumnScope.() -> Unit) {
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+    Column {
+        Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            T(title, 13.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1)
+            T(summary, 12.sp, summaryColor, maxLines = 1)
+            Ico(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
+        }
+        if (open) content()
     }
 }
 
@@ -199,7 +221,7 @@ private fun AccRow(vm: BellaViewModel, i: Int, a: Account, groupTotal: Double) {
     val p = vm.base(a) / (if (groupTotal != 0.0) groupTotal else 1.0) * 100
     Div()
     Row(Modifier.fillMaxWidth().clickable { vm.editAcc(i) }.padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Ico(if (a.name.contains("Готівка")) Icons.Outlined.Payments else Icons.Outlined.CreditCard, C.accent, 20.dp)
+        Ico(if (a.cash) Icons.Outlined.Payments else Icons.Outlined.CreditCard, C.accent, 20.dp)
         Column(Modifier.weight(1f)) {
             T(a.name, 14.sp, weight = FontWeight.Medium, maxLines = 1)
             Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -336,7 +358,7 @@ fun InvScreen(vm: BellaViewModel) {
                 }
             }
             Column {
-                t.invGroups.forEach { (g, c, v) ->
+                t.invGroups.filter { it.third.third > 0 }.forEach { (g, c, v) ->
                     val isOpen = g in vm.open
                     Div()
                     Row(Modifier.fillMaxWidth().clickable { vm.open = if (isOpen) vm.open - g else vm.open + g }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -351,15 +373,20 @@ fun InvScreen(vm: BellaViewModel) {
                     }
                     if (isOpen) vm.data.pos.forEachIndexed { ix, p ->
                         if (p.group == g) {
-                            val value = posValueUah(p, RATES); val cost = posCostUah(p); val pl = if (cost > 0) (value - cost) / cost * 100 else 0.0; val fxp = isFxPos(p)
+                            val value = posValueUah(p, RATES); val cost = posCostUah(p); val fxp = isFxPos(p)
+                            // для ETF у валюті: відсоток — зміна ціни фонду в його валюті
+                            val pl = if (fxp) plCurPct(p) else if (cost > 0) (value - cost) / cost * 100 else 0.0
+                            fun fx(v: Double) = if (vm.hide) "•••• ${curSign(p.cur)}" else fxMoney(v, p.cur)
                             Column(Modifier.fillMaxWidth().clickable { vm.editPos(ix) }.padding(start = 18.dp, top = 8.dp, bottom = 8.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(p.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(vm.m(value) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(p.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(if (fxp) fx(posValueCur(p)) else vm.m(value) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    T("${fmtQty(p.qty)} шт. · куплено по " + if (fxp) "${if (vm.hide) "••••" else fmt2(p.pxBuy)} ${p.cur}" else vm.m(p.buy), 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
+                                    T("${fmtQty(p.qty)} шт. · куплено по " + if (fxp) fx(p.pxBuy) else vm.m(p.buy), 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
                                 }
                                 if (fxp) {
                                     val sp = plSplit(p, RATES); fun sg(v: Double) = (if (v >= 0) "+" else "−") + vm.m(Math.abs(v)) + " " + vm.sym
-                                    T("${if (vm.hide) "••••" else fmt2(p.pxNow)} ${p.cur}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
+                                    val plc = posValueCur(p) - posCostCur(p)
+                                    T("≈ ${vm.m(value)} ${vm.sym} · прибуток " + (if (plc >= 0) "+" else "−") + fx(Math.abs(plc)), 11.sp, if (plc >= 0) C.pos else C.neg, maxLines = 1)
+                                    T("ціна ${fx(p.pxNow)}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
                                 } else if (p.ticker.isNotEmpty()) T(p.ticker, 11.sp, C.n500)
                                 T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
                             }
@@ -367,7 +394,7 @@ fun InvScreen(vm: BellaViewModel) {
                     }
                 }
             }
-            Column {
+            if (cashAccs.isNotEmpty()) Column {
                 val g = "Готівка"; val isOpen = g in vm.open
                 Div()
                 Row(Modifier.fillMaxWidth().clickable { vm.open = if (isOpen) vm.open - g else vm.open + g }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -388,6 +415,7 @@ fun InvScreen(vm: BellaViewModel) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Позиція", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openPos() }; Btn("ОВДП", false, Modifier.weight(1f), Icons.Outlined.Calculate) { vm.go(Screen.Calc) } }
+            CompoundSection(vm, t.invT)
         }
     }
 }
@@ -399,23 +427,48 @@ private fun fmtQty(q: Double) = if (q == Math.floor(q)) q.toLong().toString() el
 fun GoalsScreen(vm: BellaViewModel) {
     val g = vm.data.goals
     Column(Modifier.fillMaxSize()) {
-        TopBar("Цілі", vm)
+        TopBar("Цілі", vm) { IconBtn(Icons.Outlined.Add) { vm.openGoal() } }
         Page {
             Column { BigMoney("НАКОПИЧЕНО", vm.m(g.sumOf { it.saved }), vm.sym); T("із ${vm.m(g.sumOf { it.target })} ${vm.sym}", 13.sp, C.n500) }
+            if (g.isEmpty()) T("Цілей ще немає. Створіть першу: подушка безпеки, подорож, техніка.", 13.sp, C.n500)
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { g.forEachIndexed { i, x ->
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).clickable { vm.editGoal(i) }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Ico(goalIcon(x.icon), PurpleC, 22.dp)
-                        Column(Modifier.weight(1f)) { T(x.name, 14.sp, weight = FontWeight.Medium); T("${vm.m(x.saved)} з ${vm.m(x.target)} ${vm.sym}", 11.sp, C.n500, maxLines = 1) }
+                        Column(Modifier.weight(1f)) {
+                            T(x.name, 14.sp, weight = FontWeight.Medium)
+                            T("${vm.m(x.saved)} з ${vm.m(x.target)} ${vm.sym}" + if (x.deadline.length >= 10) " · до ${ddmmyy(x.deadline)}" else "", 11.sp, C.n500, maxLines = 1)
+                        }
                         T("${Math.min(100, Math.round(x.saved / x.target * 100))}%", 14.sp, weight = FontWeight.Medium)
                     }
+                    Bar((x.saved / x.target).toFloat(), PurpleC, 4.dp)
+                    GoalForecastLine(vm, x)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Bar((x.saved / x.target).toFloat(), PurpleC, 4.dp, Modifier.weight(1f)); Btn("+ " + vm.m(x.step), false) { vm.addToGoal(i) }
+                        Btn("+ " + vm.m(x.step), false, Modifier.weight(1f)) { vm.addToGoal(i) }
+                        Btn("Внести / зняти", false, Modifier.weight(1f), Icons.Outlined.SwapVert) { vm.openGoalMove(i) }
                     }
                 }
             } }
+            Btn("Ціль", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) { vm.openGoal() }
+            if (g.isNotEmpty()) T("Дотик до цілі — редагування й видалення. «+» додає крок без рахунку; «Внести / зняти» — довільна сума, за бажанням з рахунку.", 11.sp, C.n500)
         }
     }
+}
+
+/** Рядок прогнозу на картці цілі. */
+@Composable
+private fun GoalForecastLine(vm: BellaViewModel, g: Goal) {
+    val f = goalForecast(g, TODAY); val dl = if (g.deadline.length >= 10) ddmmyy(g.deadline) else ""
+    fun need() = if (f.deadlinePassed) "дедлайн $dl минув" else if (f.needMonthly > 0) "щоб устигнути до $dl, треба ≈ ${vm.m(f.needMonthly)} ${vm.sym}/міс" else ""
+    val (text, col) = when (f.status) {
+        GoalStatus.DONE -> "Ціль досягнута" to C.pos
+        GoalStatus.NO_PLAN -> (listOf("Вкажіть внесок на місяць у цілі — покажу, коли її досягнете", need()).filter { it.isNotEmpty() }.joinToString(" · ")) to C.n500
+        GoalStatus.TOO_LONG -> "При ${vm.m(g.monthly)} ${vm.sym}/міс — понад 50 років" + need().let { if (it.isEmpty()) "" else " · $it" } to GoldC
+        GoalStatus.NO_DEADLINE -> "Досягнете ≈ ${monthNameLower(f.reachMonth)} · через ${f.months} міс. при ${vm.m(g.monthly)} ${vm.sym}/міс" to C.n400
+        GoalStatus.ON_TIME -> "Досягнете ≈ ${monthNameLower(f.reachMonth)} · через ${f.months} міс. · встигаєте до $dl" to C.pos
+        GoalStatus.LATE -> "Досягнете ≈ ${monthNameLower(f.reachMonth)} · через ${f.months} міс. · не встигаєте: ${need()}" to GoldC
+    }
+    T(text, 11.sp, col)
 }
 
 // ================= ПАСИВНИЙ ДОХІД =================
@@ -437,6 +490,8 @@ fun PassScreen(vm: BellaViewModel) {
                     }
                 }
             }
+            val avgY = if (t.invT > 0) t.invGroups.sumOf { it.third.first * it.third.second } / t.invT else 0.0
+            FireSection(vm, t.invT, avgY)
         }
     }
 }
@@ -454,6 +509,7 @@ fun CalcScreen(vm: BellaViewModel) {
                 Field("ISIN / назва", s.isin, hint = "UA4000236228") { vm.calcIn = s.copy(isin = it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Номінал (₴)", s.nom, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(nom = it) }; Field("Ставка купона, %", s.coupon, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(coupon = it) } }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Дата купівлі", s.buy, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(buy = it) }; Field("Дата погашення", s.mat, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(mat = it) } }
+                if (s.freq == 0) Field("Початок купона (випуск)", s.issue, hint = "РРРР-ММ-ДД · порожньо = дата купівлі") { vm.calcIn = s.copy(issue = it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна купівлі (₴)", s.price, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(price = it) }; Field("Кількість", s.qty, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(qty = it) } }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна продажу (₴)", s.sell, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(sell = it) }; Field("Дата продажу", s.sellD, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(sellD = it) } }
                 T("Виплата купона", 12.sp, C.n500)

@@ -69,3 +69,16 @@ fun applyQuote(p: Pos, q: Quote, rates: Map<String, Double>, now: Long): Pair<Po
     // гривнева позиція з тікером переходить на валюту фонду: ціна купівлі перераховується за поточним курсом
     else p.copy(cur = q.currency, pxBuy = if (p.buy > 0) p.buy / rate else q.price, buyFx = rate, pxNow = q.price, now = q.price * rate, pxAt = now) to ""
 }
+
+/** Знак валюти: € $ zł ₴. */
+fun curSign(cur: String): String = SYM[cur]?.trim() ?: cur
+
+/** Сума у валюті фонду: «3 356,00 €». */
+fun fxMoney(v: Double, cur: String): String = fmt2(v) + " " + curSign(cur)
+
+/** Вартість і купівля у валюті фонду (для гривневих позицій — 0). */
+fun posValueCur(p: Pos): Double = if (isFxPos(p)) p.qty * p.pxNow else 0.0
+fun posCostCur(p: Pos): Double = if (isFxPos(p)) p.qty * p.pxBuy else 0.0
+
+/** Зміна ціни фонду у відсотках у його валюті (без впливу курсу). */
+fun plCurPct(p: Pos): Double = if (isFxPos(p) && p.pxBuy > 0) (p.pxNow - p.pxBuy) / p.pxBuy * 100 else 0.0

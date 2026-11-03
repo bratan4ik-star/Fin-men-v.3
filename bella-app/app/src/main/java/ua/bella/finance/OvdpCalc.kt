@@ -13,6 +13,8 @@ data class CalcInput(
     val isin: String = "UA4000236228", val nom: String = "1000", val buy: String = "2026-11-02", val mat: String = "2027-03-10",
     val price: String = "1029.54", val qty: String = "98", val coupon: String = "17.1", val freq: Int = 6,
     val sell: String = "1050", val sellD: String = "2027-01-10",
+    /** Дата початку купона (випуску): купон «в кінці» нараховується від неї; порожньо — від дати купівлі. */
+    val issue: String = "",
 )
 
 private fun pd(s: String): LocalDate? = try { LocalDate.parse(s.trim()) } catch (e: Exception) { null }
@@ -36,7 +38,9 @@ fun calcOvdp(s: CalcInput): CalcResult {
     val sched = mutableListOf<SchedRow>()
     var cum = 0.0
     dates.forEach { d -> cum += per; sched.add(SchedRow(d, "Купон", per, cum, !d.isAfter(today))) }
-    val last = if (fr > 0) per else qty * nom * cp / 100 * yrs
+    // Купон «в кінці»: від дати випуску (або купівлі), actual/360 — як у довідці брокера
+    val cStart = pd(s.issue)?.takeIf { it.isBefore(mat) } ?: buy
+    val last = if (fr > 0) per else qty * nom * cp / 100 * Math.max(0.0, days(cStart, mat)) / 360.0
     if (mat.isAfter(buy)) { cum += qty * nom + last; sched.add(SchedRow(mat, if (fr > 0) "Купон + погашення" else "Погашення з купоном", qty * nom + last, cum, !mat.isAfter(today))) }
     val cpn = dates.size * per + if (mat.isAfter(buy)) last else 0.0
     val inv = qty * pr
@@ -44,11 +48,14 @@ fun calcOvdp(s: CalcInput): CalcResult {
     val tot = qty * nom + cpn
     val sp = parseNum(s.sell)
     val sd = pd(s.sellD) ?: mat
-    val sy = Math.max(days(buy, sd) / 365.25, 1 / 365.0)
-    val got = sched.filter { it.kind == "Купон" && !it.date.isAfter(sd) }.sumOf { it.amount }
-    val sProfit = if (sp > 0) qty * sp - inv + got else 0.0
+    // Продаж у день погашення або пізніше — це погашення: номінал + усі купони (включно з виплатою «в кінці»)
+    val atMat = mat.isAfter(buy) && !sd.isBefore(mat)
+    val sy = Math.max(days(buy, if (atMat) mat else sd) / 365.25, 1 / 365.0)
+    val got = if (atMat) cpn else sched.filter { it.kind == "Купон" && !it.date.isAfter(sd) }.sumOf { it.amount }
+    val proceeds = if (atMat) qty * nom else qty * sp
+    val sProfit = if (sp > 0) proceeds - inv + got else 0.0
     return CalcResult(
-        qty, inv, cpn, disc, tot, sched, sProfit, if (sp > 0 && inv > 0) sProfit / inv / sy * 100 else 0.0, qty * sp, sp > 0,
+        qty, inv, cpn, disc, tot, sched, sProfit, if (sp > 0 && inv > 0) sProfit / inv / sy * 100 else 0.0, proceeds, sp > 0,
         Math.max(0.0, Math.min(100.0, Math.round(days(buy, today) / Math.max(1.0, days(buy, mat)) * 100).toDouble())).toInt(),
         ChronoUnit.DAYS.between(today, mat), if (inv > 0) (cpn + disc) / inv / yrs * 100 else 0.0,
     )

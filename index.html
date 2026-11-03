@@ -691,39 +691,72 @@
                 <h2 class="text-base font-bold text-slate-100 mb-4 flex items-center gap-2">
                     <i class="fa-solid fa-seedling text-indigo-400"></i> Калькулятор складного відсотка
                 </h2>
-                <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
                     <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Початковий капітал</label>
-                        <input type="number" id="invStart" value="100000" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                        <label class="block text-xs font-medium text-slate-400 mb-1 flex justify-between items-center">
+                            <span>Початковий капітал</span>
+                            <button type="button" onclick="fillCompoundFromPortfolio()" title="Підставити поточну вартість портфеля" class="text-[10px] text-indigo-400 hover:underline"><i class="fa-solid fa-rotate"></i> з портфеля</button>
+                        </label>
+                        <input type="number" id="invStart" value="100000" min="0" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-400 mb-1">Щомісячний внесок</label>
-                        <input type="number" id="invMonthly" value="5000" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                        <input type="number" id="invMonthly" value="5000" min="0" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
                     </div>
                     <div>
-                        <label class="block text-xs font-medium text-slate-400 mb-1">Річна дохідність (%)</label>
-                        <input type="number" id="invRate" value="10" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                        <label class="block text-xs font-medium text-slate-400 mb-1" title="Очікувана середньорічна дохідність до комісій і податків">Річна дохідність (%)</label>
+                        <input type="number" id="invRate" value="10" step="0.1" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-400 mb-1">Термін (років)</label>
-                        <input type="number" id="invYears" value="10" min="1" max="40" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                        <input type="number" id="invYears" value="10" min="1" max="50" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1" title="Щорічна інфляція у валюті розрахунку. Потрібна, щоб показати суму в сьогоднішніх грошах">Інфляція (%/рік)</label>
+                        <input type="number" id="invInflation" value="8" step="0.1" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1" title="Комісія фонду (TER) + брокерські витрати, % від капіталу на рік">Комісії (%/рік)</label>
+                        <input type="number" id="invFees" value="0.2" step="0.05" min="0" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1" title="Податок з прибутку при виході з інвестиції. ОВДП — 0%, іноземні ETF/депозити — 23% (18% ПДФО + 5% ВЗ). Перевіряйте чинні ставки">Податок на прибуток (%)</label>
+                        <select id="invTax" onchange="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            <option value="0">0% — ОВДП</option>
+                            <option value="23" selected>23% — ETF / акції / депозит</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1" title="На скільки відсотків щороку збільшується щомісячний внесок (напр. разом із зарплатою)">Ріст внеску (%/рік)</label>
+                        <input type="number" id="invContribGrowth" value="0" step="0.5" min="0" oninput="calcCompound()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-900/80 p-4 rounded-xl border border-slate-700/60 text-xs">
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 bg-slate-900/80 p-4 rounded-xl border border-slate-700/60 text-xs">
                     <div>
                         <span class="text-slate-400 font-semibold uppercase">Власні внески</span>
                         <p id="resInvDeposits" class="text-base font-bold text-slate-200">0</p>
                     </div>
                     <div>
-                        <span class="text-slate-400 font-semibold uppercase">Прибуток від відсотків</span>
+                        <span class="text-slate-400 font-semibold uppercase">Прибуток (після комісій)</span>
                         <p id="resInvProfit" class="text-base font-bold text-emerald-400">0</p>
                     </div>
                     <div>
-                        <span class="text-slate-400 font-semibold uppercase">Разом</span>
-                        <p id="resInvTotal" class="text-lg font-extrabold text-indigo-400">0</p>
+                        <span class="text-slate-400 font-semibold uppercase">Разом (до податку)</span>
+                        <p id="resInvTotal" class="text-base font-bold text-slate-200">0</p>
+                    </div>
+                    <div title="Сума після сплати податку з прибутку при виході">
+                        <span class="text-slate-400 font-semibold uppercase">На руки</span>
+                        <p id="resInvNet" class="text-lg font-extrabold text-indigo-400">0</p>
+                        <span id="resInvTaxNote" class="text-[10px] text-slate-500"></span>
+                    </div>
+                    <div title="Скільки сума «на руки» коштуватиме в цінах сьогодні з урахуванням інфляції">
+                        <span class="text-amber-400 font-semibold uppercase">У сьогоднішніх грошах</span>
+                        <p id="resInvReal" class="text-lg font-extrabold text-amber-400">0</p>
+                        <span id="resInvRealRate" class="text-[10px] text-slate-500"></span>
                     </div>
                 </div>
+                <p class="text-[10px] text-slate-500 mt-2">Відсотки нараховуються щомісяця за ефективною річною ставкою (місячна ставка = (1 + r)<sup>1/12</sup> − 1), внески — наприкінці місяця. Податок береться один раз із накопиченого прибутку при виході. Це оцінка, а не гарантія: реальна дохідність коливається.</p>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -750,7 +783,16 @@
                                 <option value="PLN">PLN zł</option>
                             </select>
                         </div>
-                        <input type="number" id="assetProfitPct" step="0.1" value="5.0" placeholder="Прибуток (%)" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[10px] font-medium text-slate-400 mb-1" title="Скільки позиція вже заробила/втратила від ціни купівлі. На прогноз пасивного доходу НЕ впливає">Нереаліз. прибуток / збиток (%)</label>
+                                <input type="number" id="assetProfitPct" step="0.1" value="0" placeholder="напр. 12.5" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-medium text-slate-400 mb-1" title="Реальні грошові виплати на рік: купон ОВДП, ставка депозиту, дивіденди, оренда. Для крипти й акумулюючих ETF — 0">Річний дохід / купон (%)</label>
+                                <input type="number" id="assetYieldPct" step="0.1" min="0" value="0" placeholder="напр. 16.5" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            </div>
+                        </div>
                         <button type="submit" id="assetSubmitBtn" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl text-xs transition-colors">
                             Зберегти в портфель
                         </button>
@@ -839,7 +881,7 @@
                     <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Пасивний капітал</span>
                     <p id="piCapital" class="text-xl font-bold text-slate-100 mt-1">0</p>
                 </div>
-                <div title="Середньозважена очікувана дохідність портфеля (за полем «Прибуток %» кожного активу)" class="bg-slate-800 p-5 rounded-2xl border border-slate-700/80">
+                <div title="Середньозважена грошова дохідність портфеля (за полем «Річний дохід %» кожного активу)" class="bg-slate-800 p-5 rounded-2xl border border-slate-700/80">
                     <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Середня дохідність</span>
                     <p id="piAvgYield" class="text-xl font-bold text-indigo-400 mt-1">0%</p>
                 </div>
@@ -852,7 +894,7 @@
                     <p id="piAnnualIncome" class="text-xl font-bold text-slate-100 mt-1">0</p>
                 </div>
             </div>
-            <p class="text-[10px] text-slate-500 mb-6">Розрахунок ґрунтується на полі «Прибуток (%)» кожного активу з вкладки «Інвестиції» — тож він враховує весь портфель, включно з активами, що не виплачують реальний дохід (напр. криптовалюта), а лише орієнтовно зростають у ціні. Для активів категорії «Депозит» дохід показано за вирахуванням податку 23% (18% ПДФО + 5% військовий збір) — на відміну від ОВДП, дохід за депозитами оподатковується. Сприймайте цифри як оцінку.</p>
+            <p class="text-[10px] text-slate-500 mb-6">Розрахунок ґрунтується на полі «Річний дохід / купон (%)» кожного активу з вкладки «Інвестиції» — тобто лише на реальних грошових виплатах (купони, відсотки, дивіденди, оренда). Ріст ціни (крипта, акумулюючі ETF) сюди не входить, бо його не можна отримати без продажу. Для активів категорії «Депозит» дохід показано за вирахуванням податку 23% (18% ПДФО + 5% військовий збір) — на відміну від ОВДП, дохід за депозитами оподатковується. Сприймайте цифри як оцінку.</p>
 
             <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700/80 mb-6" title="Наскільки поточний пасивний дохід покриває середньомісячні витрати">
                 <div class="flex justify-between items-center text-xs mb-1.5">
@@ -898,24 +940,34 @@
                     <div class="lg:col-span-2 space-y-3">
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Стартовий капітал</label>
-                            <input type="number" id="piStartCapital" oninput="calculatePassiveProjection()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            <input type="number" id="piStartCapital" min="0" oninput="onPassiveInput(this)" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Щомісячний внесок</label>
-                            <input type="number" id="piMonthlyContribution" value="0" oninput="calculatePassiveProjection()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            <label class="block text-xs font-medium text-slate-400 mb-1" title="Вважається, що внесок щороку індексується на інфляцію">Щомісячний внесок</label>
+                            <input type="number" id="piMonthlyContribution" value="0" min="0" oninput="onPassiveInput(this)" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
                         </div>
                         <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Середня дохідність (%)</label>
-                            <input type="number" id="piYieldInput" step="0.1" oninput="calculatePassiveProjection()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            <label class="block text-xs font-medium text-slate-400 mb-1" title="Номінальна середньорічна дохідність, з якою капітал росте на етапі накопичення (після податків і комісій)">Дохідність накопичення (%/рік)</label>
+                            <input type="number" id="piYieldInput" step="0.1" oninput="onPassiveInput(this)" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1" title="Щорічна інфляція. Ціль і внески вважаються в сьогоднішніх цінах">Інфляція (%/рік)</label>
+                                <input type="number" id="piInflation" step="0.1" oninput="onPassiveInput(this)" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-400 mb-1" title="Яку частку капіталу можна безпечно забирати щороку, не проїдаючи його (в реальному вимірі). Для ETF зазвичай 3–4%, для ОВДП/депозитів — реальна ставка (номінальна мінус інфляція)">Безпечне знімання (%/рік)</label>
+                                <input type="number" id="piWithdrawal" step="0.1" min="0" oninput="onPassiveInput(this)" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            </div>
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Цільовий пасивний дохід / місяць</label>
-                            <input type="number" id="piTargetIncome" oninput="calculatePassiveProjection()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
+                            <input type="number" id="piTargetIncome" min="0" oninput="onPassiveInput(this)" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
                         </div>
 
                         <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700/60 text-xs space-y-2 mt-2">
                             <div class="flex justify-between">
-                                <span class="text-slate-400">Поточний дохід/міс (за проекцією):</span>
+                                <span class="text-slate-400">Можна знімати зараз / міс:</span>
                                 <span id="piCurrentProjIncome" class="font-bold text-emerald-400">0</span>
                             </div>
                             <div class="flex justify-between">
@@ -926,6 +978,15 @@
                                 <span class="text-slate-400">Орієнтовна дата:</span>
                                 <span id="piGoalDate" class="font-bold text-slate-200">—</span>
                             </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Потрібний капітал (сьогоднішні гроші):</span>
+                                <span id="piCapitalNeeded" class="font-bold text-slate-200">—</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-400">Ціль у грошах на дату досягнення:</span>
+                                <span id="piTargetNominal" class="font-bold text-slate-200">—</span>
+                            </div>
+                            <p class="text-[10px] text-slate-500 pt-1">Усі суми прогнозу — у сьогоднішніх цінах (з поправкою на інфляцію). Реальна дохідність = (1 + дохідність) / (1 + інфляція) − 1: <span id="piRealRate" class="font-semibold text-slate-400">—</span></p>
                         </div>
                     </div>
                     <div class="lg:col-span-3">
@@ -1083,6 +1144,18 @@
             { id: 103, name: 'Валютні ОВДП (USD)', category: 'ОВДП', value: 2000, currency: 'USD', profitPct: 4.5 },
             { id: 104, name: 'Bitcoin', category: 'Криптовалюта', value: 1500, currency: 'USD', profitPct: 20.0 }
         ];
+
+        // Міграція: раніше одне поле profitPct означало і «прибуток позиції», і «річний дохід».
+        // Тепер дохід (купон/ставка/дивіденди/оренда) зберігається окремо в yieldPct.
+        const INCOME_CATEGORIES = ['ОВДП', 'Депозит', 'Нерухомість'];
+        function normalizeAsset(a) {
+            if (a.yieldPct === undefined || a.yieldPct === null || isNaN(a.yieldPct)) {
+                a.yieldPct = INCOME_CATEGORIES.includes(a.category) ? (Number(a.profitPct) || 0) : 0;
+                if (INCOME_CATEGORIES.includes(a.category)) a.profitPct = 0;
+            }
+            return a;
+        }
+        portfolio.forEach(normalizeAsset);
 
         let goals = JSON.parse(localStorage.getItem('fin_goals')) || [
             { id: 201, title: 'Фінансова подушка', target: 5000, current: 2000, currency: 'USD' }
@@ -1247,6 +1320,7 @@
             const type = el.dataset.type || 'number';
             const rawValue = el.dataset.raw !== undefined ? el.dataset.raw : '';
             const positiveOnlyFields = ['amount', 'value'];
+            const nonNegativeFields = ['yieldPct'];
 
             const input = document.createElement('input');
             input.type = type === 'number' ? 'number' : 'text';
@@ -1266,7 +1340,7 @@
                 if (save) {
                     const newVal = type === 'number' ? parseFloat(input.value) : input.value.trim();
                     const valid = type === 'number'
-                        ? (!isNaN(newVal) && (!positiveOnlyFields.includes(field) || newVal > 0))
+                        ? (!isNaN(newVal) && (!positiveOnlyFields.includes(field) || newVal > 0) && (!nonNegativeFields.includes(field) || newVal >= 0))
                         : newVal !== '';
                     if (valid) applyInlineEdit(store, id, field, newVal);
                 }
@@ -1292,7 +1366,7 @@
 
         function refreshAfterInlineEdit(store) {
             if (store === 'tx') renderBudget();
-            if (store === 'asset') renderPortfolio();
+            if (store === 'asset') { renderPortfolio(); if (!document.getElementById('tabPassive').classList.contains('hidden')) renderPassiveIncome(); }
             if (store === 'goal') renderGoals();
             renderNetWorth();
         }
@@ -2191,7 +2265,8 @@
                 category: 'ОВДП',
                 value: Math.round(w.price * qty * 100) / 100,
                 currency: w.currency,
-                profitPct: w.coupon
+                profitPct: 0,
+                yieldPct: w.coupon
             });
             saveData();
             renderPortfolio();
@@ -2226,23 +2301,65 @@
             }).join('');
         }
 
-        function calcCompound() {
-            const P = parseFloat(document.getElementById('invStart').value) || 0;
-            const PMT = parseFloat(document.getElementById('invMonthly').value) || 0;
-            const r = (parseFloat(document.getElementById('invRate').value) || 0) / 100;
-            const t = parseInt(document.getElementById('invYears').value) || 1;
+        function readNum(id, def = 0, min = -Infinity, max = Infinity) {
+            const el = document.getElementById(id);
+            const v = parseFloat(el ? el.value : '');
+            if (isNaN(v)) return def;
+            return Math.min(max, Math.max(min, v));
+        }
 
-            let total = P;
-            let deposits = P;
+        // Ефективна річна ставка -> місячна (без завищення, яке дає r/12)
+        function monthlyRateFromAnnual(annual) {
+            return annual <= -1 ? -1 : Math.pow(1 + annual, 1 / 12) - 1;
+        }
 
-            for (let i = 0; i < t * 12; i++) {
-                total = (total + PMT) * (1 + r / 12);
-                deposits += PMT;
+        // Спільне ядро прогнозу. Внески — наприкінці місяця, щорічно індексуються на contribGrowth.
+        function simulateGrowth({ start, monthly, annualRate, years, contribGrowth = 0 }) {
+            const m = monthlyRateFromAnnual(annualRate);
+            let total = start, deposits = start, pmt = monthly;
+            const yearly = [];
+            for (let i = 1; i <= years * 12; i++) {
+                total = total * (1 + m) + pmt;
+                deposits += pmt;
+                if (i % 12 === 0) {
+                    yearly.push({ year: i / 12, total, deposits });
+                    pmt *= (1 + contribGrowth);
+                }
             }
+            return { total, deposits, yearly };
+        }
+
+        function fillCompoundFromPortfolio() {
+            const total = portfolio.reduce((s, a) => s + convert(a.value, a.currency, mainCurrency), 0);
+            document.getElementById('invStart').value = Math.round(total);
+            calcCompound();
+        }
+
+        function calcCompound() {
+            const P = readNum('invStart', 0, 0);
+            const PMT = readNum('invMonthly', 0, 0);
+            const r = readNum('invRate', 0, -99) / 100;
+            const t = Math.round(readNum('invYears', 1, 1, 50));
+            const inflation = readNum('invInflation', 0, -50, 200) / 100;
+            const fees = readNum('invFees', 0, 0, 20) / 100;
+            const tax = readNum('invTax', 0, 0, 100) / 100;
+            const growth = readNum('invContribGrowth', 0, 0, 100) / 100;
+
+            const netRate = (1 + r) * (1 - fees) - 1;
+            const { total, deposits } = simulateGrowth({ start: P, monthly: PMT, annualRate: netRate, years: t, contribGrowth: growth });
+            const profit = total - deposits;
+            const taxAmount = Math.max(0, profit) * tax;
+            const net = total - taxAmount;
+            const real = net / Math.pow(1 + inflation, t);
+            const realRate = (1 + netRate) / (1 + inflation) - 1;
 
             document.getElementById('resInvDeposits').textContent = formatMoney(deposits);
-            document.getElementById('resInvProfit').textContent = formatMoney(total - deposits);
+            document.getElementById('resInvProfit').textContent = formatMoney(profit);
             document.getElementById('resInvTotal').textContent = formatMoney(total);
+            document.getElementById('resInvNet').textContent = formatMoney(net);
+            document.getElementById('resInvTaxNote').textContent = taxAmount > 0 ? `податок −${formatMoney(taxAmount)}` : 'без податку';
+            document.getElementById('resInvReal').textContent = formatMoney(real);
+            document.getElementById('resInvRealRate').textContent = `реальна дохідність ${(realRate * 100).toFixed(1)}%/рік`;
         }
 
         function addAsset(e) {
@@ -2252,6 +2369,7 @@
             const val = parseFloat(document.getElementById('assetValue').value);
             const curr = document.getElementById('assetCurrency').value;
             const profit = parseFloat(document.getElementById('assetProfitPct').value) || 0;
+            const yieldPct = Math.max(0, parseFloat(document.getElementById('assetYieldPct').value) || 0);
 
             if (!name || isNaN(val) || val <= 0) return;
 
@@ -2263,10 +2381,11 @@
                     a.value = val;
                     a.currency = curr;
                     a.profitPct = profit;
+                    a.yieldPct = yieldPct;
                 }
                 cancelAssetEdit();
             } else {
-                portfolio.unshift({ id: Date.now(), name, category: cat, value: val, currency: curr, profitPct: profit });
+                portfolio.unshift({ id: Date.now(), name, category: cat, value: val, currency: curr, profitPct: profit, yieldPct });
                 document.getElementById('assetName').value = '';
                 document.getElementById('assetValue').value = '';
             }
@@ -2284,6 +2403,7 @@
             document.getElementById('assetValue').value = a.value;
             document.getElementById('assetCurrency').value = a.currency;
             document.getElementById('assetProfitPct').value = a.profitPct;
+            document.getElementById('assetYieldPct').value = a.yieldPct ?? 0;
             editingAssetId = id;
             document.getElementById('assetSubmitBtn').textContent = 'Оновити актив';
             document.getElementById('assetCancelBtn').classList.remove('hidden');
@@ -2339,7 +2459,9 @@
                     <div class="flex items-center gap-3">
                         <div class="text-right">
                             <p class="font-bold text-slate-200 cursor-pointer hover:text-indigo-300 hover:underline" data-store="asset" data-field="value" data-id="${a.id}" data-type="number" data-raw="${a.value}" onclick="startInlineEdit(this)">${formatMoney(a.value, a.currency)}</p>
-                            <span class="text-[10px] font-semibold ${isPos ? 'text-emerald-400' : 'text-rose-400'} cursor-pointer hover:underline" data-store="asset" data-field="profitPct" data-id="${a.id}" data-type="number" data-raw="${a.profitPct}" onclick="startInlineEdit(this)">${isPos ? '+' : ''}${a.profitPct}%</span>
+                            <span class="text-[10px] font-semibold ${isPos ? 'text-emerald-400' : 'text-rose-400'} cursor-pointer hover:underline" data-store="asset" data-field="profitPct" data-id="${a.id}" data-type="number" data-raw="${a.profitPct}" onclick="startInlineEdit(this)" title="Нереалізований прибуток/збиток">${isPos ? '+' : ''}${a.profitPct}%</span>
+                            <span class="text-[10px] text-slate-500"> · </span>
+                            <span class="text-[10px] font-semibold text-sky-400 cursor-pointer hover:underline" data-store="asset" data-field="yieldPct" data-id="${a.id}" data-type="number" data-raw="${a.yieldPct ?? 0}" onclick="startInlineEdit(this)" title="Річний дохід (купон/ставка/дивіденди)">дохід ${a.yieldPct ?? 0}%/р</span>
                         </div>
                         <button onclick="editAsset(${a.id})" title="Редагувати актив" class="text-slate-500 hover:text-indigo-400"><i class="fa-solid fa-pen"></i></button>
                         <button onclick="deleteAsset(${a.id})" title="Видалити актив з портфеля" class="text-slate-500 hover:text-rose-400"><i class="fa-solid fa-xmark"></i></button>
@@ -2985,7 +3107,7 @@
                         return;
                     }
                     if (data.transactions) transactions = data.transactions;
-                    if (data.portfolio) portfolio = data.portfolio;
+                    if (data.portfolio) portfolio = data.portfolio.map(normalizeAsset);
                     if (data.goals) goals = data.goals;
                     if (Array.isArray(data.categories)) categories = data.categories;
                     if (Array.isArray(data.recurringTemplates)) recurringTemplates = data.recurringTemplates;
@@ -3034,7 +3156,8 @@
         const DEPOSIT_TAX_RATE = 0.23;
 
         function getEffectiveYield(asset) {
-            return asset.category === 'Депозит' ? asset.profitPct * (1 - DEPOSIT_TAX_RATE) : asset.profitPct;
+            const y = Number(asset.yieldPct) || 0;
+            return asset.category === 'Депозит' ? y * (1 - DEPOSIT_TAX_RATE) : y;
         }
 
         function computePassiveIncomeSummary() {
@@ -3048,7 +3171,7 @@
                 const monthlyIncome = valueInMain * (effectiveYield / 100) / 12;
                 capital += valueInMain;
                 weightedYieldSum += valueInMain * effectiveYield;
-                rows.push({ name: a.name, category: a.category, valueInMain, profitPct: a.profitPct, effectiveYield, isTaxed, monthlyIncome, currency: a.currency, originalValue: a.value });
+                rows.push({ name: a.name, category: a.category, valueInMain, yieldPct: Number(a.yieldPct) || 0, effectiveYield, isTaxed, monthlyIncome, currency: a.currency, originalValue: a.value });
             });
             const avgYield = capital > 0 ? weightedYieldSum / capital : 0;
             const monthlyIncome = capital * (avgYield / 100) / 12;
@@ -3080,8 +3203,8 @@
                         <td class="py-3 px-4 font-semibold text-slate-200">${escapeHtml(r.name)}</td>
                         <td class="py-3 px-4 text-slate-400">${escapeHtml(r.category)}</td>
                         <td class="py-3 px-4 text-right">${formatMoney(r.originalValue, r.currency)}</td>
-                        <td class="py-3 px-4 text-right ${r.profitPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
-                            ${r.profitPct}%
+                        <td class="py-3 px-4 text-right ${r.yieldPct > 0 ? 'text-emerald-400' : 'text-slate-500'}">
+                            ${r.yieldPct}%
                             ${r.isTaxed ? `<span class="block text-[9px] text-amber-400 font-normal">після податку ${r.effectiveYield.toFixed(2)}%</span>` : ''}
                         </td>
                         <td class="py-3 px-4 text-right font-bold text-indigo-400">${formatMoney(r.monthlyIncome)}</td>
@@ -3093,6 +3216,21 @@
             calculatePassiveProjection();
         }
 
+        // Поля, які користувач змінив вручну, зберігаються; решта щоразу перераховується з портфеля/бюджету.
+        const PASSIVE_FIELDS = ['piStartCapital', 'piMonthlyContribution', 'piYieldInput', 'piInflation', 'piWithdrawal', 'piTargetIncome'];
+        let passiveManual = {};
+
+        function passiveDefaults(summary, avgExpense) {
+            return {
+                piStartCapital: Math.round(summary.capital),
+                piMonthlyContribution: 0,
+                piYieldInput: summary.avgYield.toFixed(1),
+                piInflation: mainCurrency === 'UAH' ? 8 : 3,
+                piWithdrawal: 4,
+                piTargetIncome: Math.round(avgExpense)
+            };
+        }
+
         function loadOrInitPassiveSettings(summary, avgExpense) {
             let saved;
             try {
@@ -3100,73 +3238,93 @@
             } catch (e) {
                 saved = null;
             }
-            if (saved) {
-                document.getElementById('piStartCapital').value = saved.startCapital ?? Math.round(summary.capital);
-                document.getElementById('piMonthlyContribution').value = saved.monthlyContribution ?? 0;
-                document.getElementById('piYieldInput').value = saved.avgYield ?? summary.avgYield.toFixed(1);
-                document.getElementById('piTargetIncome').value = saved.targetIncome ?? Math.round(avgExpense);
-            } else {
-                document.getElementById('piStartCapital').value = Math.round(summary.capital);
-                document.getElementById('piMonthlyContribution').value = 0;
-                document.getElementById('piYieldInput').value = summary.avgYield.toFixed(1);
-                document.getElementById('piTargetIncome').value = Math.round(avgExpense);
+            passiveManual = {};
+            if (saved && saved.manual && typeof saved.manual === 'object') {
+                passiveManual = saved.manual;
+            } else if (saved) {
+                // Старий формат зберігав усі поля завжди — вважаємо ручним лише внесок.
+                if (parseFloat(saved.monthlyContribution) > 0) passiveManual.piMonthlyContribution = saved.monthlyContribution;
             }
+            const defs = passiveDefaults(summary, avgExpense);
+            PASSIVE_FIELDS.forEach(id => {
+                const el = document.getElementById(id);
+                el.value = passiveManual[id] !== undefined ? passiveManual[id] : defs[id];
+                el.classList.toggle('border-indigo-500', passiveManual[id] !== undefined);
+            });
+        }
+
+        function onPassiveInput(el) {
+            passiveManual[el.id] = el.value;
+            el.classList.add('border-indigo-500');
+            savePassiveSettings();
+            calculatePassiveProjection();
         }
 
         function syncPassiveCalculatorInputs() {
             const summary = computePassiveIncomeSummary();
             const avgExpense = computeAverageMonthlyExpense();
-            document.getElementById('piStartCapital').value = Math.round(summary.capital);
-            document.getElementById('piYieldInput').value = summary.avgYield.toFixed(1);
-            document.getElementById('piTargetIncome').value = Math.round(avgExpense);
+            ['piStartCapital', 'piYieldInput', 'piTargetIncome'].forEach(id => delete passiveManual[id]);
+            savePassiveSettings();
+            const defs = passiveDefaults(summary, avgExpense);
+            PASSIVE_FIELDS.forEach(id => {
+                const el = document.getElementById(id);
+                el.value = passiveManual[id] !== undefined ? passiveManual[id] : defs[id];
+                el.classList.toggle('border-indigo-500', passiveManual[id] !== undefined);
+            });
             calculatePassiveProjection();
         }
 
         function savePassiveSettings() {
-            const settings = {
-                startCapital: document.getElementById('piStartCapital').value,
-                monthlyContribution: document.getElementById('piMonthlyContribution').value,
-                avgYield: document.getElementById('piYieldInput').value,
-                targetIncome: document.getElementById('piTargetIncome').value
-            };
-            localStorage.setItem('fin_passive_settings', JSON.stringify(settings));
+            localStorage.setItem('fin_passive_settings', JSON.stringify({ manual: passiveManual }));
         }
 
         function calculatePassiveProjection() {
-            const P = parseFloat(document.getElementById('piStartCapital').value) || 0;
-            const PMT = parseFloat(document.getElementById('piMonthlyContribution').value) || 0;
-            const r = (parseFloat(document.getElementById('piYieldInput').value) || 0) / 100;
-            const target = parseFloat(document.getElementById('piTargetIncome').value) || 0;
+            // Усе рахуємо в реальних (сьогоднішніх) грошах: дохідність очищаємо від інфляції,
+            // ціль і внесок вважаємо індексованими на інфляцію.
+            const P = readNum('piStartCapital', 0, 0);
+            const PMT = readNum('piMonthlyContribution', 0, 0);
+            const r = readNum('piYieldInput', 0, -99) / 100;
+            const inflation = readNum('piInflation', 0, -50, 200) / 100;
+            const swr = readNum('piWithdrawal', 4, 0, 100) / 100;
+            const target = readNum('piTargetIncome', 0, 0);
+
+            const realRate = (1 + r) / (1 + inflation) - 1;
+            const mReal = monthlyRateFromAnnual(realRate);
+            document.getElementById('piRealRate').textContent = `${(realRate * 100).toFixed(1)}%/рік`;
 
             let capital = P;
-            const currentMonthlyIncome = capital * r / 12;
+            const currentMonthlyIncome = capital * swr / 12;
             document.getElementById('piCurrentProjIncome').textContent = formatMoney(currentMonthlyIncome);
 
             const monthsToGoalEl = document.getElementById('piMonthsToGoal');
             const goalDateEl = document.getElementById('piGoalDate');
+            const neededEl = document.getElementById('piCapitalNeeded');
+            const nominalEl = document.getElementById('piTargetNominal');
+            neededEl.textContent = (target > 0 && swr > 0) ? formatMoney(target * 12 / swr) : '—';
+            nominalEl.textContent = '—';
+
+            const finish = (series) => { renderPassiveProjectionChart(series, target); };
 
             if (target <= 0) {
                 monthsToGoalEl.textContent = 'Вкажіть цільовий дохід';
                 goalDateEl.textContent = '—';
-                renderPassiveProjectionChart([{ month: 0, income: currentMonthlyIncome }], target);
-                savePassiveSettings();
-                return;
+                return finish([{ month: 0, income: currentMonthlyIncome }]);
             }
-
+            if (swr <= 0) {
+                monthsToGoalEl.textContent = 'Вкажіть ставку знімання';
+                goalDateEl.textContent = '—';
+                return finish([{ month: 0, income: currentMonthlyIncome }]);
+            }
             if (currentMonthlyIncome >= target) {
                 monthsToGoalEl.textContent = 'Ціль вже досягнута!';
                 goalDateEl.textContent = new Date().toLocaleDateString('uk-UA');
-                renderPassiveProjectionChart([{ month: 0, income: currentMonthlyIncome }], target);
-                savePassiveSettings();
-                return;
+                nominalEl.textContent = formatMoney(target);
+                return finish([{ month: 0, income: currentMonthlyIncome }]);
             }
-
-            if (r <= 0 && PMT <= 0) {
-                monthsToGoalEl.textContent = 'Недосяжно без внесків чи дохідності';
+            if (realRate <= 0 && PMT <= 0) {
+                monthsToGoalEl.textContent = 'Недосяжно: дохідність не перекриває інфляцію, а внесків немає';
                 goalDateEl.textContent = '—';
-                renderPassiveProjectionChart([{ month: 0, income: currentMonthlyIncome }], target);
-                savePassiveSettings();
-                return;
+                return finish([{ month: 0, income: currentMonthlyIncome }]);
             }
 
             const maxMonths = 600;
@@ -3175,14 +3333,14 @@
             let reached = false;
             while (months < maxMonths) {
                 months++;
-                capital = (capital + PMT) * (1 + r / 12);
-                const income = capital * r / 12;
-                if (months % 3 === 0) series.push({ month: months, income });
+                capital = capital * (1 + mReal) + PMT;
+                const income = capital * swr / 12;
                 if (income >= target) {
                     series.push({ month: months, income });
                     reached = true;
                     break;
                 }
+                if (months % 3 === 0) series.push({ month: months, income });
             }
 
             if (reached) {
@@ -3192,13 +3350,12 @@
                 const goalDate = new Date();
                 goalDate.setMonth(goalDate.getMonth() + months);
                 goalDateEl.textContent = goalDate.toLocaleDateString('uk-UA');
+                nominalEl.textContent = formatMoney(target * Math.pow(1 + inflation, months / 12));
             } else {
                 monthsToGoalEl.textContent = 'Понад 50 років — збільшіть внесок або дохідність';
                 goalDateEl.textContent = '—';
             }
-
-            renderPassiveProjectionChart(series, target);
-            savePassiveSettings();
+            finish(series);
         }
 
         function renderPassiveProjectionChart(series, target) {
@@ -3207,7 +3364,7 @@
             if (piProjectionChartInstance) piProjectionChartInstance.destroy();
             const ctx = canvas.getContext('2d');
             const datasets = [{
-                label: `Пасивний дохід/міс (${mainCurrency})`,
+                label: `Можна знімати/міс, сьогоднішні ${mainCurrency}`,
                 data: series.map(s => s.income),
                 borderColor: '#10b981',
                 backgroundColor: 'rgba(16, 185, 129, 0.12)',
@@ -3217,7 +3374,7 @@
             }];
             if (target > 0) {
                 datasets.push({
-                    label: 'Ціль',
+                    label: 'Ціль (сьогоднішні гроші)',
                     data: series.map(() => target),
                     borderColor: '#f59e0b',
                     borderDash: [6, 4],

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Передній план іконки: фіолетова монета (акцент #9184D9) з кільцем і літерою «F» (Finance). У межах безпечної зони 66dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#9184D9" android:pathData="M54,24a30,30 0 1,0 0.001,0z" />
+    <path android:strokeColor="#161826" android:strokeWidth="1.6" android:fillColor="#00000000" android:pathData="M54,27.5a26.5,26.5 0 1,0 0.001,0z" />
+    <path android:fillColor="#161826" android:pathData="M45.5,40 H64 V45.5 H51 V52 H60.5 V57.5 H51 V68 H45.5 Z" />
+</vector>

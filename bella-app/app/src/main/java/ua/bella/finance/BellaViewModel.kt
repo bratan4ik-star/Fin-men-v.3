@@ -16,7 +16,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Cats, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -33,6 +33,9 @@ data class Form(
     val pMonthly: Boolean = false, val pPayAcc: String = "", val cashF: Boolean = false,
     // ETF: валюта ціни, тікер Yahoo, курс купівлі (₴ за 1 одиницю валюти)
     val pCur: String = "UAH", val pTicker: String = "", val pFx: String = "",
+    // ціль: поля форми, індекс цілі; внесок/зняття — напрям, рахунок, сума
+    val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1, val gMonthly: String = "",
+    val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
 )
 
 data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
@@ -65,6 +68,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var filters by mutableStateOf(Filters())
     var open by mutableStateOf(setOf<String>())
     var help by mutableStateOf(-1)
+    /** Розділ довідки, що показується першим (-1 — звичайний порядок). */
+    var helpTop by mutableStateOf(-1)
     var eraseAsk by mutableStateOf(false)
     var calcIn by mutableStateOf(CalcInput())
     var impResult by mutableStateOf<ImportResult?>(null); private set
@@ -73,6 +78,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     // undo
     private val stack = ArrayDeque<AppData>()
+    private val labels = ArrayDeque<String>()
     var undoN by mutableStateOf(0); private set
     var toastAt by mutableStateOf(0L); private set
 
@@ -182,14 +188,23 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun commit(raw: AppData) {
         val nd = ensureAccIds(raw)
         if (nd == data) return
-        stack.addLast(data); if (stack.size > 20) stack.removeFirst()
+        stack.addLast(data); labels.addLast(describeChange(data, nd)); if (stack.size > 20) { stack.removeFirst(); labels.removeFirst() }
         data = nd; undoN = stack.size; persist()
         val t = System.currentTimeMillis(); toastAt = t
         viewModelScope.launch { delay(6000); if (toastAt == t) toastAt = 0 }
     }
     fun undo() {
         if (stack.isEmpty()) return
-        data = stack.removeLast(); undoN = stack.size; toastAt = 0; persist()
+        data = stack.removeLast(); labels.removeLastOrNull(); undoN = stack.size; toastAt = 0; persist()
+    }
+
+    /** Останні дії (найновіша перша), до 10: текст і скільки дій треба відмінити, щоб скасувати саме її разом з новішими. */
+    fun recentActions(): List<Pair<Int, String>> = labels.toList().asReversed().take(10).mapIndexed { i, l -> (i + 1) to l }
+    /** Відміняє k останніх дій одразу (повертає стан до k-ї дії). */
+    fun undoLast(k: Int) {
+        val (restored, rest) = undoSteps(stack.toList(), k) ?: return
+        stack.clear(); stack.addAll(rest); repeat(k) { labels.removeLastOrNull() }
+        data = restored; undoN = stack.size; toastAt = 0; persist()
     }
 
     @JvmName("selectCurrency") fun setCur(c: String) { cur = c; curOpen = false; persist() }
@@ -310,12 +325,14 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             pBuy = if (fx) r2(p.pxBuy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else c(p.now), pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx) p.cur else "UAH", pTicker = p.ticker,
             pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; quoteMsg = ""; sheet = Sheet.PosE
     }
+    /** Довідка з будь-якого екрана: відкривається на розділі, що відповідає поточному екрану. */
+    fun openHelp(section: Int = helpSectionFor(screen)) { help = section; helpTop = section; sheet = Sheet.Help }
     fun openSettings() { eraseAsk = false; sheet = Sheet.Settings }
     fun openImport() { impResult = null; sheet = Sheet.Import }
 
     // ---------- сабміти ----------
     fun submit() {
-        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE
+        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE || sheet == Sheet.GoalE
         val f = if (edit && o != null) fillBlanks(form, o) else form; val s = data
         when (sheet) {
             Sheet.Transfer -> {
@@ -355,6 +372,19 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 commit(addTx(s, t)); closeSheet()
                 setMonth(months.indexOf(t.date.take(7)).coerceAtLeast(0))
             }
+            Sheet.Goal -> { val g = goalFromForm(f) ?: return; commit(s.copy(goals = s.goals + g)); closeSheet() }
+            Sheet.GoalE -> {
+                if (s.goals.getOrNull(f.gIdx) == null) { closeSheet(); return }
+                val g = goalFromForm(f) ?: return
+                commit(s.copy(goals = s.goals.mapIndexed { i, x -> if (i == f.gIdx) g else x })); closeSheet()
+            }
+            Sheet.GoalMove -> {
+                val acc = s.accs.firstOrNull { it.id == f.gAcc }
+                val amt = parseNum(f.gAmt) * (if (acc != null) RATES[acc.cur] ?: 1.0 else rate)
+                if (amt <= 0) { formErr = "Вкажіть суму більше нуля"; return }
+                val (nd, e) = moveGoal(s, f.gIdx, if (f.gIn) amt else -amt, f.gAcc, RATES); formErr = e
+                if (nd != null) { commit(nd); closeSheet() }
+            }
             Sheet.Cats -> {
                 val (lim, e) = buildLimits(catsEdit, limEdit, rate); formErr = e
                 if (lim != null) { commit(s.copy(cats = catsEdit, limits = lim)); closeSheet() }
@@ -367,6 +397,38 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             else -> {}
         }
     }
+    // ---------- калькулятори (складний відсоток, фінансова незалежність) ----------
+    // Значення, введені вручну, зберігаються між запусками; решта підставляється автоматично.
+    private fun loadMap(k: String): Map<String, String> = try { prefs.getString(k, null)?.let { json.decodeFromString<Map<String, String>>(it) } ?: emptyMap() } catch (_: Exception) { emptyMap() }
+    var compIn by mutableStateOf(loadMap("compIn")); private set
+    var fireIn by mutableStateOf(loadMap("fireIn")); private set
+    fun setComp(k: String, v: String) { compIn = compIn + (k to v); prefs.edit().putString("compIn", json.encodeToString(compIn)).apply() }
+    fun setFire(k: String, v: String) { fireIn = fireIn + (k to v); prefs.edit().putString("fireIn", json.encodeToString(fireIn)).apply() }
+    /** Як у вебверсії: капітал, дохідність і ціль знову рахуються автоматично; внесок, інфляція й ставка знімання лишаються. */
+    fun resetFire() { fireIn = fireIn - setOf("cap", "yield", "target"); prefs.edit().putString("fireIn", json.encodeToString(fireIn)).apply() }
+    /** Середні витрати на місяць за історією операцій (₴). */
+    fun avgMonthlyExpenseUah(): Double = data.txs.filter { it.type == "expense" }.groupBy { it.date.take(7) }.values.map { l -> l.sumOf { it.amt } }.let { if (it.isEmpty()) 0.0 else it.average() }
+
+    // ---------- цілі ----------
+    private fun v2(uah: Double) = (Math.round(uah / rate * 100) / 100.0).let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }
+    fun openGoal() { formErr = ""; formOrig = null; form = form.copy(gName = "", gTarget = "", gSaved = "", gStep = "", gDeadline = "", gIcon = "flag", gIdx = -1, gMonthly = ""); sheet = Sheet.Goal }
+    fun editGoal(i: Int) {
+        val g = data.goals.getOrNull(i) ?: return
+        formErr = ""; form = form.copy(gName = g.name, gTarget = v2(g.target), gSaved = v2(g.saved), gStep = v2(g.step), gDeadline = g.deadline, gIcon = g.icon, gIdx = i, gMonthly = if (g.monthly > 0) v2(g.monthly) else ""); formOrig = form; sheet = Sheet.GoalE
+    }
+    fun openGoalMove(i: Int) { if (data.goals.getOrNull(i) == null) return; formErr = ""; formOrig = null; form = form.copy(gIdx = i, gIn = true, gAcc = data.accs.firstOrNull { !it.sav }?.id ?: "", gAmt = ""); sheet = Sheet.GoalMove }
+    fun deleteGoal() {
+        if (!delAsk) { delAsk = true; return }; delAsk = false
+        val i = form.gIdx; if (data.goals.getOrNull(i) == null) { closeSheet(); return }
+        commit(data.copy(goals = data.goals.filterIndexed { j, _ -> j != i })); closeSheet()
+    }
+    private fun goalFromForm(f: Form): Goal? {
+        val target = parseNum(f.gTarget); val saved = parseNum(f.gSaved); val step = if (f.gStep.isBlank()) 1000.0 else parseNum(f.gStep)
+        formErr = goalFormError(f.gName, target, saved, step, f.gDeadline); if (formErr.isNotEmpty()) return null
+        val monthly = parseNum(f.gMonthly); if (monthly < 0) { formErr = "Внесок на місяць не може бути від'ємним"; return null }
+        return Goal(f.gName.trim(), saved * rate, target * rate, f.gIcon, step * rate, f.gDeadline.trim(), monthly * rate)
+    }
+
     // ---------- ліміти й категорії ----------
     var catsEdit by mutableStateOf(listOf<String>()); private set
     var limEdit by mutableStateOf(mapOf<String, String>()); private set
@@ -385,7 +447,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun linkedTxCount(): Int = data.accs.getOrNull(form.editIdx)?.id?.let { id -> data.txs.count { it.acc == id || it.toAcc == id } } ?: 0
     fun deleteAcc() { if (!delAsk) { delAsk = true; return }; delAsk = false; val s = data; commit(s.copy(accs = s.accs.filterIndexed { i, _ -> i != form.editIdx })); form = form.copy(from = 0, to = 0); closeSheet() }
     fun deletePos() { if (!delAsk) { delAsk = true; return }; delAsk = false; val s = data; commit(s.copy(pos = s.pos.filterIndexed { i, _ -> i != form.editIdx })); closeSheet() }
-    fun toggleDebt(i: Int) { commit(data.copy(debts = data.debts.mapIndexed { j, d -> if (j == i) d.copy(done = !d.done) else d })) }
+    /** Галочка «повернено»: борг зникає зі списку (повернути його можна кнопкою «Скасувати» чи в «Відмінити останні дії»). */
+    fun toggleDebt(i: Int) { commit(data.copy(debts = settleDebt(data.debts, i))) }
     fun addToGoal(i: Int) { commit(data.copy(goals = data.goals.mapIndexed { j, g -> if (j == i) g.copy(saved = Math.min(g.target, g.saved + g.step)) else g })) }
     fun erase() {
         if (!eraseAsk) { eraseAsk = true; return }

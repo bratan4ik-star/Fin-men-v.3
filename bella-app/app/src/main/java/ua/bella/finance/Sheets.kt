@@ -15,6 +15,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,10 +28,10 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.Cats to "Ліміти й категорії",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
 )
 private const val EDIT_NOTE = "Щоб побачити, що було, очистіть поле: старе значення з'явиться сірим. Порожнє поле під час збереження лишається як було."
-private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.Cats to "Зберегти")
+private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +44,7 @@ fun SheetHost(vm: BellaViewModel) {
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (sh) {
-                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm)
+                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
                     Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
@@ -139,6 +141,43 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
 }
 
 @Composable
+private fun GoalForm(vm: BellaViewModel, edit: Boolean) {
+    val f = vm.form
+    Seg(GOAL_ICONS, f.gIcon) { vm.form = f.copy(gIcon = it) }
+    Field("Назва", f.gName, hint = vm.was { it.gName }.ifEmpty { "напр. Подушка безпеки" }) { vm.form = f.copy(gName = it) }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Field("Сума цілі (${vm.sym})", f.gTarget, Modifier.weight(1f), hint = vm.was { it.gTarget }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(gTarget = it) }
+        Field("Вже накопичено (${vm.sym})", f.gSaved, Modifier.weight(1f), hint = vm.was { it.gSaved }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(gSaved = it) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Field("Крок для «+» (${vm.sym})", f.gStep, Modifier.weight(1f), hint = vm.was { it.gStep }.ifEmpty { "1000" }, numeric = true) { vm.form = f.copy(gStep = it) }
+        Field("Дедлайн", f.gDeadline, Modifier.weight(1f), hint = vm.was { it.gDeadline }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(gDeadline = it) }
+    }
+    Field("Планую відкладати на місяць (${vm.sym})", f.gMonthly, hint = vm.was { it.gMonthly }.ifEmpty { "для прогнозу, необов'язково" }, numeric = true) { vm.form = f.copy(gMonthly = it) }
+    T("«Вже накопичено» — гроші, які вже відкладено; рахунків воно не змінює. Щоб перекласти гроші з рахунку, скористайтеся «Внести / зняти».", 11.sp, C.n500)
+    if (edit) T(EDIT_NOTE + " Дедлайн і внесок на місяць можна прибрати, очистивши поле.", 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+    if (edit) T(if (vm.delAsk) "Натисніть ще раз, щоб видалити ціль" else "Видалити ціль", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteGoal() }.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun GoalMoveForm(vm: BellaViewModel) {
+    val f = vm.form; val g = vm.data.goals.getOrNull(f.gIdx) ?: return
+    val accs = vm.data.accs; val acc = accs.firstOrNull { it.id == f.gAcc }
+    T("${g.name}: ${vm.m(g.saved)} з ${vm.m(g.target)} ${vm.sym}", 13.sp, weight = FontWeight.Medium)
+    Seg(listOf(true to "Внести", false to "Зняти"), f.gIn) { vm.form = f.copy(gIn = it) }
+    val opts = listOf("Без рахунку") + accs.map { "${it.name} · ${nativeLabel(it, vm.hide)}" }
+    Dropdown(if (f.gIn) "З рахунку" else "На рахунок", opts, accs.indexOfFirst { it.id == f.gAcc } + 1) { vm.form = f.copy(gAcc = if (it == 0) "" else accs[it - 1].id) }
+    Field("Сума (${acc?.cur ?: vm.cur})", f.gAmt, hint = "0", numeric = true) { vm.form = f.copy(gAmt = it) }
+    T(when {
+        acc != null && f.gIn -> "Сума спишеться з «${acc.name}» і додасться до цілі. Капітал не зміниться."
+        acc != null -> "Сума повернеться на «${acc.name}». Капітал не зміниться."
+        else -> "Без рахунку змінюється лише накопичене в цілі (наприклад, якщо гроші лежать окремо)."
+    }, 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+}
+
+@Composable
 private fun CatsForm(vm: BellaViewModel) {
     T("Місячний ліміт витрат у ${vm.sym}. Порожньо — без ліміту.", 12.sp, C.n500)
     val lc = limitCats(vm.catsEdit)
@@ -173,7 +212,7 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
         }
     } else if (f.group == "ETF") {
         Seg(CURRENCIES.map { it to it }, f.pCur) { vm.form = f.copy(pCur = it) }
-        val cs = if (f.pCur == "UAH") vm.sym else f.pCur
+        val cs = if (f.pCur == "UAH") vm.sym else curSign(f.pCur)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
             Field("Тікер (Yahoo)", f.pTicker, Modifier.weight(1f), hint = vm.was { it.pTicker }.ifEmpty { "VWCE.DE, SPY" }) { vm.form = f.copy(pTicker = it) }
             Btn(if (vm.quoteBusy) "…" else "Ціна з біржі", false, icon = Icons.Outlined.Sync) { vm.quoteIntoForm() }
@@ -188,6 +227,10 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
             if (f.pCur != "UAH") Field("Курс купівлі, ₴ за 1 ${f.pCur}", f.pFx, Modifier.weight(1f), hint = vm.was { it.pFx }.ifEmpty { "НБУ: " + fmt2(RATES[f.pCur] ?: 0.0) }, numeric = true) { vm.form = f.copy(pFx = it) }
         }
         Field("Дивідендна дохідність, % річних", f.pRate, hint = vm.was { it.pRate }.ifEmpty { "0 для накопичувальних" }, numeric = true) { vm.form = f.copy(pRate = it) }
+        if (f.pCur != "UAH") {
+            val q = parseNum(f.pQty); val px = parseNum(f.pNow).takeIf { it > 0 } ?: parseNum(f.pBuy)
+            if (q > 0 && px > 0) T("Вартість: ${fxMoney(q * px, f.pCur)} ≈ ${vm.m(q * px * (RATES[f.pCur] ?: 1.0))} ${vm.sym}", 13.sp, weight = FontWeight.Medium)
+        }
         if (f.pCur != "UAH") T("Ціни у ${f.pCur}; вартість у гривнях іде за курсом НБУ, тож прибуток показується окремо: від ціни фонду і від курсу. Курс купівлі порожній — береться поточний.", 11.sp, C.n500)
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки (${vm.sym})", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }
@@ -263,11 +306,31 @@ private fun SettingsList(vm: BellaViewModel) {
     if (vm.backupMsg.isNotEmpty()) T(vm.backupMsg, 12.sp, if (vm.backupMsg.startsWith("Не ") || vm.backupMsg.startsWith("Це не")) C.neg else C.n500)
     SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
     SettingRow(Icons.Outlined.VerifiedUser, "Безпека", if (vm.sec.hash.isNotEmpty()) "PIN-код" + (if (vm.sec.bio) " · відбиток пальця" else "") else "Захист вимкнено", trailing = true) { vm.openSheet(Sheet.Security) }
+    UndoList(vm)
     SettingRow(Icons.Outlined.ContentCopy, "Прибрати повтори операцій", if (vm.dupInStore > 0) "Знайдено повторів: ${vm.dupInStore}" else "Повторів немає") { vm.dedupeStore() }
-    SettingRow(Icons.Outlined.HelpOutline, "Довідка", "Як користуватися функціями", trailing = true) { vm.help = -1; vm.openSheet(Sheet.Help) }
+    SettingRow(Icons.Outlined.HelpOutline, "Довідка", "Як користуватися функціями", trailing = true) { vm.openHelp(-1) }
     SettingRow(if (vm.light) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Тема", if (vm.light) "Світла" else "Темна") { vm.toggleTheme() }
     SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
     T("Bella Finance ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_DATE}", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
+}
+
+/** «Відмінити останні дії» — список, що розгортається: до 10 останніх змін, дотик відміняє її й усі новіші. */
+@Composable
+private fun UndoList(vm: BellaViewModel) {
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val items = vm.recentActions()
+    Column {
+        SettingRow(Icons.Outlined.Undo, "Відмінити останні дії", if (items.isEmpty()) "Немає дій для відміни" else "Останніх дій: ${items.size}. Дотик розгортає список", trailing = false) { if (items.isNotEmpty()) open = !open }
+        if (open && items.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(start = 32.dp)) {
+            items.forEach { (k, label) ->
+                Row(Modifier.fillMaxWidth().clickable { vm.undoLast(k); if (vm.recentActions().isEmpty()) open = false }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    T("$k.", 12.sp, C.n500, modifier = Modifier.width(22.dp)); T(label, 13.sp, modifier = Modifier.weight(1f), maxLines = 2)
+                    T(if (k == 1) "Відмінити" else "Відмінити $k", 12.sp, C.accent400, maxLines = 1)
+                }
+            }
+            T("Відміна дії скасовує і всі новіші: «Відмінити 3» повертає стан до третьої дії зверху.", 11.sp, C.n500, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
 }
 
 @Composable
@@ -290,23 +353,26 @@ private val HELP = listOf(
     Icons.Outlined.Home to ("Головна" to "Тут чистий капітал, зміна за місяць, останні операції та розділи. Око в шапці ховає всі суми. Стрілка назад скасовує останню зміну даних. Шестерня відкриває налаштування."),
     Icons.Outlined.CurrencyExchange to ("Валюта" to "Кнопка з символом валюти в шапці перемикає гривню, долар, євро та злотий. Усі суми на всіх екранах перераховуються за курсами, закладеними в застосунку."),
     Icons.Outlined.Savings to ("Капітал та Рахунки" to "Показує склад капіталу: гроші на картках, заощадження, інвестиції, цілі та борги. Натисніть на рахунок, щоб змінити назву чи баланс, позначити його як заощадження або видалити. Кнопка «Переказ» переносить гроші між рахунками з конвертацією валют."),
-    Icons.Outlined.Paid to ("Борги та позики" to "У розділі «Борги та позики» додайте запис «Мені винні» або «Я винен» з терміном. Позначка біля запису закреслює його, і чистий капітал перераховується."),
+    Icons.Outlined.Paid to ("Борги та позики" to "У розділі «Борги та позики» додайте запис «Мені винні» або «Я винен» з терміном. Позначка біля запису означає «повернено»: запис зникає зі списку, а чистий капітал перераховується. Помилково прибраний запис повертає «Скасувати» або «Відмінити останні дії» в налаштуваннях."),
     Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату."),
     Icons.Outlined.Search to ("Пошук і фільтри" to "У вкладці «Операції» є пошук за описом чи категорією, кнопки сортування за датою та сумою, фільтри за діапазоном дат і сум, а також вибір типу: усі, витрати, доходи, перекази."),
     Icons.Outlined.FileUpload to ("Імпорт виписки" to "Налаштування, Імпорт виписки. Підтримує Excel (.xlsx) з банку та CSV. Перекази між власними картками не рахуються доходом чи витратою. Якщо у файлі є повтори, з'явиться кнопка «Прибрати повтори». Файл читається лише на вашому пристрої."),
-    Icons.Outlined.TrendingUp to ("Інвестиції" to "Групи ОВДП, Депозити, ETF та Крипто розгортаються по натисканню. Кнопка «Позиція» додає нову. Натисніть на позицію, щоб змінити кількість, ціну, ставку, дати чи видалити її."),
-    Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Побачите дохідність до погашення, графік виплат зі статусом і розрахунок продажу. «Додати в інвестиції» створює позицію. ОВДП для фізичних осіб не оподатковуються."),
-    Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "У «Цілях» кнопка з сумою додає внесок до накопичення. «Пасивний дохід» показує місячний дохід з інвестицій, для депозитів після податку 23%."),
+    Icons.Outlined.TrendingUp to ("Інвестиції" to "Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. Внизу — калькулятор складного відсотка."),
+    Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються."),
+    Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),
     Icons.Outlined.VerifiedUser to ("Безпека" to "Налаштування, Безпека: PIN-код із 4 цифр, відбиток пальця, автоблокування та ручне блокування. Після 5 хибних спроб потрібно зачекати 30 секунд."),
     Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Стерти дані видаляє все без можливості відновлення."),
 )
 
 @Composable
 private fun HelpList(vm: BellaViewModel) {
-    HELP.forEachIndexed { i, (ic, tt) ->
+    // розділ, що відповідає поточному екрану, показується першим
+    val order = HELP.indices.sortedBy { if (it == vm.helpTop) -1 else it }
+    order.forEach { i ->
+        val (ic, tt) = HELP[i]
         Column {
             Row(Modifier.fillMaxWidth().clickable { vm.help = if (vm.help == i) -1 else i }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Ico(ic, C.accent, 20.dp); T(tt.first, 14.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f)); Ico(if (vm.help == i) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n500, 16.dp)
+                Ico(ic, C.accent, 20.dp); T(tt.first, 14.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f)); Ico(if (vm.help == i) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
             }
             if (vm.help == i) T(tt.second, 12.sp, C.n400, modifier = Modifier.padding(start = 32.dp, bottom = 8.dp))
             Div()
