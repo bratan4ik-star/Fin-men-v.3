@@ -135,7 +135,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleTheme() { light = !light; persist() }
     fun go(s: Screen) { screen = s; curOpen = false }
     fun openSheet(s: Sheet) { sheet = s }
-    fun closeSheet() { sheet = Sheet.None }
+    fun closeSheet() { sheet = Sheet.None; formOrig = null }
+
+    /** Значення форми на момент відкриття редагування; null для нових записів. */
+    var formOrig by mutableStateOf<Form?>(null); private set
+    /** Старе значення поля для підказки (порожньо, якщо це не редагування). */
+    fun was(sel: (Form) -> String): String = formOrig?.let(sel) ?: ""
 
     // ---------- відкриття форм ----------
     fun openTransfer() { form = form.copy(amount = ""); sheet = Sheet.Transfer }
@@ -160,7 +165,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             tAmt = s2(if (acc != null && t.accAmt > 0) t.accAmt else t.amt / rate),
             tAcc = acc?.id ?: "", tToAcc = to?.id ?: "", tToAmt = if (t.type == "transfer" && to != null) s2(t.toAmt) else "",
         )
-        sheet = Sheet.TxE
+        formOrig = form; sheet = Sheet.TxE
     }
     fun deleteTx() {
         if (!txDelAsk) { txDelAsk = true; return }
@@ -178,18 +183,19 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val (t, err) = buildTx(TxInput(f.tType, parseNum(f.tAmt), if (f.tType == "transfer") "Перекази" else f.tCat, f.tDesc.trim(), f.tDate.trim(), f.tAcc, f.tToAcc, parseNum(f.tToAmt), key), data.accs, RATES, rate)
         formErr = err; return t
     }
-    fun openPos() { form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", group = "ОВДП"); sheet = Sheet.Pos }
-    fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); sheet = Sheet.AccE }
+    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП"); sheet = Sheet.Pos }
+    fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); formOrig = form; sheet = Sheet.AccE }
     fun editPos(i: Int) {
         val p = data.pos[i]; fun c(v: Double) = ((v / rate) * 100).let { Math.round(it) / 100.0 }.toString()
-        form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(), pBuy = c(p.buy), pNow = c(p.now), pRate = p.rate.toString(), pMat = p.mat, pNext = p.next); sheet = Sheet.PosE
+        form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(), pBuy = c(p.buy), pNow = c(p.now), pRate = p.rate.toString(), pMat = p.mat, pNext = p.next); formOrig = form; formErr = ""; sheet = Sheet.PosE
     }
     fun openSettings() { eraseAsk = false; sheet = Sheet.Settings }
     fun openImport() { impResult = null; sheet = Sheet.Import }
 
     // ---------- сабміти ----------
     fun submit() {
-        val f = form; val s = data
+        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE
+        val f = if (edit && o != null) fillBlanks(form, o) else form; val s = data
         when (sheet) {
             Sheet.Transfer -> {
                 val fa = s.accs.getOrNull(f.from); val ta = s.accs.getOrNull(f.to); val amt = parseNum(f.amount)
@@ -210,6 +216,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             Sheet.PosE -> {
                 val q = parseNum(f.pQty); val b = parseNum(f.pBuy) * rate; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * rate
                 val o = s.pos.getOrNull(f.editIdx)
+                formErr = posDatesError(f.pNext, f.pMat); if (formErr.isNotEmpty()) return
                 if (f.pName.isNotBlank() && q > 0 && b > 0 && o != null) {
                     open = open + f.group
                     commit(s.copy(pos = s.pos.mapIndexed { i, x -> if (i == f.editIdx) Pos(f.group, f.pName.trim(), q, b, nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), o.calc) else x })); closeSheet()
@@ -217,7 +224,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             }
             Sheet.Pos -> {
                 val q = parseNum(f.pQty); val b = parseNum(f.pBuy) * rate
-                if (f.pName.isNotBlank() && q > 0 && b > 0) { open = open + f.group; commit(s.copy(pos = s.pos + Pos(f.group, f.pName.trim(), q, b, b, f.pMat.trim(), parseNum(f.pRate)))); closeSheet() }
+                formErr = posDatesError(f.pNext, f.pMat); if (formErr.isNotEmpty()) return
+                if (f.pName.isNotBlank() && q > 0 && b > 0) { open = open + f.group; commit(s.copy(pos = s.pos + Pos(f.group, f.pName.trim(), q, b, b, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim()))); closeSheet() }
             }
             Sheet.Tx -> {
                 val t = txFromForm(f, "") ?: return
