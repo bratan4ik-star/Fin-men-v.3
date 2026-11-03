@@ -7,8 +7,9 @@ import java.util.Locale
 val RATES: MutableMap<String, Double> = mutableMapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0)
 val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł")
 val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN")
-const val TODAY = "2026-11-02"
-const val CUR_MONTH = "2026-11"
+/** Сьогоднішня дата і поточний місяць телефону (раніше були зафіксовані на 2026-11-02 з прототипу). */
+val TODAY: String get() = java.time.LocalDate.now().toString()
+val CUR_MONTH: String get() = TODAY.take(7)
 
 val MONTH_NAMES = listOf("Січень", "Лютий", "Березень", "Квітень", "Травень", "Червень", "Липень", "Серпень", "Вересень", "Жовтень", "Листопад", "Грудень")
 
@@ -47,6 +48,9 @@ data class AppData(
     val pos: List<Pos> = DemoData.pos,
     val goals: List<Goal> = DemoData.goals,
     val demo: Boolean = true,
+    /** Місячні ліміти витрат за категоріями (у гривнях) і список категорій — редагуються в «Бюджет → Ліміти». */
+    val limits: Map<String, Double> = LIMITS.filterValues { it > 0 },
+    val cats: List<String> = CATEGORIES,
 )
 
 @Serializable
@@ -62,6 +66,8 @@ data class Persisted(
     val rates: Map<String, Double> = emptyMap(),
     val ratesDate: String = "",
     val ratesAt: Long = 0L,
+    /** Щоденні знімки чистого капіталу для графіка на головній (поза журналом «Скасувати»). */
+    val hist: List<HistPoint> = emptyList(),
 )
 
 object DemoData {
