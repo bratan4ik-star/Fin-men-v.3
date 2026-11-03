@@ -16,7 +16,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Cats, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -33,6 +33,9 @@ data class Form(
     val pMonthly: Boolean = false, val pPayAcc: String = "", val cashF: Boolean = false,
     // ETF: валюта ціни, тікер Yahoo, курс купівлі (₴ за 1 одиницю валюти)
     val pCur: String = "UAH", val pTicker: String = "", val pFx: String = "",
+    // ціль: поля форми, індекс цілі; внесок/зняття — напрям, рахунок, сума
+    val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1,
+    val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
 )
 
 data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
@@ -315,7 +318,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- сабміти ----------
     fun submit() {
-        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE
+        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE || sheet == Sheet.GoalE
         val f = if (edit && o != null) fillBlanks(form, o) else form; val s = data
         when (sheet) {
             Sheet.Transfer -> {
@@ -355,6 +358,19 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 commit(addTx(s, t)); closeSheet()
                 setMonth(months.indexOf(t.date.take(7)).coerceAtLeast(0))
             }
+            Sheet.Goal -> { val g = goalFromForm(f) ?: return; commit(s.copy(goals = s.goals + g)); closeSheet() }
+            Sheet.GoalE -> {
+                if (s.goals.getOrNull(f.gIdx) == null) { closeSheet(); return }
+                val g = goalFromForm(f) ?: return
+                commit(s.copy(goals = s.goals.mapIndexed { i, x -> if (i == f.gIdx) g else x })); closeSheet()
+            }
+            Sheet.GoalMove -> {
+                val acc = s.accs.firstOrNull { it.id == f.gAcc }
+                val amt = parseNum(f.gAmt) * (if (acc != null) RATES[acc.cur] ?: 1.0 else rate)
+                if (amt <= 0) { formErr = "Вкажіть суму більше нуля"; return }
+                val (nd, e) = moveGoal(s, f.gIdx, if (f.gIn) amt else -amt, f.gAcc, RATES); formErr = e
+                if (nd != null) { commit(nd); closeSheet() }
+            }
             Sheet.Cats -> {
                 val (lim, e) = buildLimits(catsEdit, limEdit, rate); formErr = e
                 if (lim != null) { commit(s.copy(cats = catsEdit, limits = lim)); closeSheet() }
@@ -367,6 +383,25 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             else -> {}
         }
     }
+    // ---------- цілі ----------
+    private fun v2(uah: Double) = (Math.round(uah / rate * 100) / 100.0).let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }
+    fun openGoal() { formErr = ""; formOrig = null; form = form.copy(gName = "", gTarget = "", gSaved = "", gStep = "", gDeadline = "", gIcon = "flag", gIdx = -1); sheet = Sheet.Goal }
+    fun editGoal(i: Int) {
+        val g = data.goals.getOrNull(i) ?: return
+        formErr = ""; form = form.copy(gName = g.name, gTarget = v2(g.target), gSaved = v2(g.saved), gStep = v2(g.step), gDeadline = g.deadline, gIcon = g.icon, gIdx = i); formOrig = form; sheet = Sheet.GoalE
+    }
+    fun openGoalMove(i: Int) { if (data.goals.getOrNull(i) == null) return; formErr = ""; formOrig = null; form = form.copy(gIdx = i, gIn = true, gAcc = data.accs.firstOrNull { !it.sav }?.id ?: "", gAmt = ""); sheet = Sheet.GoalMove }
+    fun deleteGoal() {
+        if (!delAsk) { delAsk = true; return }; delAsk = false
+        val i = form.gIdx; if (data.goals.getOrNull(i) == null) { closeSheet(); return }
+        commit(data.copy(goals = data.goals.filterIndexed { j, _ -> j != i })); closeSheet()
+    }
+    private fun goalFromForm(f: Form): Goal? {
+        val target = parseNum(f.gTarget); val saved = parseNum(f.gSaved); val step = if (f.gStep.isBlank()) 1000.0 else parseNum(f.gStep)
+        formErr = goalFormError(f.gName, target, saved, step, f.gDeadline); if (formErr.isNotEmpty()) return null
+        return Goal(f.gName.trim(), saved * rate, target * rate, f.gIcon, step * rate, f.gDeadline.trim())
+    }
+
     // ---------- ліміти й категорії ----------
     var catsEdit by mutableStateOf(listOf<String>()); private set
     var limEdit by mutableStateOf(mapOf<String, String>()); private set

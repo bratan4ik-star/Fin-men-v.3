@@ -26,10 +26,10 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.Cats to "Ліміти й категорії",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
 )
 private const val EDIT_NOTE = "Щоб побачити, що було, очистіть поле: старе значення з'явиться сірим. Порожнє поле під час збереження лишається як було."
-private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.Cats to "Зберегти")
+private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +42,7 @@ fun SheetHost(vm: BellaViewModel) {
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (sh) {
-                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm)
+                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
                     Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
@@ -136,6 +136,42 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     if (edit) T(EDIT_NOTE, 11.sp, C.n500)
     if (edit) T(if (vm.txDelAsk) "Натисніть ще раз, щоб видалити (баланс рахунку повернеться)" else "Видалити операцію", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteTx() }.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun GoalForm(vm: BellaViewModel, edit: Boolean) {
+    val f = vm.form
+    Seg(GOAL_ICONS, f.gIcon) { vm.form = f.copy(gIcon = it) }
+    Field("Назва", f.gName, hint = vm.was { it.gName }.ifEmpty { "напр. Подушка безпеки" }) { vm.form = f.copy(gName = it) }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Field("Сума цілі (${vm.sym})", f.gTarget, Modifier.weight(1f), hint = vm.was { it.gTarget }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(gTarget = it) }
+        Field("Вже накопичено (${vm.sym})", f.gSaved, Modifier.weight(1f), hint = vm.was { it.gSaved }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(gSaved = it) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Field("Крок для «+» (${vm.sym})", f.gStep, Modifier.weight(1f), hint = vm.was { it.gStep }.ifEmpty { "1000" }, numeric = true) { vm.form = f.copy(gStep = it) }
+        Field("Дедлайн", f.gDeadline, Modifier.weight(1f), hint = vm.was { it.gDeadline }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(gDeadline = it) }
+    }
+    T("«Вже накопичено» — гроші, які вже відкладено; рахунків воно не змінює. Щоб перекласти гроші з рахунку, скористайтеся «Внести / зняти».", 11.sp, C.n500)
+    if (edit) T(EDIT_NOTE + " Дедлайн можна прибрати, очистивши поле.", 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+    if (edit) T(if (vm.delAsk) "Натисніть ще раз, щоб видалити ціль" else "Видалити ціль", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteGoal() }.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun GoalMoveForm(vm: BellaViewModel) {
+    val f = vm.form; val g = vm.data.goals.getOrNull(f.gIdx) ?: return
+    val accs = vm.data.accs; val acc = accs.firstOrNull { it.id == f.gAcc }
+    T("${g.name}: ${vm.m(g.saved)} з ${vm.m(g.target)} ${vm.sym}", 13.sp, weight = FontWeight.Medium)
+    Seg(listOf(true to "Внести", false to "Зняти"), f.gIn) { vm.form = f.copy(gIn = it) }
+    val opts = listOf("Без рахунку") + accs.map { "${it.name} · ${nativeLabel(it, vm.hide)}" }
+    Dropdown(if (f.gIn) "З рахунку" else "На рахунок", opts, accs.indexOfFirst { it.id == f.gAcc } + 1) { vm.form = f.copy(gAcc = if (it == 0) "" else accs[it - 1].id) }
+    Field("Сума (${acc?.cur ?: vm.cur})", f.gAmt, hint = "0", numeric = true) { vm.form = f.copy(gAmt = it) }
+    T(when {
+        acc != null && f.gIn -> "Сума спишеться з «${acc.name}» і додасться до цілі. Капітал не зміниться."
+        acc != null -> "Сума повернеться на «${acc.name}». Капітал не зміниться."
+        else -> "Без рахунку змінюється лише накопичене в цілі (наприклад, якщо гроші лежать окремо)."
+    }, 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
 }
 
 @Composable

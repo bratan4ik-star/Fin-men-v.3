@@ -399,21 +399,29 @@ private fun fmtQty(q: Double) = if (q == Math.floor(q)) q.toLong().toString() el
 fun GoalsScreen(vm: BellaViewModel) {
     val g = vm.data.goals
     Column(Modifier.fillMaxSize()) {
-        TopBar("Цілі", vm)
+        TopBar("Цілі", vm) { IconBtn(Icons.Outlined.Add) { vm.openGoal() } }
         Page {
             Column { BigMoney("НАКОПИЧЕНО", vm.m(g.sumOf { it.saved }), vm.sym); T("із ${vm.m(g.sumOf { it.target })} ${vm.sym}", 13.sp, C.n500) }
+            if (g.isEmpty()) T("Цілей ще немає. Створіть першу: подушка безпеки, подорож, техніка.", 13.sp, C.n500)
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { g.forEachIndexed { i, x ->
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).clickable { vm.editGoal(i) }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Ico(goalIcon(x.icon), PurpleC, 22.dp)
-                        Column(Modifier.weight(1f)) { T(x.name, 14.sp, weight = FontWeight.Medium); T("${vm.m(x.saved)} з ${vm.m(x.target)} ${vm.sym}", 11.sp, C.n500, maxLines = 1) }
+                        Column(Modifier.weight(1f)) {
+                            T(x.name, 14.sp, weight = FontWeight.Medium)
+                            T("${vm.m(x.saved)} з ${vm.m(x.target)} ${vm.sym}" + if (x.deadline.length >= 10) " · до ${ddmmyy(x.deadline)}" else "", 11.sp, C.n500, maxLines = 1)
+                        }
                         T("${Math.min(100, Math.round(x.saved / x.target * 100))}%", 14.sp, weight = FontWeight.Medium)
                     }
+                    Bar((x.saved / x.target).toFloat(), PurpleC, 4.dp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Bar((x.saved / x.target).toFloat(), PurpleC, 4.dp, Modifier.weight(1f)); Btn("+ " + vm.m(x.step), false) { vm.addToGoal(i) }
+                        Btn("+ " + vm.m(x.step), false, Modifier.weight(1f)) { vm.addToGoal(i) }
+                        Btn("Внести / зняти", false, Modifier.weight(1f), Icons.Outlined.SwapVert) { vm.openGoalMove(i) }
                     }
                 }
             } }
+            Btn("Ціль", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) { vm.openGoal() }
+            if (g.isNotEmpty()) T("Дотик до цілі — редагування й видалення. «+» додає крок без рахунку; «Внести / зняти» — довільна сума, за бажанням з рахунку.", 11.sp, C.n500)
         }
     }
 }
