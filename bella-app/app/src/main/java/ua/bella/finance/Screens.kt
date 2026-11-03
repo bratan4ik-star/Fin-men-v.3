@@ -487,6 +487,7 @@ fun CalcScreen(vm: BellaViewModel) {
                 Field("ISIN / назва", s.isin, hint = "UA4000236228") { vm.calcIn = s.copy(isin = it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Номінал (₴)", s.nom, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(nom = it) }; Field("Ставка купона, %", s.coupon, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(coupon = it) } }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Дата купівлі", s.buy, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(buy = it) }; Field("Дата погашення", s.mat, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(mat = it) } }
+                if (s.freq == 0) Field("Початок купона (випуск)", s.issue, hint = "РРРР-ММ-ДД · порожньо = дата купівлі") { vm.calcIn = s.copy(issue = it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна купівлі (₴)", s.price, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(price = it) }; Field("Кількість", s.qty, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(qty = it) } }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна продажу (₴)", s.sell, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(sell = it) }; Field("Дата продажу", s.sellD, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(sellD = it) } }
                 T("Виплата купона", 12.sp, C.n500)

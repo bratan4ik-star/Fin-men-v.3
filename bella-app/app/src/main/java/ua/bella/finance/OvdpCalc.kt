@@ -13,6 +13,8 @@ data class CalcInput(
     val isin: String = "UA4000236228", val nom: String = "1000", val buy: String = "2026-11-02", val mat: String = "2027-03-10",
     val price: String = "1029.54", val qty: String = "98", val coupon: String = "17.1", val freq: Int = 6,
     val sell: String = "1050", val sellD: String = "2027-01-10",
+    /** Дата початку купона (випуску): купон «в кінці» нараховується від неї; порожньо — від дати купівлі. */
+    val issue: String = "",
 )
 
 private fun pd(s: String): LocalDate? = try { LocalDate.parse(s.trim()) } catch (e: Exception) { null }
@@ -36,7 +38,9 @@ fun calcOvdp(s: CalcInput): CalcResult {
     val sched = mutableListOf<SchedRow>()
     var cum = 0.0
     dates.forEach { d -> cum += per; sched.add(SchedRow(d, "Купон", per, cum, !d.isAfter(today))) }
-    val last = if (fr > 0) per else qty * nom * cp / 100 * yrs
+    // Купон «в кінці»: від дати випуску (або купівлі), actual/360 — як у довідці брокера
+    val cStart = pd(s.issue)?.takeIf { it.isBefore(mat) } ?: buy
+    val last = if (fr > 0) per else qty * nom * cp / 100 * Math.max(0.0, days(cStart, mat)) / 360.0
     if (mat.isAfter(buy)) { cum += qty * nom + last; sched.add(SchedRow(mat, if (fr > 0) "Купон + погашення" else "Погашення з купоном", qty * nom + last, cum, !mat.isAfter(today))) }
     val cpn = dates.size * per + if (mat.isAfter(buy)) last else 0.0
     val inv = qty * pr
