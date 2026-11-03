@@ -210,7 +210,7 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
         }
     } else if (f.group == "ETF") {
         Seg(CURRENCIES.map { it to it }, f.pCur) { vm.form = f.copy(pCur = it) }
-        val cs = if (f.pCur == "UAH") vm.sym else f.pCur
+        val cs = if (f.pCur == "UAH") vm.sym else curSign(f.pCur)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
             Field("Тікер (Yahoo)", f.pTicker, Modifier.weight(1f), hint = vm.was { it.pTicker }.ifEmpty { "VWCE.DE, SPY" }) { vm.form = f.copy(pTicker = it) }
             Btn(if (vm.quoteBusy) "…" else "Ціна з біржі", false, icon = Icons.Outlined.Sync) { vm.quoteIntoForm() }
@@ -225,6 +225,10 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
             if (f.pCur != "UAH") Field("Курс купівлі, ₴ за 1 ${f.pCur}", f.pFx, Modifier.weight(1f), hint = vm.was { it.pFx }.ifEmpty { "НБУ: " + fmt2(RATES[f.pCur] ?: 0.0) }, numeric = true) { vm.form = f.copy(pFx = it) }
         }
         Field("Дивідендна дохідність, % річних", f.pRate, hint = vm.was { it.pRate }.ifEmpty { "0 для накопичувальних" }, numeric = true) { vm.form = f.copy(pRate = it) }
+        if (f.pCur != "UAH") {
+            val q = parseNum(f.pQty); val px = parseNum(f.pNow).takeIf { it > 0 } ?: parseNum(f.pBuy)
+            if (q > 0 && px > 0) T("Вартість: ${fxMoney(q * px, f.pCur)} ≈ ${vm.m(q * px * (RATES[f.pCur] ?: 1.0))} ${vm.sym}", 13.sp, weight = FontWeight.Medium)
+        }
         if (f.pCur != "UAH") T("Ціни у ${f.pCur}; вартість у гривнях іде за курсом НБУ, тож прибуток показується окремо: від ціни фонду і від курсу. Курс купівлі порожній — береться поточний.", 11.sp, C.n500)
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки (${vm.sym})", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }

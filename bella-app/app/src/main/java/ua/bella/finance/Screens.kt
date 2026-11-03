@@ -351,15 +351,20 @@ fun InvScreen(vm: BellaViewModel) {
                     }
                     if (isOpen) vm.data.pos.forEachIndexed { ix, p ->
                         if (p.group == g) {
-                            val value = posValueUah(p, RATES); val cost = posCostUah(p); val pl = if (cost > 0) (value - cost) / cost * 100 else 0.0; val fxp = isFxPos(p)
+                            val value = posValueUah(p, RATES); val cost = posCostUah(p); val fxp = isFxPos(p)
+                            // для ETF у валюті: відсоток — зміна ціни фонду в його валюті
+                            val pl = if (fxp) plCurPct(p) else if (cost > 0) (value - cost) / cost * 100 else 0.0
+                            fun fx(v: Double) = if (vm.hide) "•••• ${curSign(p.cur)}" else fxMoney(v, p.cur)
                             Column(Modifier.fillMaxWidth().clickable { vm.editPos(ix) }.padding(start = 18.dp, top = 8.dp, bottom = 8.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(p.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(vm.m(value) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(p.name, 13.sp, maxLines = 1, modifier = Modifier.weight(1f)); T(if (fxp) fx(posValueCur(p)) else vm.m(value) + " " + vm.sym, 13.sp, weight = FontWeight.Medium) }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    T("${fmtQty(p.qty)} шт. · куплено по " + if (fxp) "${if (vm.hide) "••••" else fmt2(p.pxBuy)} ${p.cur}" else vm.m(p.buy), 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
+                                    T("${fmtQty(p.qty)} шт. · куплено по " + if (fxp) fx(p.pxBuy) else vm.m(p.buy), 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
                                 }
                                 if (fxp) {
                                     val sp = plSplit(p, RATES); fun sg(v: Double) = (if (v >= 0) "+" else "−") + vm.m(Math.abs(v)) + " " + vm.sym
-                                    T("${if (vm.hide) "••••" else fmt2(p.pxNow)} ${p.cur}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
+                                    val plc = posValueCur(p) - posCostCur(p)
+                                    T("≈ ${vm.m(value)} ${vm.sym} · прибуток " + (if (plc >= 0) "+" else "−") + fx(Math.abs(plc)), 11.sp, if (plc >= 0) C.pos else C.neg, maxLines = 1)
+                                    T("ціна ${fx(p.pxNow)}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
                                 } else if (p.ticker.isNotEmpty()) T(p.ticker, 11.sp, C.n500)
                                 T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
                             }
