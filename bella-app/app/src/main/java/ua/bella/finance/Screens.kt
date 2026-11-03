@@ -77,7 +77,7 @@ fun HomeScreen(vm: BellaViewModel) {
                 val dl = if (vm.hide) "•••• ${vm.sym}" else (if (t.novNet >= 0) "+" else "−") + fmtInt(vm.cv(Math.abs(t.novNet))) + " " + vm.sym
                 T("$dl за місяць", 13.sp, if (t.novNet >= 0) C.pos else C.neg, modifier = Modifier.padding(top = 2.dp))
                 Sparkline()
-                Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("$ 41.50", "€ 46.00", "zł 10.00").forEach { RateChip(it) } }
+                Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("$" to "USD", "€" to "EUR", "zł" to "PLN").forEach { (sy, c) -> RateChip(sy + " " + String.format(java.util.Locale.US, "%.2f", RATES[c] ?: 0.0)) } }
             }
             Btn("Нова операція", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) { vm.openTx() }
             Column {
@@ -180,6 +180,7 @@ fun AccScreen(vm: BellaViewModel) {
                     }
                 }
             }
+            RatesSection(vm)
         }
     }
 }
@@ -238,7 +239,7 @@ fun BudgetScreen(vm: BellaViewModel) {
             }
             Seg(listOf(0 to "Огляд", 1 to "Операції", 2 to "Звіт", 3 to "Ліміти"), vm.tab) { vm.tab = it }
             when (vm.tab) {
-                0 -> Column { cats.entries.sortedByDescending { it.value }.forEach { (c, v) ->
+                0 -> Column(verticalArrangement = Arrangement.spacedBy(22.dp)) { Column { cats.entries.sortedByDescending { it.value }.forEach { (c, v) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Ico(catIcon(c), C.accent, 20.dp)
                         Column(Modifier.weight(1f)) {
@@ -247,6 +248,8 @@ fun BudgetScreen(vm: BellaViewModel) {
                         }
                     }
                 } }
+                    SmartAnalyticsSection(vm, mt)
+                }
                 1 -> OpsTab(vm)
                 2 -> Column {
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) { listOf("Місяць", "Доходи", "Витрати", "Баланс").forEach { T(it, 11.sp, C.n500, modifier = Modifier.weight(1f)) } }

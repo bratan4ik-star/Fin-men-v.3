@@ -44,6 +44,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var light by mutableStateOf(loaded.light); private set
     var sec by mutableStateOf(loaded.sec); private set
 
+    // курси НБУ
+    var ratesDate by mutableStateOf(loaded.ratesDate); private set
+    var ratesAt by mutableStateOf(loaded.ratesAt); private set
+    var ratesTick by mutableStateOf(0); private set
+    var ratesBusy by mutableStateOf(false); private set
+    var ratesMsg by mutableStateOf(""); private set
+
     var screen by mutableStateOf(Screen.Home)
     var sheet by mutableStateOf(Sheet.None)
     var hide by mutableStateOf(false)
@@ -74,16 +81,37 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     private var until = 0L
     var hiddenAt = 0L
 
-    val rate get() = RATES[cur]!!
+    /** Читає ratesTick, щоб екрани перемальовувались після оновлення курсів. */
+    private fun r(c: String): Double { if (ratesTick < 0) return 1.0; return RATES[c]!! }
+    val rate get() = r(cur)
     val sym get() = SYM[cur]!!.trim()
     fun cv(v: Double) = v / rate
     fun m(v: Double) = if (hide) "••••" else fmtInt(cv(v))
-    fun base(a: Account) = a.bal * RATES[a.cur]!!
+    fun base(a: Account) = a.bal * r(a.cur)
 
     val months: List<String> get() = data.txs.map { it.date.take(7) }.distinct().sorted().ifEmpty { listOf(CUR_MONTH) }
 
     private fun persist() {
-        try { prefs.edit().putString("state", json.encodeToString(Persisted(data, cur, month, form.from, form.to, ov, light, sec))).apply() } catch (_: Exception) {}
+        try { prefs.edit().putString("state", json.encodeToString(Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt))).apply() } catch (_: Exception) {}
+    }
+
+    init {
+        loaded.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
+        if (System.currentTimeMillis() - loaded.ratesAt > 6 * 3600_000L) refreshRates()
+    }
+
+    /** Завантажує курси USD, EUR, PLN з НБУ. Без інтернету лишає попередні курси й показує повідомлення. */
+    fun refreshRates() {
+        if (ratesBusy) return
+        ratesBusy = true; ratesMsg = ""
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) { try { fetchNbuRates() } catch (_: Exception) { null } }
+            if (res != null) {
+                RATES.putAll(res.rates); ratesDate = res.date; ratesAt = System.currentTimeMillis(); ratesTick++
+                ratesMsg = "Курси НБУ оновлено"; persist()
+            } else ratesMsg = "Не вдалося оновити курси. Перевірте інтернет."
+            ratesBusy = false
+        }
     }
 
     /** Усі зміни даних проходять тут: зберігається знімок для «Скасувати» і показується тост. */

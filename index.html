@@ -245,6 +245,31 @@
                     </table>
                 </div>
             </div>
+            <div id="ratesCard" class="bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-700/80 mt-6">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-landmark text-indigo-400"></i> Курси НБУ і конвертер
+                    </h3>
+                    <button id="ratesRefreshBtn" onclick="fetchRates(true)" title="Завантажити актуальні курси з сайту НБУ" class="px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-700 bg-slate-900 text-indigo-300 hover:text-indigo-200">
+                        <i class="fa-solid fa-rotate mr-1"></i><span id="ratesRefreshLabel">Оновити курси</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-3 gap-3 mb-2">
+                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/60"><span class="text-[10px] text-slate-400">USD → UAH</span><p id="rcUSD" class="text-base font-bold text-slate-100">—</p></div>
+                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/60"><span class="text-[10px] text-slate-400">EUR → UAH</span><p id="rcEUR" class="text-base font-bold text-slate-100">—</p></div>
+                    <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-700/60"><span class="text-[10px] text-slate-400">PLN → UAH</span><p id="rcPLN" class="text-base font-bold text-slate-100">—</p></div>
+                </div>
+                <p id="ratesNote" class="text-[10px] text-slate-500 mb-4"></p>
+                <div class="grid grid-cols-3 gap-3 items-end">
+                    <div><label class="block text-[11px] font-semibold text-slate-400 mb-1" for="cvAmount">Сума</label><input type="number" id="cvAmount" value="100" step="any" inputmode="decimal" oninput="updateConverter()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"></div>
+                    <div><label class="block text-[11px] font-semibold text-slate-400 mb-1" for="cvFrom">З</label><select id="cvFrom" onchange="updateConverter()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"><option value="UAH">UAH</option><option value="USD" selected>USD</option><option value="EUR">EUR</option><option value="PLN">PLN</option></select></div>
+                    <div><label class="block text-[11px] font-semibold text-slate-400 mb-1" for="cvTo">У</label><select id="cvTo" onchange="updateConverter()" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-900 text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"><option value="UAH">UAH</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="PLN">PLN</option></select></div>
+                </div>
+                <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60 mt-3">
+                    <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Результат</span>
+                    <p id="cvResult" class="text-xl font-black text-indigo-300 mt-1">—</p>
+                </div>
+            </div>
         </div>
 
         <!-- TAB 1: BUDGET & ANALYTICS -->
@@ -330,6 +355,27 @@
                 <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden">
                     <div id="progressBar" class="bg-emerald-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
+            </div>
+
+            <div id="smartAnalytics" class="bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-700/80 mb-8">
+                <h3 class="text-sm font-bold text-slate-200 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-lightbulb text-indigo-400"></i> Розумна аналітика
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div title="На скільки місяців вистачить готівки за середніми місячними витратами" class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Запас міцності</span>
+                        <p id="saRunway" class="text-xl font-black text-slate-50 mt-1">—</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">готівки за середніми витратами</p>
+                    </div>
+                    <div title="Прогноз витрат поточного календарного місяця за темпом витрат на сьогодні" class="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Витрати цього місяця</span>
+                        <p id="saProjection" class="text-xl font-black text-slate-50 mt-1">0</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">прогноз · ≈ <span id="saBurn">0</span> на день</p>
+                    </div>
+                </div>
+                <div id="saInsights" class="space-y-2 mb-4"></div>
+                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Найбільші витрати за період</h4>
+                <div id="saTop" class="space-y-1.5"></div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -1016,6 +1062,11 @@
         let mainCurrency = localStorage.getItem('fin_main_currency') || 'UAH';
         let currentType = 'expense';
         let rates = { UAH: 1, USD: 41.2, EUR: 45.0, PLN: 10.5 };
+        let ratesMeta = null; // { r: {USD, EUR, PLN}, d: ISO час оновлення, nd: дата курсу НБУ }
+        try {
+            ratesMeta = JSON.parse(localStorage.getItem('fin_rates_meta') || 'null');
+            if (ratesMeta && ratesMeta.r) Object.assign(rates, ratesMeta.r);
+        } catch (e) { ratesMeta = null; }
 
         let editingTxId = null;
         let editingAssetId = null;
@@ -1065,24 +1116,60 @@
         let nwHistoryChartInstance = null;
         let piProjectionChartInstance = null;
 
-        async function fetchRates() {
+        function renderRatesUI(errorText) {
+            const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+            ['USD', 'EUR', 'PLN'].forEach(c => {
+                set('rate' + c, `${c}: ${rates[c].toFixed(2)} ₴`);
+                set('rc' + c, `${rates[c].toFixed(2).replace('.', ',')} ₴`);
+            });
+            let note = 'Показано орієнтовні курси: оновлення з НБУ ще не було.';
+            if (ratesMeta && ratesMeta.r) {
+                const upd = ratesMeta.d ? new Date(ratesMeta.d).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+                note = (ratesMeta.nd ? `Курс НБУ на ${ratesMeta.nd}` : 'Курс НБУ') + (upd ? ` · оновлено ${upd}` : '');
+            }
+            const noteEl = document.getElementById('ratesNote');
+            if (noteEl) {
+                noteEl.textContent = errorText || note;
+                noteEl.className = errorText ? 'text-[10px] text-rose-400 mb-4' : 'text-[10px] text-slate-500 mb-4';
+            }
+            updateConverter();
+        }
+
+        function updateConverter() {
+            const out = document.getElementById('cvResult');
+            if (!out) return;
+            const amount = parseFloat(document.getElementById('cvAmount').value) || 0;
+            const from = document.getElementById('cvFrom').value;
+            const to = document.getElementById('cvTo').value;
+            const res = convert(amount, from, to);
+            out.textContent = `${res.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${to}`;
+        }
+
+        async function fetchRates(manual) {
+            const btnLabel = document.getElementById('ratesRefreshLabel');
+            if (manual === true && btnLabel) btnLabel.textContent = 'Оновлення…';
+            let errorText = '';
             try {
                 const res = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json');
                 const data = await res.json();
-                const usd = data.find(c => c.cc === 'USD')?.rate;
-                const eur = data.find(c => c.cc === 'EUR')?.rate;
-                const pln = data.find(c => c.cc === 'PLN')?.rate;
+                const pick = code => data.find(c => c.cc === code);
+                const usd = pick('USD'), eur = pick('EUR'), pln = pick('PLN');
 
-                if (usd) rates.USD = usd;
-                if (eur) rates.EUR = eur;
-                if (pln) rates.PLN = pln;
-
-                document.getElementById('rateUSD').textContent = `USD: ${rates.USD.toFixed(2)} ₴`;
-                document.getElementById('rateEUR').textContent = `EUR: ${rates.EUR.toFixed(2)} ₴`;
-                document.getElementById('ratePLN').textContent = `PLN: ${rates.PLN.toFixed(2)} ₴`;
+                if (usd && eur && pln) {
+                    rates.USD = usd.rate;
+                    rates.EUR = eur.rate;
+                    rates.PLN = pln.rate;
+                    ratesMeta = { r: { USD: usd.rate, EUR: eur.rate, PLN: pln.rate }, d: new Date().toISOString(), nd: usd.exchangedate || '' };
+                    try { localStorage.setItem('fin_rates_meta', JSON.stringify(ratesMeta)); } catch (e) { /* сховище недоступне */ }
+                } else {
+                    throw new Error('incomplete rates');
+                }
             } catch (e) {
                 console.log('Використовуються стандартні курси');
+                if (manual === true) errorText = 'Не вдалося оновити курси. Перевірте інтернет.';
             }
+            if (btnLabel) btnLabel.textContent = 'Оновити курси';
+            renderRatesUI(errorText);
             renderAll();
         }
 
@@ -1709,7 +1796,82 @@
             bar.style.width = `${pct}%`;
             bar.className = pct < 70 ? "bg-emerald-500 h-2.5 rounded-full" : (pct < 90 ? "bg-amber-500 h-2.5 rounded-full" : "bg-rose-500 h-2.5 rounded-full");
 
+            renderSmartAnalytics(filteredTx);
             renderCharts(catTotals, filteredTx);
+        }
+
+        // Розумна аналітика: запас міцності, прогноз витрат, поради й найбільші витрати
+        function renderSmartAnalytics(filteredTx) {
+            if (!document.getElementById('smartAnalytics')) return;
+            const now = new Date();
+            const cm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const dayOfMonth = now.getDate();
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+            let monthIncome = 0, monthExpense = 0, cashIn = 0, cashOut = 0;
+            transactions.forEach(t => {
+                const amt = convert(t.amount, t.currency || 'UAH', mainCurrency);
+                if (t.type === 'income') cashIn += amt;
+                if (t.type === 'expense') cashOut += amt;
+                if (t.date.startsWith(cm)) {
+                    if (t.type === 'income') monthIncome += amt;
+                    if (t.type === 'expense') monthExpense += amt;
+                }
+            });
+            const cash = Math.max(0, cashIn - cashOut);
+            const burn = monthExpense / dayOfMonth;
+            const projected = burn * daysInMonth;
+            const avgExpense = computeAverageMonthlyExpense();
+            const base = avgExpense > 0 ? avgExpense : projected;
+            const runway = base > 0 ? cash / base : null;
+            const runwayText = runway === null ? '' : (runway >= 99 ? '99+' : runway.toFixed(1).replace('.', ','));
+
+            document.getElementById('saRunway').textContent = runway === null ? '—' : `${runwayText} міс.`;
+            document.getElementById('saProjection').textContent = formatMoney(projected);
+            document.getElementById('saBurn').textContent = formatMoney(burn);
+
+            const expenses = filteredTx.filter(t => t.type === 'expense');
+            const periodExpense = expenses.reduce((sum, t) => sum + convert(t.amount, t.currency || 'UAH', mainCurrency), 0);
+            const byCat = {};
+            expenses.forEach(t => { byCat[t.category] = (byCat[t.category] || 0) + convert(t.amount, t.currency || 'UAH', mainCurrency); });
+            const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
+            const topPct = topCat && periodExpense > 0 ? Math.round(topCat[1] / periodExpense * 100) : 0;
+            const savings = monthIncome > 0 ? Math.round((monthIncome - monthExpense) / monthIncome * 100) : null;
+
+            const insights = [];
+            if (savings !== null) {
+                if (savings >= 20) insights.push({ ok: true, title: `Норма заощаджень ${savings}%`, text: 'Це не менше рекомендованих 20% доходу (правило 50/30/20).' });
+                else if (savings >= 0) insights.push({ ok: false, title: `Норма заощаджень ${savings}%`, text: 'Правило 50/30/20 радить відкладати щонайменше 20% доходу.' });
+                else insights.push({ ok: false, title: 'Витрати перевищують доходи', text: 'Цього місяця витрачено більше, ніж зароблено. Перегляньте необов’язкові категорії.' });
+            }
+            if (topCat) {
+                insights.push(topPct > 40
+                    ? { ok: false, title: 'Висока концентрація витрат', text: `«${topCat[0]}» — ${topPct}% усіх витрат за вибраний період.` }
+                    : { ok: true, title: 'Збалансовані витрати', text: `Найбільша категорія «${topCat[0]}» — ${topPct}% витрат.` });
+            }
+            if (runway !== null) {
+                insights.push(runway >= 6
+                    ? { ok: true, title: 'Фінансова подушка', text: `Готівки вистачить приблизно на ${runwayText} міс. витрат. Рекомендовано від 6.` }
+                    : { ok: false, title: 'Фінансова подушка', text: `Готівки вистачить приблизно на ${runwayText} міс. витрат. Рекомендовано мати запас від 6 міс.` });
+            }
+            document.getElementById('saInsights').innerHTML = insights.length ? insights.map(i => `
+                <div class="border-l-2 ${i.ok ? 'border-emerald-500' : 'border-amber-500'} pl-3 py-0.5">
+                    <p class="text-xs font-semibold text-slate-200">${i.ok ? '✓' : '!'} ${escapeHtml(i.title)}</p>
+                    <p class="text-[11px] text-slate-400">${escapeHtml(i.text)}</p>
+                </div>`).join('') : '<p class="text-xs text-slate-500 italic">Додайте операції, щоб отримати поради.</p>';
+
+            const top5 = expenses
+                .map(t => ({ t, v: convert(t.amount, t.currency || 'UAH', mainCurrency) }))
+                .sort((a, b) => b.v - a.v)
+                .slice(0, 5);
+            document.getElementById('saTop').innerHTML = top5.length ? top5.map(({ t, v }) => `
+                <div class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-700/60 text-xs">
+                    <div class="min-w-0">
+                        <p class="font-medium text-slate-200 truncate">${escapeHtml(t.description || t.category)}</p>
+                        <p class="text-[10px] text-slate-400">${escapeHtml(t.category)} • ${escapeHtml(t.date)}</p>
+                    </div>
+                    <span class="font-bold text-slate-200 whitespace-nowrap">-${formatMoney(v)}</span>
+                </div>`).join('') : '<p class="text-xs text-slate-500 italic">Витрат за період немає.</p>';
         }
 
         function renderCharts(catTotals, filteredTx) {
@@ -3099,6 +3261,7 @@
         renderCategoryOptions();
         processRecurringTransactions();
 
+        renderRatesUI();
         fetchRates();
     </script>
 </body>

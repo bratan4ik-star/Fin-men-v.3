@@ -3,8 +3,8 @@ package ua.bella.finance
 import kotlinx.serialization.Serializable
 import java.util.Locale
 
-/** Курси та символи закладені в прототипі (не живі). */
-val RATES = mapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0)
+/** Курси до гривні. Початкові значення з прототипу; після «Оновити курси» підміняються курсами НБУ (змінюється лише з головного потоку). */
+val RATES: MutableMap<String, Double> = mutableMapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0)
 val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł")
 val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN")
 const val TODAY = "2026-11-02"
@@ -47,6 +47,9 @@ data class Persisted(
     val ov: Map<String, Override> = emptyMap(),
     val light: Boolean = false,
     val sec: Security = Security(),
+    val rates: Map<String, Double> = emptyMap(),
+    val ratesDate: String = "",
+    val ratesAt: Long = 0L,
 )
 
 object DemoData {
