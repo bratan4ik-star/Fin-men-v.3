@@ -388,6 +388,7 @@ fun InvScreen(vm: BellaViewModel) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Позиція", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openPos() }; Btn("ОВДП", false, Modifier.weight(1f), Icons.Outlined.Calculate) { vm.go(Screen.Calc) } }
+            CompoundSection(vm, t.invT)
         }
     }
 }
@@ -462,6 +463,8 @@ fun PassScreen(vm: BellaViewModel) {
                     }
                 }
             }
+            val avgY = if (t.invT > 0) t.invGroups.sumOf { it.third.first * it.third.second } / t.invT else 0.0
+            FireSection(vm, t.invT, avgY)
         }
     }
 }

@@ -383,6 +383,18 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             else -> {}
         }
     }
+    // ---------- калькулятори (складний відсоток, фінансова незалежність) ----------
+    // Значення, введені вручну, зберігаються між запусками; решта підставляється автоматично.
+    private fun loadMap(k: String): Map<String, String> = try { prefs.getString(k, null)?.let { json.decodeFromString<Map<String, String>>(it) } ?: emptyMap() } catch (_: Exception) { emptyMap() }
+    var compIn by mutableStateOf(loadMap("compIn")); private set
+    var fireIn by mutableStateOf(loadMap("fireIn")); private set
+    fun setComp(k: String, v: String) { compIn = compIn + (k to v); prefs.edit().putString("compIn", json.encodeToString(compIn)).apply() }
+    fun setFire(k: String, v: String) { fireIn = fireIn + (k to v); prefs.edit().putString("fireIn", json.encodeToString(fireIn)).apply() }
+    /** Як у вебверсії: капітал, дохідність і ціль знову рахуються автоматично; внесок, інфляція й ставка знімання лишаються. */
+    fun resetFire() { fireIn = fireIn - setOf("cap", "yield", "target"); prefs.edit().putString("fireIn", json.encodeToString(fireIn)).apply() }
+    /** Середні витрати на місяць за історією операцій (₴). */
+    fun avgMonthlyExpenseUah(): Double = data.txs.filter { it.type == "expense" }.groupBy { it.date.take(7) }.values.map { l -> l.sumOf { it.amt } }.let { if (it.isEmpty()) 0.0 else it.average() }
+
     // ---------- цілі ----------
     private fun v2(uah: Double) = (Math.round(uah / rate * 100) / 100.0).let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }
     fun openGoal() { formErr = ""; formOrig = null; form = form.copy(gName = "", gTarget = "", gSaved = "", gStep = "", gDeadline = "", gIcon = "flag", gIdx = -1, gMonthly = ""); sheet = Sheet.Goal }
