@@ -135,9 +135,10 @@ fun CurPicker(vm: BellaViewModel) {
 @Composable
 fun TxRowView(t: Tx, vm: BellaViewModel) {
     val tr = t.type == "transfer"; val inc = t.type == "income"
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    val acc = vm.accLabel(t)
+    Row(Modifier.fillMaxWidth().clickable { vm.editTx(t) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Ico(if (tr) Icons.Outlined.SwapHoriz else catIcon(t.cat), C.accent, 20.dp)
-        Column(Modifier.weight(1f)) { T(t.desc, 14.sp, weight = FontWeight.Medium, maxLines = 1); T("${t.cat} · ${ddmm(t.date)}", 11.sp, C.n500, maxLines = 1) }
+        Column(Modifier.weight(1f)) { T(t.desc, 14.sp, weight = FontWeight.Medium, maxLines = 1); T("${t.cat} · ${ddmm(t.date)}" + if (acc.isNotEmpty()) " · $acc" else "", 11.sp, C.n500, maxLines = 1) }
         T((if (tr) "⇄ " else if (inc) "+" else "−") + vm.m(t.amt) + " " + vm.sym, 14.sp, if (tr) C.n500 else if (inc) C.pos else C.text, FontWeight.Medium, maxLines = 1)
     }
 }

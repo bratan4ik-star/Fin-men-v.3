@@ -17,9 +17,16 @@ val GROUPS = listOf("ОВДП" to 0xFF9184D9, "Депозити" to 0xFF60A5FA, 
 val LIMITS = linkedMapOf("Харчування" to 12000.0, "Житло" to 20000.0, "Транспорт" to 3000.0, "Розваги" to 2000.0, "Здоров'я" to 1500.0, "Інше" to 0.0)
 val CATEGORIES = listOf("Перекази", "Надходження", "Зняття готівки", "Послуги", "Поповнення мобільного", "Побутова техніка", "Харчування", "Житло", "Транспорт", "Розваги", "Здоров'я", "Зарплата", "Інше")
 
-@Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false)
-/** amt завжди в гривнях. type: income | expense | transfer. key використовується для пошуку повторів при імпорті. */
-@Serializable data class Tx(val desc: String, val cat: String, val type: String, val amt: Double, val date: String, val key: String = "")
+@Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false, val id: String = "")
+/**
+ * amt завжди в гривнях. type: income | expense | transfer. key використовується для пошуку повторів при імпорті.
+ * acc — id рахунку («» = без рахунку), accAmt — сума у валюті рахунку, що змінила його баланс.
+ * Для переказу acc — звідки, toAcc/toAmt — куди і скільки зараховано у валюті отримувача.
+ */
+@Serializable data class Tx(
+    val desc: String, val cat: String, val type: String, val amt: Double, val date: String, val key: String = "",
+    val acc: String = "", val accAmt: Double = 0.0, val toAcc: String = "", val toAmt: Double = 0.0,
+)
 @Serializable data class Debt(val who: String, val owedToMe: Boolean, val amt: Double, val done: Boolean = false, val due: String = "")
 @Serializable data class CalcExtra(val isin: String, val nom: Double, val freq: Int, val sell: String, val sellD: String, val buy: String)
 @Serializable data class Pos(val group: String, val name: String, val qty: Double, val buy: Double, val now: Double, val mat: String = "", val rate: Double = 0.0, val next: String = "", val calc: CalcExtra? = null)

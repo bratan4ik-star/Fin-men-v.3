@@ -25,9 +25,9 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію",
 )
-private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати")
+private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +40,7 @@ fun SheetHost(vm: BellaViewModel) {
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (sh) {
-                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm)
+                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
                     Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
@@ -87,13 +87,45 @@ private fun DebtForm(vm: BellaViewModel) {
 }
 
 @Composable
-private fun TxForm(vm: BellaViewModel) {
-    val f = vm.form
-    Seg(listOf("expense" to "Витрата", "income" to "Дохід"), f.tType) { vm.form = f.copy(tType = it) }
-    Field("Сума (${vm.sym})", f.tAmt, hint = "0", numeric = true) { vm.form = f.copy(tAmt = it) }
-    val cats = CATEGORIES.filter { it != "Зарплата" || f.tType == "income" }
-    Dropdown("Категорія", cats, cats.indexOf(f.tCat)) { vm.form = f.copy(tCat = cats[it]) }
-    Field("Опис", f.tDesc, hint = "напр. Сільпо") { vm.form = f.copy(tDesc = it) }
+private fun TxForm(vm: BellaViewModel, edit: Boolean) {
+    val f = vm.form; val accs = vm.data.accs
+    val acc = accs.firstOrNull { it.id == f.tAcc }
+    Seg(listOf("expense" to "Витрата", "income" to "Дохід", "transfer" to "Переказ"), f.tType) { k ->
+        var nf = f.copy(tType = k)
+        if (k == "transfer") {
+            val from = if (acc != null) acc.id else accs.firstOrNull()?.id ?: ""
+            val to = if (f.tToAcc.isNotEmpty() && f.tToAcc != from) f.tToAcc else accs.firstOrNull { it.id != from }?.id ?: ""
+            nf = nf.copy(tAcc = from, tToAcc = to)
+        } else if (f.tType == "transfer" && f.tCat == "Перекази") nf = nf.copy(tCat = "Інше")
+        vm.form = nf
+    }
+    if (f.tType == "transfer") {
+        val names = accs.map { "${it.name} · ${it.cur}" }
+        Dropdown("З рахунку", names, accs.indexOfFirst { it.id == f.tAcc }) { vm.form = f.copy(tAcc = accs[it].id) }
+        Dropdown("На рахунок", names, accs.indexOfFirst { it.id == f.tToAcc }) { vm.form = f.copy(tToAcc = accs[it].id) }
+        Field("Сума (${acc?.cur ?: ""})", f.tAmt, hint = "0", numeric = true) { vm.form = f.copy(tAmt = it) }
+        val to = accs.firstOrNull { it.id == f.tToAcc }
+        if (acc != null && to != null && acc.cur != to.cur) {
+            val auto = convertAmount(parseNum(f.tAmt), acc.cur, to.cur, RATES)
+            Field("Надійде (${to.cur})", f.tToAmt, hint = "за курсом: ${fmt2(auto)}", numeric = true) { vm.form = f.copy(tToAmt = it) }
+        }
+    } else {
+        val opts = listOf("Без рахунку") + accs.map { "${it.name} · ${it.cur}" }
+        Dropdown("Рахунок", opts, accs.indexOfFirst { it.id == f.tAcc } + 1) { vm.form = f.copy(tAcc = if (it == 0) "" else accs[it - 1].id) }
+        Field("Сума (${acc?.cur ?: vm.cur})", f.tAmt, hint = "0", numeric = true) { vm.form = f.copy(tAmt = it) }
+        val cats = (CATEGORIES.filter { it != "Зарплата" || f.tType == "income" } + f.tCat).distinct()
+        Dropdown("Категорія", cats, cats.indexOf(f.tCat)) { vm.form = f.copy(tCat = cats[it]) }
+    }
+    Field("Опис", f.tDesc, hint = if (f.tType == "transfer") "необов'язково" else "напр. Сільпо") { vm.form = f.copy(tDesc = it) }
+    Field("Дата", f.tDate, hint = "РРРР-ММ-ДД") { vm.form = f.copy(tDate = it) }
+    val note = when {
+        f.tType == "transfer" -> "Баланси обох рахунків зміняться автоматично. Переказ не потрапляє в доходи й витрати."
+        acc != null -> "Баланс «${acc.name}» зміниться автоматично."
+        else -> "Без рахунку: баланси рахунків не змінюються."
+    }
+    T(note, 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+    if (edit) T(if (vm.txDelAsk) "Натисніть ще раз, щоб видалити (баланс рахунку повернеться)" else "Видалити операцію", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteTx() }.padding(vertical = 4.dp))
 }
 
 @Composable
