@@ -44,11 +44,14 @@ fun calcOvdp(s: CalcInput): CalcResult {
     val tot = qty * nom + cpn
     val sp = parseNum(s.sell)
     val sd = pd(s.sellD) ?: mat
-    val sy = Math.max(days(buy, sd) / 365.25, 1 / 365.0)
-    val got = sched.filter { it.kind == "Купон" && !it.date.isAfter(sd) }.sumOf { it.amount }
-    val sProfit = if (sp > 0) qty * sp - inv + got else 0.0
+    // Продаж у день погашення або пізніше — це погашення: номінал + усі купони (включно з виплатою «в кінці»)
+    val atMat = mat.isAfter(buy) && !sd.isBefore(mat)
+    val sy = Math.max(days(buy, if (atMat) mat else sd) / 365.25, 1 / 365.0)
+    val got = if (atMat) cpn else sched.filter { it.kind == "Купон" && !it.date.isAfter(sd) }.sumOf { it.amount }
+    val proceeds = if (atMat) qty * nom else qty * sp
+    val sProfit = if (sp > 0) proceeds - inv + got else 0.0
     return CalcResult(
-        qty, inv, cpn, disc, tot, sched, sProfit, if (sp > 0 && inv > 0) sProfit / inv / sy * 100 else 0.0, qty * sp, sp > 0,
+        qty, inv, cpn, disc, tot, sched, sProfit, if (sp > 0 && inv > 0) sProfit / inv / sy * 100 else 0.0, proceeds, sp > 0,
         Math.max(0.0, Math.min(100.0, Math.round(days(buy, today) / Math.max(1.0, days(buy, mat)) * 100).toDouble())).toInt(),
         ChronoUnit.DAYS.between(today, mat), if (inv > 0) (cpn + disc) / inv / yrs * 100 else 0.0,
     )
