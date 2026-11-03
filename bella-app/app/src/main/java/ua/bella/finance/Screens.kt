@@ -281,10 +281,10 @@ fun BudgetScreen(vm: BellaViewModel) {
 private fun OpsTab(vm: BellaViewModel) {
     val f = vm.filters; val q = f.q.trim().lowercase(); val rt = vm.rate
     val mn = f.min.takeIf { it.isNotEmpty() }?.let { parseNum(it) }; val mx = f.max.takeIf { it.isNotEmpty() }?.let { parseNum(it) }
-    val found = vm.data.txs.filter { (f.tf == "all" || it.type == f.tf) && (q.isEmpty() || it.desc.lowercase().contains(q) || it.cat.lowercase().contains(q)) && (f.dateFrom.isEmpty() || it.date >= f.dateFrom) && (f.dateTo.isEmpty() || it.date <= f.dateTo) && (mn == null || it.amt / rt >= mn) && (mx == null || it.amt / rt <= mx) }
+    val found = vm.data.txs.filter { f.acc == "*" || it.acc == f.acc || (f.acc.isNotEmpty() && it.toAcc == f.acc) }.filter { (f.tf == "all" || it.type == f.tf) && (q.isEmpty() || it.desc.lowercase().contains(q) || it.cat.lowercase().contains(q)) && (f.dateFrom.isEmpty() || it.date >= f.dateFrom) && (f.dateTo.isEmpty() || it.date <= f.dateTo) && (mn == null || it.amt / rt >= mn) && (mx == null || it.amt / rt <= mx) }
         .let { l -> when (f.sort) { "dateA" -> l.sortedBy { it.date }; "amtD" -> l.sortedByDescending { it.amt }; "amtA" -> l.sortedBy { it.amt }; else -> l.sortedByDescending { it.date } } }
     val fi = found.filter { it.type == "income" }.sumOf { it.amt }; val fe = found.filter { it.type == "expense" }.sumOf { it.amt }
-    val cnt = listOf(f.dateFrom, f.dateTo, f.min, f.max).count { it.isNotEmpty() }
+    val cnt = listOf(f.dateFrom, f.dateTo, f.min, f.max).count { it.isNotEmpty() } + if (f.acc != "*") 1 else 0
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Field("", f.q, hint = "Пошук (Сільпо, Зарплата…)") { vm.filters = f.copy(q = it) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -294,11 +294,14 @@ private fun OpsTab(vm: BellaViewModel) {
             }
         }
         Row(Modifier.clickable { vm.filters = f.copy(show = !f.show) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Ico(Icons.Outlined.FilterList, C.n500, 16.dp); T("Фільтри за датою та сумою" + if (cnt > 0) " ($cnt)" else "", 12.sp, C.n400); Ico(if (f.show) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n500, 14.dp)
+            Ico(Icons.Outlined.FilterList, C.n500, 16.dp); T("Фільтри: дата, сума, рахунок" + if (cnt > 0) " ($cnt)" else "", 12.sp, C.n400); Ico(if (f.show) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n500, 14.dp)
         }
         if (f.show) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Дата від", f.dateFrom, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.filters = f.copy(dateFrom = it) }; Field("Дата до", f.dateTo, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.filters = f.copy(dateTo = it) } }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Сума від (${vm.sym})", f.min, Modifier.weight(1f), numeric = true) { vm.filters = f.copy(min = it) }; Field("Сума до (${vm.sym})", f.max, Modifier.weight(1f), numeric = true) { vm.filters = f.copy(max = it) } }
+            val accs = vm.data.accs; val aOpts = listOf("Усі рахунки", "Без рахунку") + accs.map { it.name }
+            val aSel = when (f.acc) { "*" -> 0; "" -> 1; else -> accs.indexOfFirst { it.id == f.acc }.let { if (it < 0) 0 else it + 2 } }
+            Dropdown("Рахунок", aOpts, aSel) { vm.filters = f.copy(acc = when (it) { 0 -> "*"; 1 -> ""; else -> accs[it - 2].id }) }
             T("Скинути все", 12.sp, C.accent400, modifier = Modifier.clickable { vm.filters = Filters(show = true) })
         }
         Seg(listOf("all" to "Усі", "expense" to "Витрати", "income" to "Доходи", "transfer" to "Перекази"), f.tf) { vm.filters = f.copy(tf = it) }

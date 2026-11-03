@@ -16,7 +16,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, Tx, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -28,16 +28,18 @@ data class Form(
     val group: String = "ОВДП", val pName: String = "", val pQty: String = "", val pBuy: String = "", val pNow: String = "",
     val pRate: String = "", val pMat: String = "", val pNext: String = "",
     val editIdx: Int = 0,
+    // операція: дата, рахунок, для переказу — рахунок і сума зарахування; txIdx — індекс операції, що редагується
+    val tDate: String = "", val tAcc: String = "", val tToAcc: String = "", val tToAmt: String = "", val txIdx: Int = -1,
 )
 
-data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false)
+data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
 
 class BellaViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("bella", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val loaded: Persisted = try { prefs.getString("state", null)?.let { json.decodeFromString<Persisted>(it) } ?: Persisted() } catch (e: Exception) { Persisted() }
 
-    var data by mutableStateOf(loaded.data); private set
+    var data by mutableStateOf(ensureAccIds(loaded.data)); private set
     var cur by mutableStateOf(loaded.cur); private set
     var month by mutableStateOf(loaded.month); private set
     var ov by mutableStateOf(loaded.ov); private set
@@ -115,7 +117,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Усі зміни даних проходять тут: зберігається знімок для «Скасувати» і показується тост. */
-    fun commit(nd: AppData) {
+    fun commit(raw: AppData) {
+        val nd = ensureAccIds(raw)
         if (nd == data) return
         stack.addLast(data); if (stack.size > 20) stack.removeFirst()
         data = nd; undoN = stack.size; persist()
@@ -138,7 +141,43 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun openTransfer() { form = form.copy(amount = ""); sheet = Sheet.Transfer }
     fun openAcc() { form = form.copy(name = "", bal = "", cur = "UAH"); sheet = Sheet.Acc }
     fun openDebt() { form = form.copy(who = "", amt = "", due = "", kindOwedToMe = true); sheet = Sheet.Debt }
-    fun openTx() { form = form.copy(tAmt = "", tDesc = "", tType = "expense", tCat = "Харчування"); sheet = Sheet.Tx }
+    var formErr by mutableStateOf("")
+    var txDelAsk by mutableStateOf(false); private set
+
+    fun openTx() {
+        formErr = ""; txDelAsk = false
+        form = form.copy(tAmt = "", tDesc = "", tType = "expense", tCat = "Харчування", tDate = todayIso(), tAcc = data.accs.firstOrNull()?.id ?: "", tToAcc = data.accs.getOrNull(1)?.id ?: "", tToAmt = "", txIdx = -1)
+        sheet = Sheet.Tx
+    }
+    /** Відкриває операцію на редагування. Рахунок, якого вже немає, показується як «Без рахунку». */
+    fun editTx(t: Tx) {
+        val i = data.txs.indexOf(t); if (i < 0) return
+        val acc = data.accs.firstOrNull { it.id == t.acc }; val to = data.accs.firstOrNull { it.id == t.toAcc }
+        fun s2(v: Double) = (Math.round(v * 100) / 100.0).toString()
+        formErr = ""; txDelAsk = false
+        form = form.copy(
+            tType = t.type, tCat = t.cat, tDesc = t.desc, tDate = t.date, txIdx = i,
+            tAmt = s2(if (acc != null && t.accAmt > 0) t.accAmt else t.amt / rate),
+            tAcc = acc?.id ?: "", tToAcc = to?.id ?: "", tToAmt = if (t.type == "transfer" && to != null) s2(t.toAmt) else "",
+        )
+        sheet = Sheet.TxE
+    }
+    fun deleteTx() {
+        if (!txDelAsk) { txDelAsk = true; return }
+        txDelAsk = false
+        val i = form.txIdx; if (data.txs.getOrNull(i) == null) { closeSheet(); return }
+        commit(ua.bella.finance.deleteTx(data, i)); closeSheet()
+    }
+    /** Підпис рахунку для рядка операції: «Monobank» або «Monobank → Готівка USD». */
+    fun accLabel(t: Tx): String {
+        val a = data.accs.firstOrNull { it.id == t.acc }?.name ?: ""
+        if (t.type == "transfer") { val b = data.accs.firstOrNull { it.id == t.toAcc }?.name ?: ""; return if (a.isEmpty() && b.isEmpty()) "" else "$a → $b" }
+        return a
+    }
+    private fun txFromForm(f: Form, key: String): Tx? {
+        val (t, err) = buildTx(TxInput(f.tType, parseNum(f.tAmt), if (f.tType == "transfer") "Перекази" else f.tCat, f.tDesc.trim(), f.tDate.trim(), f.tAcc, f.tToAcc, parseNum(f.tToAmt), key), data.accs, RATES, rate)
+        formErr = err; return t
+    }
     fun openPos() { form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", group = "ОВДП"); sheet = Sheet.Pos }
     fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); sheet = Sheet.AccE }
     fun editPos(i: Int) {
@@ -156,7 +195,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 val fa = s.accs.getOrNull(f.from); val ta = s.accs.getOrNull(f.to); val amt = parseNum(f.amount)
                 if (fa != null && ta != null && amt > 0 && f.from != f.to && amt <= fa.bal) {
                     val conv = amt * RATES[fa.cur]!! / RATES[ta.cur]!!
-                    commit(s.copy(accs = s.accs.mapIndexed { i, a -> if (i == f.from) a.copy(bal = a.bal - amt) else if (i == f.to) a.copy(bal = a.bal + conv) else a })); closeSheet()
+                    val ids = ensureAccIds(s); val fid = ids.accs[f.from].id; val tid = ids.accs[f.to].id
+                    commit(addTx(ids, Tx("Переказ: ${fa.name} → ${ta.name}", "Перекази", "transfer", amt * RATES[fa.cur]!!, todayIso(), "", fid, amt, tid, conv))); closeSheet()
                 }
             }
             Sheet.Acc -> if (f.name.isNotBlank()) { commit(s.copy(accs = s.accs + Account(f.name.trim(), f.cur, parseNum(f.bal), cash = f.name.contains("Готівка")))); closeSheet() }
@@ -180,13 +220,14 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 if (f.pName.isNotBlank() && q > 0 && b > 0) { open = open + f.group; commit(s.copy(pos = s.pos + Pos(f.group, f.pName.trim(), q, b, b, f.pMat.trim(), parseNum(f.pRate)))); closeSheet() }
             }
             Sheet.Tx -> {
-                val v = parseNum(f.tAmt) * rate
-                if (v > 0) {
-                    month = months.indexOf(CUR_MONTH).takeIf { it >= 0 } ?: month
-                    val accs = s.accs.mapIndexed { i, a -> if (i == 0) a.copy(bal = a.bal + if (f.tType == "income") v / RATES[a.cur]!! else -v / RATES[a.cur]!!) else a }
-                    commit(s.copy(txs = listOf(Tx(f.tDesc.trim().ifEmpty { f.tCat }, f.tCat, f.tType, v, "$CUR_MONTH-02")) + s.txs, accs = accs)); closeSheet()
-                    month = months.indexOf(CUR_MONTH).coerceAtLeast(0)
-                }
+                val t = txFromForm(f, "") ?: return
+                commit(addTx(s, t)); closeSheet()
+                setMonth(months.indexOf(t.date.take(7)).coerceAtLeast(0))
+            }
+            Sheet.TxE -> {
+                val old = s.txs.getOrNull(f.txIdx) ?: run { closeSheet(); return }
+                val t = txFromForm(f, old.key) ?: return
+                commit(replaceTx(s, f.txIdx, t)); closeSheet()
             }
             else -> {}
         }
@@ -255,7 +296,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val txs = r.txs + keep
         var nd = s.copy(txs = txs, demo = s.demo && !rep)
         if (rep) nd = nd.copy(pos = emptyList(), goals = emptyList(), debts = emptyList())
-        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = applyOv(r.accs)); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
+        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = carryAccIds(s.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
         commit(nd); tab = 1; sheet = Sheet.None
         month = data.txs.map { it.date.take(7) }.distinct().sorted().size - 1
         persist()
