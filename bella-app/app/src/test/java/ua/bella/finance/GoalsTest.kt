@@ -44,4 +44,30 @@ class GoalsTest {
     @Test fun oldGoalsWithoutDeadlineLoad() {
         assertEquals("", Goal("x", 0.0, 1.0, "flag", 1.0).deadline)
     }
+
+    // ---- прогноз ----
+    private fun goal(saved: Double, target: Double, monthly: Double, deadline: String = "") = Goal("Ціль", saved, target, "flag", 1000.0, deadline, monthly)
+
+    @Test fun forecastWithoutDeadline() {
+        val f = goalForecast(goal(10000.0, 50000.0, 2500.0), "2026-11-03")
+        assertEquals(GoalStatus.NO_DEADLINE, f.status); assertEquals(16, f.months); assertEquals("2028-03", f.reachMonth)
+        assertEquals("березень 2028", monthNameLower(f.reachMonth))
+    }
+
+    @Test fun forecastOnTimeAndLate() {
+        assertEquals(GoalStatus.ON_TIME, goalForecast(goal(10000.0, 50000.0, 2500.0, "2028-03-31"), "2026-11-03").status)
+        val late = goalForecast(goal(10000.0, 50000.0, 2500.0, "2027-11-01"), "2026-11-03")
+        assertEquals(GoalStatus.LATE, late.status)
+        assertEquals(40000.0 / 12, late.needMonthly, 1e-6) // 12 місяців до листопада 2027
+    }
+
+    @Test fun forecastEdgeCases() {
+        assertEquals(GoalStatus.DONE, goalForecast(goal(50000.0, 50000.0, 0.0), "2026-11-03").status)
+        val noPlan = goalForecast(goal(0.0, 12000.0, 0.0, "2027-11-30"), "2026-11-03")
+        assertEquals(GoalStatus.NO_PLAN, noPlan.status); assertEquals(1000.0, noPlan.needMonthly, 1e-6)
+        assertEquals(GoalStatus.TOO_LONG, goalForecast(goal(0.0, 1e9, 10.0), "2026-11-03").status)
+        val passed = goalForecast(goal(0.0, 1000.0, 100.0, "2026-01-01"), "2026-11-03")
+        assertEquals(GoalStatus.LATE, passed.status); assertEquals(true, passed.deadlinePassed)
+        assertEquals(1, goalForecast(goal(0.0, 1000.0, 1000.0), "2026-11-03").months)
+    }
 }

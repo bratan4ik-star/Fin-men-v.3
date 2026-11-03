@@ -32,3 +32,37 @@ fun moveGoal(d: AppData, gi: Int, amountUah: Double, accId: String, rates: Map<S
     val goals = d.goals.mapIndexed { i, x -> if (i == gi) x.copy(saved = Math.max(0.0, x.saved + amountUah)) else x }
     return d.copy(goals = goals, accs = accs) to ""
 }
+
+/** Стан прогнозу цілі. */
+enum class GoalStatus { DONE, NO_PLAN, ON_TIME, LATE, NO_DEADLINE, TOO_LONG }
+
+/**
+ * Прогноз за запланованим щомісячним внеском (усе в гривнях).
+ * reachMonth — РРРР-ММ, коли ціль буде досягнута; needMonthly — скільки треба відкладати, щоб устигнути до дедлайну
+ * (0, якщо дедлайну немає або він уже минув); deadlinePassed — дедлайн у минулому.
+ */
+data class GoalForecast(val status: GoalStatus, val months: Int = 0, val reachMonth: String = "", val needMonthly: Double = 0.0, val deadlinePassed: Boolean = false)
+
+fun goalForecast(g: Goal, today: String): GoalForecast {
+    val rem = g.target - g.saved
+    if (rem <= 1e-6) return GoalForecast(GoalStatus.DONE)
+    val now = java.time.LocalDate.parse(today)
+    val dl = if (isIsoDate(g.deadline)) java.time.LocalDate.parse(g.deadline) else null
+    // повних місяців до дедлайну (мінімум 1, якщо дедлайн ще попереду)
+    val toDl = dl?.let { java.time.temporal.ChronoUnit.MONTHS.between(java.time.YearMonth.from(now), java.time.YearMonth.from(it)).toInt() }
+    val passed = dl != null && dl.isBefore(now)
+    val need = if (toDl != null && !passed) rem / Math.max(1, toDl) else 0.0
+    if (g.monthly <= 0) return GoalForecast(GoalStatus.NO_PLAN, needMonthly = need, deadlinePassed = passed)
+    val months = Math.ceil(rem / g.monthly - 1e-9).toInt()
+    if (months > 600) return GoalForecast(GoalStatus.TOO_LONG, months, needMonthly = need, deadlinePassed = passed)
+    val reach = java.time.YearMonth.from(now).plusMonths(months.toLong())
+    val st = when {
+        dl == null -> GoalStatus.NO_DEADLINE
+        !reach.isAfter(java.time.YearMonth.from(dl)) -> GoalStatus.ON_TIME
+        else -> GoalStatus.LATE
+    }
+    return GoalForecast(st, months, reach.toString(), need, passed)
+}
+
+/** «березень 2028». */
+fun monthNameLower(ym: String): String = if (ym.length >= 7) MONTH_NAMES[ym.substring(5, 7).toInt() - 1].lowercase() + " " + ym.substring(0, 4) else ""

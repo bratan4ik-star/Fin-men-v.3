@@ -414,6 +414,7 @@ fun GoalsScreen(vm: BellaViewModel) {
                         T("${Math.min(100, Math.round(x.saved / x.target * 100))}%", 14.sp, weight = FontWeight.Medium)
                     }
                     Bar((x.saved / x.target).toFloat(), PurpleC, 4.dp)
+                    GoalForecastLine(vm, x)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Btn("+ " + vm.m(x.step), false, Modifier.weight(1f)) { vm.addToGoal(i) }
                         Btn("Внести / зняти", false, Modifier.weight(1f), Icons.Outlined.SwapVert) { vm.openGoalMove(i) }
@@ -424,6 +425,22 @@ fun GoalsScreen(vm: BellaViewModel) {
             if (g.isNotEmpty()) T("Дотик до цілі — редагування й видалення. «+» додає крок без рахунку; «Внести / зняти» — довільна сума, за бажанням з рахунку.", 11.sp, C.n500)
         }
     }
+}
+
+/** Рядок прогнозу на картці цілі. */
+@Composable
+private fun GoalForecastLine(vm: BellaViewModel, g: Goal) {
+    val f = goalForecast(g, TODAY); val dl = if (g.deadline.length >= 10) ddmmyy(g.deadline) else ""
+    fun need() = if (f.deadlinePassed) "дедлайн $dl минув" else if (f.needMonthly > 0) "щоб устигнути до $dl, треба ≈ ${vm.m(f.needMonthly)} ${vm.sym}/міс" else ""
+    val (text, col) = when (f.status) {
+        GoalStatus.DONE -> "Ціль досягнута" to C.pos
+        GoalStatus.NO_PLAN -> (listOf("Вкажіть внесок на місяць у цілі — покажу, коли її досягнете", need()).filter { it.isNotEmpty() }.joinToString(" · ")) to C.n500
+        GoalStatus.TOO_LONG -> "При ${vm.m(g.monthly)} ${vm.sym}/міс — понад 50 років" + need().let { if (it.isEmpty()) "" else " · $it" } to GoldC
+        GoalStatus.NO_DEADLINE -> "Досягнете ≈ ${monthNameLower(f.reachMonth)} · через ${f.months} міс. при ${vm.m(g.monthly)} ${vm.sym}/міс" to C.n400
+        GoalStatus.ON_TIME -> "Досягнете ≈ ${monthNameLower(f.reachMonth)} · через ${f.months} міс. · встигаєте до $dl" to C.pos
+        GoalStatus.LATE -> "Досягнете ≈ ${monthNameLower(f.reachMonth)} · через ${f.months} міс. · не встигаєте: ${need()}" to GoldC
+    }
+    T(text, 11.sp, col)
 }
 
 // ================= ПАСИВНИЙ ДОХІД =================

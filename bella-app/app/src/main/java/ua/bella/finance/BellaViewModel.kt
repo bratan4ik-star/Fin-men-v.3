@@ -34,7 +34,7 @@ data class Form(
     // ETF: валюта ціни, тікер Yahoo, курс купівлі (₴ за 1 одиницю валюти)
     val pCur: String = "UAH", val pTicker: String = "", val pFx: String = "",
     // ціль: поля форми, індекс цілі; внесок/зняття — напрям, рахунок, сума
-    val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1,
+    val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1, val gMonthly: String = "",
     val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
 )
 
@@ -385,10 +385,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     }
     // ---------- цілі ----------
     private fun v2(uah: Double) = (Math.round(uah / rate * 100) / 100.0).let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }
-    fun openGoal() { formErr = ""; formOrig = null; form = form.copy(gName = "", gTarget = "", gSaved = "", gStep = "", gDeadline = "", gIcon = "flag", gIdx = -1); sheet = Sheet.Goal }
+    fun openGoal() { formErr = ""; formOrig = null; form = form.copy(gName = "", gTarget = "", gSaved = "", gStep = "", gDeadline = "", gIcon = "flag", gIdx = -1, gMonthly = ""); sheet = Sheet.Goal }
     fun editGoal(i: Int) {
         val g = data.goals.getOrNull(i) ?: return
-        formErr = ""; form = form.copy(gName = g.name, gTarget = v2(g.target), gSaved = v2(g.saved), gStep = v2(g.step), gDeadline = g.deadline, gIcon = g.icon, gIdx = i); formOrig = form; sheet = Sheet.GoalE
+        formErr = ""; form = form.copy(gName = g.name, gTarget = v2(g.target), gSaved = v2(g.saved), gStep = v2(g.step), gDeadline = g.deadline, gIcon = g.icon, gIdx = i, gMonthly = if (g.monthly > 0) v2(g.monthly) else ""); formOrig = form; sheet = Sheet.GoalE
     }
     fun openGoalMove(i: Int) { if (data.goals.getOrNull(i) == null) return; formErr = ""; formOrig = null; form = form.copy(gIdx = i, gIn = true, gAcc = data.accs.firstOrNull { !it.sav }?.id ?: "", gAmt = ""); sheet = Sheet.GoalMove }
     fun deleteGoal() {
@@ -399,7 +399,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     private fun goalFromForm(f: Form): Goal? {
         val target = parseNum(f.gTarget); val saved = parseNum(f.gSaved); val step = if (f.gStep.isBlank()) 1000.0 else parseNum(f.gStep)
         formErr = goalFormError(f.gName, target, saved, step, f.gDeadline); if (formErr.isNotEmpty()) return null
-        return Goal(f.gName.trim(), saved * rate, target * rate, f.gIcon, step * rate, f.gDeadline.trim())
+        val monthly = parseNum(f.gMonthly); if (monthly < 0) { formErr = "Внесок на місяць не може бути від'ємним"; return null }
+        return Goal(f.gName.trim(), saved * rate, target * rate, f.gIcon, step * rate, f.gDeadline.trim(), monthly * rate)
     }
 
     // ---------- ліміти й категорії ----------

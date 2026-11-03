@@ -151,8 +151,9 @@ private fun GoalForm(vm: BellaViewModel, edit: Boolean) {
         Field("Крок для «+» (${vm.sym})", f.gStep, Modifier.weight(1f), hint = vm.was { it.gStep }.ifEmpty { "1000" }, numeric = true) { vm.form = f.copy(gStep = it) }
         Field("Дедлайн", f.gDeadline, Modifier.weight(1f), hint = vm.was { it.gDeadline }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(gDeadline = it) }
     }
+    Field("Планую відкладати на місяць (${vm.sym})", f.gMonthly, hint = vm.was { it.gMonthly }.ifEmpty { "для прогнозу, необов'язково" }, numeric = true) { vm.form = f.copy(gMonthly = it) }
     T("«Вже накопичено» — гроші, які вже відкладено; рахунків воно не змінює. Щоб перекласти гроші з рахунку, скористайтеся «Внести / зняти».", 11.sp, C.n500)
-    if (edit) T(EDIT_NOTE + " Дедлайн можна прибрати, очистивши поле.", 11.sp, C.n500)
+    if (edit) T(EDIT_NOTE + " Дедлайн і внесок на місяць можна прибрати, очистивши поле.", 11.sp, C.n500)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     if (edit) T(if (vm.delAsk) "Натисніть ще раз, щоб видалити ціль" else "Видалити ціль", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteGoal() }.padding(vertical = 4.dp))
 }
