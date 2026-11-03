@@ -75,4 +75,4 @@ npm install && npm test                 # тести
 Обмеження:
 - Android-збірку `bella-app` (Compose) треба запустити в Android Studio або CI: `./gradlew :app:testDebugUnitTest :app:assembleDebug`.
 - Робочі процеси CI з bella-mobile (збірка APK) не додавалися: їм потрібні секрети підпису.
-- `deploy-pages.yml` публікує всю теку. Після злиття в `main` PWA стане доступна за адресою `/bella-mobile/app/`.
+- `deploy-pages.yml` тепер публікує PWA з `bella-mobile/app/` як корінь сайту, а старий `index.html` — за адресою `/legacy/`. Fin-men-v.3 визнано основним репозиторієм, головна версія — нативний `bella-app`.
