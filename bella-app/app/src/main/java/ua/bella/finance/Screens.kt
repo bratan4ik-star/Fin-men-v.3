@@ -341,7 +341,7 @@ fun InvScreen(vm: BellaViewModel) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     T("${fmtQty(p.qty)} шт. · куплено по ${vm.m(p.buy)}", 11.sp, C.n500, maxLines = 1, modifier = Modifier.weight(1f)); T((if (pl >= 0) "+" else "−") + "%.1f%%".format(Math.abs(pl)), 11.sp, if (pl >= 0) C.pos else C.neg)
                                 }
-                                T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null).joinToString(" · "), 11.sp, C.n500)
+                                T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
                             }
                         }
                     }

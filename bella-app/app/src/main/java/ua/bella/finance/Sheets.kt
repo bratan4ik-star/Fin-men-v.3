@@ -68,6 +68,7 @@ private fun TransferForm(vm: BellaViewModel) {
         amt > 0 && fa != null && ta != null -> "Надійде ${Math.round(amt * RATES[fa.cur]!! / RATES[ta.cur]!! * 100) / 100.0} ${ta.cur}"; else -> ""
     }
     T(hint, 12.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
 }
 
 @Composable
@@ -76,6 +77,7 @@ private fun AccForm(vm: BellaViewModel) {
     Field("Назва", f.name, hint = "напр. Monobank Чорна") { vm.form = f.copy(name = it) }
     Field("Початковий баланс", f.bal, hint = "0", numeric = true) { vm.form = f.copy(bal = it) }
     Seg(CURRENCIES.map { it to it }, f.cur) { vm.form = f.copy(cur = it) }
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
 }
 
 @Composable
@@ -85,6 +87,7 @@ private fun DebtForm(vm: BellaViewModel) {
     Field("Особа / опис", f.who, hint = "напр. Іван") { vm.form = f.copy(who = it) }
     Field("Сума (${vm.sym})", f.amt, hint = "0", numeric = true) { vm.form = f.copy(amt = it) }
     Field("Термін повернення", f.due, hint = "РРРР-ММ-ДД") { vm.form = f.copy(due = it) }
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
 }
 
 @Composable
@@ -134,17 +137,38 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
 @Composable
 private fun PosForm(vm: BellaViewModel, edit: Boolean) {
     val f = vm.form
-    Seg(GROUPS.map { it.first to it.first }, f.group) { vm.form = f.copy(group = it) }
-    Field("Назва / тікер", f.pName, hint = if (edit) vm.was { it.pName } else "напр. VWCE") { vm.form = f.copy(pName = it) }
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки (${vm.sym})", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }
-    if (edit) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Поточна ціна (${vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }; Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) } }
-    else Field("Ставка, % річних", f.pRate, numeric = true) { vm.form = f.copy(pRate = it) }
     val dep = f.group == "Депозити"
+    Seg(GROUPS.map { it.first to it.first }, f.group) { vm.form = f.copy(group = it) }
+    Field(if (dep) "Назва депозиту" else "Назва / тікер", f.pName, hint = if (edit) vm.was { it.pName } else if (dep) "напр. Депозит Моно, 12 міс." else "напр. VWCE") { vm.form = f.copy(pName = it) }
+    if (dep) {
+        Field("Сума депозиту (${vm.sym})", f.pBuy, hint = vm.was { it.pBuy }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(pBuy = it) }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (edit) Field("Поточна сума (${vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }
+            Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) }
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки (${vm.sym})", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }
+        if (edit) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Поточна ціна (${vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }; Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) } }
+        else Field("Ставка, % річних", f.pRate, numeric = true) { vm.form = f.copy(pRate = it) }
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Field(if (dep) "Дата виплати відсотків" else "Наступна виплата", f.pNext, Modifier.weight(1f), vm.was { it.pNext }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pNext = it) }
         Field(if (dep) "Дата повернення" else "Погашення", f.pMat, Modifier.weight(1f), vm.was { it.pMat }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pMat = it) }
     }
-    if (f.group == "Депозити") T("Дата виплати — коли надійдуть відсотки, дата повернення — коли повернеться сума депозиту. Обидві необов'язкові.", 11.sp, C.n500)
+    if (dep) {
+        Row(Modifier.clickable { vm.form = f.copy(pMonthly = !f.pMonthly) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Ico(if (f.pMonthly) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Повторювати щомісяця (відсотки в дохід)", 13.sp)
+        }
+        if (f.pMonthly) {
+            val accs = vm.data.accs; val opts = listOf("Без рахунку") + accs.map { "${it.name} · ${it.cur}" }
+            Dropdown("Зараховувати відсотки на", opts, accs.indexOfFirst { it.id == f.pPayAcc } + 1) { vm.form = f.copy(pPayAcc = if (it == 0) "" else accs[it - 1].id) }
+            val sum = (parseNum(f.pNow).takeIf { edit && it > 0 } ?: parseNum(f.pBuy)) * vm.rate
+            val qty = parseNum(f.pQty).takeIf { it > 0 } ?: 1.0
+            val net = depositMonthlyNet(Pos("Депозити", "", qty, sum, sum, rate = parseNum(f.pRate)))
+            T("≈ ${vm.m(net)} ${vm.sym} щомісяця після податку 23%. Операція «Відсотки» створюється в дату виплати, далі дата переходить на наступний місяць; пропущені місяці дораховуються. Після дати повернення виплати зупиняються.", 11.sp, C.n500)
+        }
+    }
+    if (dep) T("Дата виплати — коли надійдуть відсотки, дата повернення — коли повернеться сума депозиту. Обидві необов'язкові.", 11.sp, C.n500)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     if (edit) {
         T(EDIT_NOTE, 11.sp, C.n500)
@@ -159,6 +183,7 @@ private fun AccEditForm(vm: BellaViewModel) {
     Field("Назва", f.name, hint = vm.was { it.name }) { vm.form = f.copy(name = it) }
     Field("Поточний баланс (${a?.cur ?: ""})", f.bal, hint = vm.was { it.bal }, numeric = true) { vm.form = f.copy(bal = it) }
     T(EDIT_NOTE, 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     T("Виписка показує залишок на дату останньої операції. Введіть актуальний.", 11.sp, C.n500)
     Row(Modifier.clickable { vm.form = f.copy(sav = !f.sav) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Ico(if (f.sav) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Заощадження (не рахується як повсякденні гроші)", 13.sp)
