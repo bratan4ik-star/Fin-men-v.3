@@ -39,4 +39,11 @@ class FormHintsTest {
         assertEquals("03.11.2026 о 14:05", fmtSavedAt(ms, kyiv))
         assertEquals("", fmtSavedAt(0L, kyiv))
     }
+
+    @Test fun debtFieldsKeepOriginalWhenBlank() {
+        val o = Form(who = "Іван", amt = "12300", due = "2026-12-20", dIdx = 0)
+        val r = fillBlanks(o.copy(who = "", amt = "", due = ""), o)
+        assertEquals("Іван", r.who); assertEquals("12300", r.amt)
+        assertEquals("", r.due) // порожній термін означає «без терміну»
+    }
 }

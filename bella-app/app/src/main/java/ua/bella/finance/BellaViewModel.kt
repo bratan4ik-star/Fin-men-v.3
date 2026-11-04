@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, Tx, TxE, Rec, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -38,6 +38,7 @@ data class Form(
     val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1, val gMonthly: String = "",
     val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
     // повторювана операція: галочка в новій операції; редагування шаблону (індекс, число місяця, активність)
+    val dIdx: Int = -1, val dPay: String = "",
     val tRepeat: Boolean = false, val rIdx: Int = -1, val rDay: String = "", val rActive: Boolean = true,
 )
 
@@ -228,6 +229,16 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun openAcc() { form = form.copy(name = "", bal = "", cur = "UAH", cashF = false); sheet = Sheet.Acc }
     /** Новий готівковий рахунок (з портфеля). */
     fun openCash() { form = form.copy(name = "Готівка USD", bal = "", cur = "USD", cashF = true); sheet = Sheet.Acc }
+    fun editDebt(i: Int) {
+        val d = data.debts.getOrNull(i) ?: return
+        fun s2(v: Double) = (Math.round(v / rate * 100) / 100.0).let { if (it == Math.floor(it)) it.toLong().toString() else it.toString() }
+        formErr = ""; form = form.copy(dIdx = i, who = d.who, amt = s2(d.amt), due = d.due, kindOwedToMe = d.owedToMe, dPay = ""); formOrig = form; sheet = Sheet.DebtE
+    }
+    fun deleteDebt() {
+        if (!delAsk) { delAsk = true; return }; delAsk = false
+        val i = form.dIdx; if (data.debts.getOrNull(i) == null) { closeSheet(); return }
+        commit(data.copy(debts = data.debts.filterIndexed { j, _ -> j != i })); closeSheet()
+    }
     fun openDebt() { form = form.copy(who = "", amt = "", due = "", kindOwedToMe = true); sheet = Sheet.Debt }
     var formErr by mutableStateOf("")
     var txDelAsk by mutableStateOf(false); private set
@@ -336,7 +347,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- сабміти ----------
     fun submit() {
-        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE || sheet == Sheet.GoalE || sheet == Sheet.Rec
+        val o = formOrig; val edit = sheet == Sheet.TxE || sheet == Sheet.AccE || sheet == Sheet.PosE || sheet == Sheet.GoalE || sheet == Sheet.Rec || sheet == Sheet.DebtE
         val f = if (edit && o != null) fillBlanks(form, o) else form; val s = data
         when (sheet) {
             Sheet.Transfer -> {
@@ -350,6 +361,18 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             }
             Sheet.Acc -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else { commit(s.copy(accs = s.accs + Account(f.name.trim(), f.cur, parseNum(f.bal), cash = f.cashF))); closeSheet() }
             Sheet.Debt -> { val v = parseNum(f.amt) * rate; formErr = when { f.who.isBlank() -> "Вкажіть особу або опис"; v <= 0 -> "Вкажіть суму більше нуля"; f.due.isNotBlank() && !isIsoDate(f.due.trim()) -> "Термін у форматі РРРР-ММ-ДД"; else -> "" }; if (formErr.isEmpty()) { commit(s.copy(debts = s.debts + Debt(f.who.trim(), f.kindOwedToMe, v, false, f.due.trim()))); closeSheet() } }
+            Sheet.DebtE -> {
+                val old = s.debts.getOrNull(f.dIdx) ?: run { closeSheet(); return }
+                val amt = parseNum(f.amt) * rate; val pay = parseNum(f.dPay) * rate
+                formErr = when { f.who.isBlank() -> "Вкажіть особу або опис"; amt <= 0 -> "Вкажіть суму більше нуля"; pay < 0 -> "Платіж не може бути від'ємним"
+                    pay > amt + 1e-6 -> "Платіж більший за суму боргу"; f.due.isNotBlank() && !isIsoDate(f.due.trim()) -> "Термін у форматі РРРР-ММ-ДД"; else -> "" }
+                if (formErr.isNotEmpty()) return
+                // платіж зменшує залишок; повний платіж означає «повернено» — борг зникає
+                val left = amt - pay
+                val list = if (left <= 1e-6) s.debts.filterIndexed { j, _ -> j != f.dIdx }
+                    else s.debts.mapIndexed { j, d -> if (j == f.dIdx) old.copy(who = f.who.trim(), owedToMe = f.kindOwedToMe, amt = left, due = f.due.trim()) else d }
+                commit(s.copy(debts = list)); closeSheet()
+            }
             Sheet.AccE -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else if (s.accs.getOrNull(f.editIdx) != null) {
                 val old = s.accs[f.editIdx]
                 ov = ov + (old.name.takeLast(4) to Override(f.name.trim(), old.cur, parseNum(f.bal), f.sav))
