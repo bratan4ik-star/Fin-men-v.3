@@ -19,7 +19,7 @@ fun signing(prop: String, env: String): String? = keystoreProps.getProperty(prop
 // Версія: назву (1.1.0) піднімаємо вручну разом зі змінами. Номер збірки = кількість комітів у git:
 // росте з кожною зміною і однаковий локально й у CI, тож новіший APK завжди встановлюється поверх старішого.
 // Можна перевизначити змінною BELLA_BUILD_NUMBER.
-val appVersionName = "1.13.0"
+val appVersionName = "1.14.0"
 val buildNumber: Int = System.getenv("BELLA_BUILD_NUMBER")?.toIntOrNull()
     ?: try { providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }.standardOutput.asText.get().trim().toInt() } catch (e: Exception) { 1 }
 
@@ -67,6 +67,7 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.8.3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     testImplementation("junit:junit:4.13.2")
 }

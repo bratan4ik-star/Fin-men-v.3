@@ -588,7 +588,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelPin() { kmode = KMode.None; entry = ""; kerr = ""; tmp = "" }
     fun unlockByBio() { kmode = KMode.None; entry = ""; kerr = "" }
     fun onStopped() { hiddenAt = System.currentTimeMillis() }
-    fun onStarted() { runRecurring(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
+    fun onStarted() { runRecurring(); refreshNotifyState(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
     fun backspace() { entry = entry.dropLast(1) }
     fun press(d: String) {
         if (kmode == KMode.None) return
@@ -614,8 +614,45 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- автокопія й нагадування (див. Jobs.kt) ----------
+    private val ctx get() = getApplication<Application>()
+    var autoDirName by mutableStateOf(dirLabel(Jobs.autoDir(ctx))); private set
+    var autoAt by mutableStateOf(Jobs.autoAt(ctx)); private set
+    var autoMsg by mutableStateOf(""); private set
+    var remindMsg by mutableStateOf(""); private set
+    var remindOn by mutableStateOf(Jobs.remindOn(ctx) && Jobs.canNotify(ctx)); private set
+    private fun dirLabel(u: Uri?): String = u?.let { Uri.decode(it.lastPathSegment ?: "").substringAfter(':').ifEmpty { "Внутрішня пам'ять" } } ?: ""
+
+    fun chooseAutoDir(uri: Uri) {
+        try { Jobs.setAutoDir(ctx, uri) } catch (_: Exception) { autoMsg = "Не вдалося отримати доступ до папки"; return }
+        autoDirName = dirLabel(uri); backupNow()
+    }
+    fun disableAutoBackup() { Jobs.setAutoDir(ctx, null); autoDirName = ""; autoAt = 0L; autoMsg = "Автокопію вимкнено" }
+    fun backupNow(force: Boolean = true) {
+        viewModelScope.launch {
+            val m = withContext(Dispatchers.IO) { try { Jobs.runAutoBackup(ctx, force) } catch (_: Exception) { "Не вдалося зберегти автокопію" } }
+            if (m != null) autoMsg = m
+            autoAt = Jobs.autoAt(ctx)
+        }
+    }
+    /** Вмикає/вимикає нагадування; granted — чи є дозвіл на сповіщення (Android 13+). */
+    fun setRemind(on: Boolean, granted: Boolean = Jobs.canNotify(ctx)) {
+        Jobs.setRemind(ctx, on); remindOn = on && granted
+        remindMsg = if (on && !granted) "Сповіщення заборонені. Дозвольте їх у налаштуваннях Android: Програми → Bella Finance → Сповіщення" else ""
+        if (on && granted) viewModelScope.launch(Dispatchers.IO) { try { Jobs.runReminders(ctx) } catch (_: Exception) {} }
+    }
+    fun refreshNotifyState() { remindOn = Jobs.remindOn(ctx) && Jobs.canNotify(ctx) }
+    /** Виплати ОВДП на найближчі 60 днів (для екрана «Інвестиції»). */
+    fun upcomingOvdp(): List<OvdpEvent> = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(60)) }
+
     // Наприкінці класу: на цей момент усі поля (зокрема quoteBusy/quoteMsg) уже ініціалізовані.
     init {
+        try { Jobs.schedule(ctx) } catch (_: Exception) {}
+        viewModelScope.launch {
+            val m = withContext(Dispatchers.IO) { try { Jobs.runAutoBackup(ctx) } catch (_: Exception) { null } }
+            if (m != null) autoMsg = m; autoAt = Jobs.autoAt(ctx)
+            withContext(Dispatchers.IO) { try { Jobs.runReminders(ctx) } catch (_: Exception) {} }
+        }
         // ціни ETF за тікером — не частіше ніж раз на 6 годин
         val lastQuote = data.pos.filter { it.ticker.isNotBlank() }.maxOfOrNull { it.pxAt }
         if (lastQuote != null && System.currentTimeMillis() - lastQuote > 6 * 3600_000L) refreshQuotes()
