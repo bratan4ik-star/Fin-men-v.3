@@ -180,8 +180,8 @@ fun AccScreen(vm: BellaViewModel) {
                         g.items.forEach { (i, d) ->
                             Div()
                             val col = if (d.done) C.n500 else if (d.owedToMe) C.pos else C.neg
-                            Row(Modifier.fillMaxWidth().clickable { vm.toggleDebt(i) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(if (d.done) C.accent else Color.Transparent).then(Modifier.androidBorder(C.n700)), contentAlignment = Alignment.Center) { if (d.done) Ico(Icons.Outlined.Check, C.bg, 12.dp) }
+                            Row(Modifier.fillMaxWidth().clickable { vm.editDebt(i) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Box(Modifier.size(28.dp).clickable { vm.toggleDebt(i) }, contentAlignment = Alignment.Center) { Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(if (d.done) C.accent else Color.Transparent).then(Modifier.androidBorder(C.n700)), contentAlignment = Alignment.Center) { if (d.done) Ico(Icons.Outlined.Check, C.bg, 12.dp) } }
                                 Column(Modifier.weight(1f)) {
                                     T(d.who, 14.sp, strike = d.done); T((if (d.done) "Повернено" else if (d.owedToMe) "Мені винні" else "Я винен") + if (d.due.length >= 10) " · до ${ddmm(d.due)}" else "", 11.sp, col)
                                 }

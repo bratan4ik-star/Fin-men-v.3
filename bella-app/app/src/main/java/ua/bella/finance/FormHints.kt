@@ -12,7 +12,7 @@ fun fillBlanks(cur: Form, orig: Form): Form {
         name = k(cur.name, orig.name), bal = k(cur.bal, orig.bal),
         pName = k(cur.pName, orig.pName), pQty = k(cur.pQty, orig.pQty), pBuy = k(cur.pBuy, orig.pBuy), pNow = k(cur.pNow, orig.pNow),
         pRate = k(cur.pRate, orig.pRate), pMat = k(cur.pMat, orig.pMat), pNext = k(cur.pNext, orig.pNext),
-        rDay = k(cur.rDay, orig.rDay), gName = k(cur.gName, orig.gName), gTarget = k(cur.gTarget, orig.gTarget), gSaved = k(cur.gSaved, orig.gSaved), gStep = k(cur.gStep, orig.gStep), // дедлайн не підставляється: порожній — без дедлайну
+        rDay = k(cur.rDay, orig.rDay), who = k(cur.who, orig.who), amt = k(cur.amt, orig.amt), due = cur.due, gName = k(cur.gName, orig.gName), gTarget = k(cur.gTarget, orig.gTarget), gSaved = k(cur.gSaved, orig.gSaved), gStep = k(cur.gStep, orig.gStep), // дедлайн не підставляється: порожній — без дедлайну
     )
 }
 
