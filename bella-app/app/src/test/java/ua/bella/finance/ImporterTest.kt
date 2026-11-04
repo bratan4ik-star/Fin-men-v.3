@@ -70,4 +70,14 @@ class ImporterTest {
         assertEquals("Сільпо", r.txs[0].desc); assertEquals("Харчування", r.txs[0].cat); assertEquals(1250.4, r.txs[0].amt, 0.001)
         assertEquals("income", r.txs[1].type)
     }
+
+    @Test fun savingsIncomeIsIncomeAndPrincipalIsTransfer() {
+        assertEquals("income", Importer.classifyType("Заощадження", "Купон ОВДП", 16350.0))
+        assertEquals("income", Importer.classifyType("Заощадження", "% за депозитом", 4430.14))
+        assertEquals("transfer", Importer.classifyType("Заощадження", "Номінал ОВДП", 200000.0))
+        assertEquals("transfer", Importer.classifyType("Заощадження", "Скарбничка", -500.0))
+        assertEquals("transfer", Importer.classifyType("Переказ на свою картку", "На свою картку *1", -5.0))
+        assertEquals("expense", Importer.classifyType("Таксі", "Uklon", -90.0))
+        assertEquals("income", Importer.classifyType("Надходження", "Зарплата", 100.0))
+    }
 }

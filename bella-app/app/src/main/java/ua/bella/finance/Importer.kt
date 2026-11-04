@@ -39,6 +39,17 @@ object Importer {
         "АЗС" to "Транспорт", "Квитки на поїзд" to "Транспорт", "Аптеки" to "Здоров'я", "Медичні послуги" to "Здоров'я", "Краса" to "Здоров'я",
         "Комуналка та Інтернет" to "Житло", "Дім та ремонт" to "Житло", "Цифрові товари" to "Розваги",
     )
+    /**
+     * Тип операції: переказ між власними рахунками чи «Заощадження» — переказ, але купон і відсотки
+     * (надходження з категорії «Заощадження» з «купон» / «%» / «відсот» в описі) — це дохід.
+     */
+    fun classifyType(cat: String, desc: String, a: Double): String {
+        if (cat == "Заощадження" && a > 0) {
+            val d = desc.lowercase()
+            if (d.contains("купон") && !d.contains("номінал") || d.contains("%") || d.contains("відсот") || d.contains("проценти")) return "income"
+        }
+        return if (cat in OWN) "transfer" else if (a < 0) "expense" else "income"
+    }
     private val OWN = setOf("Переказ на свою картку", "Зарахування зі своєї картки", "Заощадження")
 
     private const val ERR_NOT_XLSX = "Це не справжній файл .xlsx (можливо, .xls або HTML). Збережіть виписку в банку саме як Excel (.xlsx)"
@@ -241,7 +252,7 @@ object Importer {
             if (iso == null || a == null) { bad++; return@forEach }
             val card = g(c.card); val cur = g(c.cur).uppercase().ifEmpty { "UAH" }; val cat = g(c.cat)
             val desc = g(c.desc).ifEmpty { cat }.ifEmpty { "Операція" }
-            val type = if (cat in OWN) "transfer" else if (a < 0) "expense" else "income"
+            val type = classifyType(cat, desc, a)
             val c2 = if (type == "income" && cat.startsWith("Зарахування")) "Надходження" else (CMAP[cat] ?: cat.ifEmpty { "Інше" })
             txs.add(Tx(desc, c2, type, Math.abs(a) * (RATES[cur] ?: 1.0), iso, "$dRaw|$card|$a|$desc"))
             if (card.isNotEmpty() && seen.add(card)) {
