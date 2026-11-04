@@ -323,6 +323,8 @@ private fun SettingsList(vm: BellaViewModel) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Ico(Icons.Outlined.Lock, C.n500, 16.dp); T("Дані зберігаються автоматично на цьому пристрої" + fmtSavedAt(vm.savedAt).let { if (it.isEmpty()) "" else " · останнє збереження $it" }, 11.sp, C.n500) }
     val saveCopy = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
     val openCopy = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.readBackup(uri) }
+    val saveXlsx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri -> if (uri != null) vm.exportXlsx(uri) }
+    SettingRow(Icons.Outlined.TableChart, "Експорт у Excel (.xlsx)", "Операції, по місяцях і по категоріях", trailing = true) { saveXlsx.launch(xlsxFileName(TODAY)) }
     SettingRow(Icons.Outlined.Backup, "Зберегти резервну копію", "Файл JSON з усіма даними (без PIN, не шифрується)", trailing = true) { saveCopy.launch(backupFileName(TODAY)) }
     SettingRow(Icons.Outlined.Restore, "Відновити з копії", "Замінює поточні дані даними з файлу", trailing = true) { openCopy.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
     vm.pendingRestore?.let { b ->

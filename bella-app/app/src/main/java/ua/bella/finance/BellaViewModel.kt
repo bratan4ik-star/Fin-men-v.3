@@ -130,6 +130,15 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             backupMsg = if (ok) "Копію збережено: операцій ${data.txs.size}, рахунків ${data.accs.size}" else "Не вдалося записати файл копії"
         }
     }
+    fun exportXlsx(uri: Uri) {
+        val d = data
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try { val bytes = buildXlsx(d); getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null } catch (_: Exception) { false }
+            }
+            backupMsg = if (ok) "Експортовано в Excel: операцій ${d.txs.size}" else "Не вдалося записати файл Excel"
+        }
+    }
     fun readBackup(uri: Uri) {
         pendingRestore = null
         viewModelScope.launch {
