@@ -341,7 +341,7 @@ private fun OpsTab(vm: BellaViewModel) {
             Ico(Icons.Outlined.FilterList, C.n500, 16.dp); T("Фільтри: дата, сума, рахунок" + if (cnt > 0) " ($cnt)" else "", 12.sp, C.n400); Ico(if (f.show) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n500, 14.dp)
         }
         if (f.show) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Дата від", f.dateFrom, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.filters = f.copy(dateFrom = it) }; Field("Дата до", f.dateTo, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.filters = f.copy(dateTo = it) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { DateField("Дата від", f.dateFrom, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.filters = f.copy(dateFrom = it) }; DateField("Дата до", f.dateTo, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.filters = f.copy(dateTo = it) } }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Сума від (${vm.sym})", f.min, Modifier.weight(1f), numeric = true) { vm.filters = f.copy(min = it) }; Field("Сума до (${vm.sym})", f.max, Modifier.weight(1f), numeric = true) { vm.filters = f.copy(max = it) } }
             val accs = vm.data.accs; val aOpts = listOf("Усі рахунки", "Без рахунку") + accs.map { it.name }
             val aSel = when (f.acc) { "*" -> 0; "" -> 1; else -> accs.indexOfFirst { it.id == f.acc }.let { if (it < 0) 0 else it + 2 } }
@@ -523,10 +523,10 @@ fun CalcScreen(vm: BellaViewModel) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Field("ISIN / назва", s.isin, hint = "UA4000236228") { vm.calcIn = s.copy(isin = it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Номінал (₴)", s.nom, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(nom = it) }; Field("Ставка купона, %", s.coupon, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(coupon = it) } }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Дата купівлі", s.buy, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(buy = it) }; Field("Дата погашення", s.mat, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(mat = it) } }
-                if (s.freq == 0) Field("Початок купона (випуск)", s.issue, hint = "РРРР-ММ-ДД · порожньо = дата купівлі") { vm.calcIn = s.copy(issue = it) }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { DateField("Дата купівлі", s.buy, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(buy = it) }; DateField("Дата погашення", s.mat, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(mat = it) } }
+                if (s.freq == 0) DateField("Початок купона (випуск)", s.issue, hint = "РРРР-ММ-ДД · порожньо = дата купівлі") { vm.calcIn = s.copy(issue = it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна купівлі (₴)", s.price, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(price = it) }; Field("Кількість", s.qty, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(qty = it) } }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна продажу (₴)", s.sell, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(sell = it) }; Field("Дата продажу", s.sellD, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(sellD = it) } }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна продажу (₴)", s.sell, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(sell = it) }; DateField("Дата продажу", s.sellD, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(sellD = it) } }
                 T("Виплата купона", 12.sp, C.n500)
                 Seg(listOf(1 to "Щомісяця", 3 to "Щокв.", 6 to "6 міс.", 12 to "Рік", 0 to "В кінці"), s.freq) { vm.calcIn = s.copy(freq = it) }
             }

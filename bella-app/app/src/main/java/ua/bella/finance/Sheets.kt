@@ -92,7 +92,7 @@ private fun DebtForm(vm: BellaViewModel, edit: Boolean) {
     Seg(listOf(true to "Мені винні", false to "Я винен"), f.kindOwedToMe) { vm.form = f.copy(kindOwedToMe = it) }
     Field("Особа / опис", f.who, hint = if (edit) vm.was { it.who } else "напр. Іван") { vm.form = f.copy(who = it) }
     Field(if (edit) "Залишок боргу (${vm.sym})" else "Сума (${vm.sym})", f.amt, hint = if (edit) vm.was { it.amt } else "0", numeric = true) { vm.form = f.copy(amt = it) }
-    Field("Термін повернення", f.due, hint = if (edit) vm.was { it.due }.ifEmpty { "РРРР-ММ-ДД" } else "РРРР-ММ-ДД") { vm.form = f.copy(due = it) }
+    DateField("Термін повернення", f.due, hint = if (edit) vm.was { it.due }.ifEmpty { "РРРР-ММ-ДД" } else "РРРР-ММ-ДД") { vm.form = f.copy(due = it) }
     if (edit) {
         Field("Часткове повернення (${vm.sym})", f.dPay, hint = "сума платежу", numeric = true) { vm.form = f.copy(dPay = it) }
         val left = parseNum(f.amt) - parseNum(f.dPay)
@@ -135,7 +135,7 @@ private fun TxForm(vm: BellaViewModel, edit: Boolean) {
         Dropdown("Категорія", cats, cats.indexOf(f.tCat)) { vm.form = f.copy(tCat = cats[it]) }
     }
     Field("Опис", f.tDesc, hint = vm.was { it.tDesc }.ifEmpty { if (f.tType == "transfer") "необов'язково" else "напр. Сільпо" }) { vm.form = f.copy(tDesc = it) }
-    Field("Дата", f.tDate, hint = vm.was { it.tDate }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(tDate = it) }
+    DateField("Дата", f.tDate, hint = vm.was { it.tDate }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(tDate = it) }
     if (!edit && f.tType != "transfer") Row(Modifier.clickable { vm.form = f.copy(tRepeat = !f.tRepeat) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Ico(if (f.tRepeat) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Повторювати щомісяця (того ж числа)", 13.sp)
     }
@@ -180,7 +180,7 @@ private fun GoalForm(vm: BellaViewModel, edit: Boolean) {
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Field("Крок для «+» (${vm.sym})", f.gStep, Modifier.weight(1f), hint = vm.was { it.gStep }.ifEmpty { "1000" }, numeric = true) { vm.form = f.copy(gStep = it) }
-        Field("Дедлайн", f.gDeadline, Modifier.weight(1f), hint = vm.was { it.gDeadline }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(gDeadline = it) }
+        DateField("Дедлайн", f.gDeadline, Modifier.weight(1f), hint = vm.was { it.gDeadline }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(gDeadline = it) }
     }
     Field("Планую відкладати на місяць (${vm.sym})", f.gMonthly, hint = vm.was { it.gMonthly }.ifEmpty { "для прогнозу, необов'язково" }, numeric = true) { vm.form = f.copy(gMonthly = it) }
     T("«Вже накопичено» — гроші, які вже відкладено; рахунків воно не змінює. Щоб перекласти гроші з рахунку, скористайтеся «Внести / зняти».", 11.sp, C.n500)
@@ -267,8 +267,8 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
         else Field("Ставка, % річних", f.pRate, numeric = true) { vm.form = f.copy(pRate = it) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Field(if (dep) "Дата виплати відсотків" else "Наступна виплата", f.pNext, Modifier.weight(1f), vm.was { it.pNext }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pNext = it) }
-        Field(if (dep) "Дата повернення" else "Погашення", f.pMat, Modifier.weight(1f), vm.was { it.pMat }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pMat = it) }
+        DateField(if (dep) "Дата виплати відсотків" else "Наступна виплата", f.pNext, Modifier.weight(1f), vm.was { it.pNext }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pNext = it) }
+        DateField(if (dep) "Дата повернення" else "Погашення", f.pMat, Modifier.weight(1f), vm.was { it.pMat }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pMat = it) }
     }
     if (dep) {
         Row(Modifier.clickable { vm.form = f.copy(pMonthly = !f.pMonthly) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
