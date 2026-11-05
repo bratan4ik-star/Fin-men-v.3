@@ -8,7 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Backspace
+import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.runtime.Composable
@@ -50,7 +50,7 @@ fun LockOverlay(vm: BellaViewModel) {
                     val vis = k != "bio" || (unlock && vm.sec.bio)
                     Box(Modifier.size(68.dp).clip(CircleShape).then(if (k.length == 1 && vis) Modifier.background(C.surface) else Modifier)
                         .clickable(enabled = vis) { when (k) { "bio" -> bio(); "del" -> vm.backspace(); else -> vm.press(k) } }, contentAlignment = Alignment.Center) {
-                        when { !vis -> {}; k == "bio" -> Ico(Icons.Outlined.Fingerprint, C.accent, 28.dp); k == "del" -> Ico(Icons.Outlined.Backspace, C.n500, 24.dp); else -> T(k, 24.sp) }
+                        when { !vis -> {}; k == "bio" -> Ico(Icons.Outlined.Fingerprint, C.accent, 28.dp); k == "del" -> Ico(Icons.AutoMirrored.Outlined.Backspace, C.n500, 24.dp); else -> T(k, 24.sp) }
                     }
                 }
             }
