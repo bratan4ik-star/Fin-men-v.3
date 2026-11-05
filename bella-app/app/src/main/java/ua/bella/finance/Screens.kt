@@ -249,7 +249,8 @@ fun BudgetScreen(vm: BellaViewModel) {
             }
             Seg(listOf(0 to "Огляд", 1 to "Операції", 2 to "Звіт", 3 to "Ліміти"), vm.tab) { vm.tab = it }
             when (vm.tab) {
-                0 -> Column(verticalArrangement = Arrangement.spacedBy(22.dp)) { Column { cats.entries.sortedByDescending { it.value }.forEach { (c, v) ->
+                0 -> Column(verticalArrangement = Arrangement.spacedBy(22.dp)) { if (isLast) FreeLeftCard(vm)
+                    Column { cats.entries.sortedByDescending { it.value }.forEach { (c, v) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Ico(catIcon(c), C.accent, 20.dp)
                         Column(Modifier.weight(1f)) {

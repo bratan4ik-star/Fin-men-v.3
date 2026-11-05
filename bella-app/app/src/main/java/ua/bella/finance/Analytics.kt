@@ -69,3 +69,42 @@ fun smartAnalytics(allTxs: List<Tx>, periodTxs: List<Tx>, cashUah: Double, today
 
     return SmartResult(runway, projected, burn, insights, expenses.sortedByDescending { it.amt }.take(5))
 }
+
+/**
+ * «Вільно до кінця місяця» (як у PWA). Усі суми в гривнях.
+ * free = доходи місяця − витрати місяця − повторювані витрати, що ще будуть цього місяця − невикористаний залишок лімітів.
+ */
+data class FreeLeft(
+    val freeUah: Double,
+    val perDayUah: Double,
+    val daysLeft: Int,
+    val incomeUah: Double,
+    val expenseUah: Double,
+    val recurringUah: Double,
+    val limitsUah: Double,
+)
+
+/**
+ * @param recurring шаблони повторюваних операцій; враховуються активні витрати з наступною датою пізніше today у поточному місяці
+ *   (ті, що вже настали, створені як операції і входять у витрати)
+ * @param limits місячні ліміти за категоріями; невитрачений залишок ліміту резервується
+ */
+fun freeLeft(allTxs: List<Tx>, recurring: List<Recurring>, limits: Map<String, Double>, today: String): FreeLeft {
+    val cm = today.take(7)
+    val day = (if (today.length >= 10) today.substring(8, 10).toIntOrNull() else null)?.coerceAtLeast(1) ?: 1
+    val dim = try { YearMonth.parse(cm).lengthOfMonth() } catch (_: Exception) { 30 }
+    val daysLeft = Math.max(1, dim - day + 1)
+
+    val cmTxs = allTxs.filter { it.date.startsWith(cm) }
+    val income = cmTxs.filter { it.type == "income" }.sumOf { it.amt }
+    val expense = cmTxs.filter { it.type == "expense" }.sumOf { it.amt }
+    val pending = recurring.filter { it.active && it.type == "expense" && it.next.startsWith(cm) && it.next > today }
+    val rec = pending.sumOf { it.amt }
+    val lim = limits.entries.filter { it.value > 0 }.sumOf { (c, l) ->
+        val spent = cmTxs.filter { it.type == "expense" && it.cat == c }.sumOf { it.amt }
+        val planned = pending.filter { it.cat == c }.sumOf { it.amt }
+        Math.max(0.0, l - spent - planned)
+    }
+    val free = income - expense - rec - lim
+    return FreeLeft(free, Math.max(0.0, free) / daysLeft, daysLeft, income, expense, rec, lim)
+}

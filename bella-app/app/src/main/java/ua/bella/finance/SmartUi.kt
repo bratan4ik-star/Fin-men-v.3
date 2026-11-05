@@ -110,3 +110,27 @@ fun RatesSection(vm: BellaViewModel, startOpen: Boolean = false) {
         }
     }
 }
+
+/** «Вільно до кінця місяця»: скільки можна витратити, не виходячи за ліміти й з урахуванням повторюваних витрат (лише поточний місяць). */
+@Composable
+fun FreeLeftCard(vm: BellaViewModel) {
+    val f = freeLeft(vm.data.txs, vm.data.recurring, vm.data.limits, TODAY)
+    val neg = f.freeUah < 0
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, C.accent, RoundedCornerShape(10.dp)).padding(14.dp)) {
+        Label("ВІЛЬНО ДО КІНЦЯ МІСЯЦЯ")
+        T((if (neg) "−" else "") + vm.m(Math.abs(f.freeUah)) + " " + vm.sym, 28.sp, if (neg) C.neg else C.pos, FontWeight.Medium, Modifier.padding(top = 4.dp), maxLines = 1)
+        T("≈ " + vm.m(f.perDayUah) + " " + vm.sym + " на день · лишилось днів: ${f.daysLeft}", 12.sp, C.n500)
+        Spacer(Modifier.height(10.dp)); Div(); Spacer(Modifier.height(10.dp))
+        listOf(
+            Triple("Доходи місяця", "+", f.incomeUah),
+            Triple("Витрати місяця", "−", f.expenseUah),
+            Triple("Повторювані, що ще будуть", "−", f.recurringUah),
+            Triple("Залишок лімітів", "−", f.limitsUah),
+        ).forEach { (l, s, v) ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                T(l, 12.sp, C.n500, maxLines = 1); T(s + vm.m(v) + " " + vm.sym, 12.sp, maxLines = 1)
+            }
+        }
+        if (neg) T("Заплановані витрати й ліміти більші за доходи місяця. Зменште ліміти або відкладіть частину витрат.", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
+    }
+}
