@@ -1,6 +1,8 @@
 # Аналіз репозиторіїв і перенесення в нову версію (bella-mobile 1.34)
 
-Нова версія програми: **bella-mobile** (PWA + Android-обгортка).
+> **Історична довідка.** Звіт описує стан на момент перенесення (bella-mobile 1.34). Відтоді **Fin-men-v.3 став основним репозиторієм** (головний застосунок — нативний `bella-app`, PWA лежить у `bella-mobile/`), а Bella, bella-mobile і New-fin-manager-BELLA- архівні. Актуальний опис — у `README.md` у корені.
+
+Нова версія програми на момент аналізу: **bella-mobile** (PWA + Android-обгортка).
 Переглянуто: New-fin-manager-BELLA-, Bella, Fin-men-v.3, bella-mobile.
 
 ## Що є в кожному репозиторії

@@ -11,7 +11,7 @@
 | `index.html` | Старий прототип в одному файлі (Tailwind, Chart.js). Після публікації доступний за адресою `/legacy/` | Застарілий, лише підтримка |
 | `docs/analiz-repozytoriiv.md` | Звіт: що порівняно, що перенесено, що свідомо ні | Довідка |
 
-Репозиторії **Bella**, **bella-mobile** і **New-fin-manager-BELLA-** тепер лише джерела: нова розробка йде тут.
+Репозиторії [**Bella**](https://github.com/bratan4ik-star/Bella), [**bella-mobile**](https://github.com/bratan4ik-star/bella-mobile) і [**New-fin-manager-BELLA-**](https://github.com/bratan4ik-star/New-fin-manager-BELLA-) тепер лише архівні джерела (у кожного вгорі README є позначка): нова розробка йде тут.
 
 ## Основні можливості
 
