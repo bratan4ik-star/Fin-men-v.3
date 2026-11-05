@@ -79,7 +79,7 @@ fun HomeScreen(vm: BellaViewModel) {
                 BigMoney("ЗАГАЛЬНИЙ КАПІТАЛ", vm.m(t.net), vm.sym)
                 val dl = if (vm.hide) "•••• ${vm.sym}" else (if (t.novNet >= 0) "+" else "−") + fmtInt(vm.cv(Math.abs(t.novNet))) + " " + vm.sym
                 T("$dl за місяць", 13.sp, if (t.novNet >= 0) C.pos else C.neg, modifier = Modifier.padding(top = 2.dp))
-                Sparkline(vm)
+                CapitalChart(vm)
                 Box(Modifier.padding(top = 14.dp)) { RatesSection(vm) }
             }
             Btn("Нова операція", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) { vm.openTx() }
@@ -110,23 +110,6 @@ private fun SectionRow(icon: ImageVector, color: Color, title: String, sub: Stri
         Column(Modifier.weight(1f)) { T(title, 14.sp, weight = FontWeight.Medium); T(sub, 11.sp, C.n500, maxLines = 1) }
         T(metric, 14.sp, weight = FontWeight.Medium, maxLines = 1); Ico(Icons.Outlined.ChevronRight, C.n600, 14.dp)
     }
-}
-
-/** Декоративний графік з макета (статичні точки, не реальна історія). */
-@Composable
-private fun Sparkline(vm: BellaViewModel) {
-    val h = vm.hist.takeLast(90); val acc = C.accent
-    if (h.size < 2) { T("Графік капіталу з'явиться, коли накопичиться історія: знімок зберігається щодня.", 11.sp, C.n500, modifier = Modifier.padding(top = 12.dp)); return }
-    val pts = normalize(h.map { it.v })
-    Canvas(Modifier.fillMaxWidth().padding(top = 12.dp).height(56.dp)) {
-        val dx = size.width / (pts.size - 1); val top = 4.dp.toPx(); val hh = size.height - 2 * top
-        fun y(v: Double) = top + (1 - v.toFloat()) * hh
-        val line = Path().apply { pts.forEachIndexed { i, v -> if (i == 0) moveTo(0f, y(v)) else lineTo(i * dx, y(v)) } }
-        val fill = Path().apply { addPath(line); lineTo(size.width, size.height); lineTo(0f, size.height); close() }
-        drawPath(fill, Brush.verticalGradient(listOf(acc.copy(alpha = .28f), Color.Transparent)))
-        drawPath(line, acc, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-    }
-    T("${ddmm(h.first().d)} – ${ddmm(h.last().d)} · ${h.size} дн.", 10.sp, C.n500, modifier = Modifier.padding(top = 2.dp))
 }
 
 // ================= КАПІТАЛ ТА РАХУНКИ =================
@@ -278,6 +261,7 @@ fun BudgetScreen(vm: BellaViewModel) {
                 }
                 1 -> OpsTab(vm)
                 2 -> Column {
+                    FlowBars(vm, monthlyFlows(s.txs, CUR_MONTH, mos.size.coerceIn(6, 12)))
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) { listOf("Місяць", "Доходи", "Витрати", "Баланс").forEach { T(it, 11.sp, C.n500, modifier = Modifier.weight(1f)) } }
                     mos.reversed().forEach { k ->
                         val t = s.txs.filter { it.date.startsWith(k) }; val a = t.filter { it.type == "income" }.sumOf { it.amt }; val b = t.filter { it.type == "expense" }.sumOf { it.amt }
@@ -367,10 +351,7 @@ fun InvScreen(vm: BellaViewModel) {
             Column {
                 BigMoney("ПОРТФЕЛЬ", vm.m(total), vm.sym)
                 if (cashT > 0) T("Інвестиції ${vm.m(t.invT)} · готівка ${vm.m(cashT)} ${vm.sym}", 12.sp, C.n500, modifier = Modifier.padding(top = 2.dp))
-                Row(Modifier.fillMaxWidth().padding(top = 14.dp).height(8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    t.invGroups.forEach { (_, c, v) -> if (v.first > 0) Box(Modifier.weight(v.first.toFloat()).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(Color(c))) }
-                    if (cashT > 0) Box(Modifier.weight(cashT.toFloat()).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(CashC))
-                }
+                PortfolioDonut(vm, t.invGroups.map { (g, c, v) -> Slice(g, Color(c), v.first) } + Slice("Готівка", CashC, cashT))
             }
             Column {
                 t.invGroups.filter { it.third.third > 0 }.forEach { (g, c, v) ->
@@ -427,6 +408,18 @@ fun InvScreen(vm: BellaViewModel) {
                     }
                     T("+ Додати готівку", 13.sp, C.accent400, modifier = Modifier.clickable { vm.openCash() }.padding(start = 18.dp, top = 8.dp, bottom = 8.dp))
                     T("Суми беруться з рахунків «Капітал та Рахунки» і в капіталі не дублюються. Позначка «Готівка» — у формі рахунку.", 11.sp, C.n500, modifier = Modifier.padding(start = 18.dp))
+                }
+            }
+            val up = vm.upcomingOvdp()
+            if (up.isNotEmpty()) Column {
+                SectionHead("Найближчі виплати ОВДП", if (vm.remindOn) "нагадування увімк." else "нагадування вимк.", C.n500)
+                up.take(5).forEach { e ->
+                    Div()
+                    Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        T(ddmmyy(e.date.toString()), 12.sp, C.n500)
+                        Column(Modifier.weight(1f)) { T(e.name, 13.sp, maxLines = 1); T(if (e.maturity) "погашення" + (if (e.coupon > 0) " + купон" else "") else "купон", 11.sp, C.n500) }
+                        T("+" + vm.m(e.total) + " " + vm.sym, 13.sp, C.pos, FontWeight.Medium, maxLines = 1)
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Позиція", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openPos() }; Btn("ОВДП", false, Modifier.weight(1f), Icons.Outlined.Calculate) { vm.go(Screen.Calc) } }

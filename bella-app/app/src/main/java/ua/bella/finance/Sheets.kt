@@ -334,6 +334,7 @@ private fun SettingsList(vm: BellaViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Не відновлювати", false, Modifier.weight(1f)) { vm.cancelRestore() }; Btn("Відновити", true, Modifier.weight(1f)) { vm.confirmRestore() } }
         }
     }
+    AutoBackupRows(vm)
     if (vm.backupMsg.isNotEmpty()) T(vm.backupMsg, 12.sp, if (vm.backupMsg.startsWith("Не ") || vm.backupMsg.startsWith("Це не")) C.neg else C.n500)
     SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
     SettingRow(Icons.Outlined.VerifiedUser, "Безпека", if (vm.sec.hash.isNotEmpty()) "PIN-код" + (if (vm.sec.bio) " · відбиток пальця" else "") else "Захист вимкнено", trailing = true) { vm.openSheet(Sheet.Security) }
@@ -343,6 +344,28 @@ private fun SettingsList(vm: BellaViewModel) {
     SettingRow(if (vm.light) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Тема", if (vm.light) "Світла" else "Темна") { vm.toggleTheme() }
     SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
     T("Bella Finance ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_DATE}", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
+}
+
+/** Автокопія раз на тиждень у вибрану папку (8 останніх) і нагадування про виплати ОВДП. */
+@Composable
+private fun AutoBackupRows(vm: BellaViewModel) {
+    val pickDir = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> if (uri != null) vm.chooseAutoDir(uri) }
+    val on = vm.autoDirName.isNotEmpty()
+    val last = if (vm.autoAt > 0) fmtSavedAt(vm.autoAt).ifEmpty { "—" } else "ще не було"
+    SettingRow(Icons.Outlined.Schedule, "Автокопія щотижня", if (on) "Папка «${vm.autoDirName}» · остання: $last · зберігаються $AUTO_KEEP останніх" else "Вимкнено. Виберіть папку на телефоні, наприклад Documents/Bella", trailing = true) { pickDir.launch(null) }
+    if (on) Row(Modifier.padding(start = 32.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        T("Зберегти зараз", 13.sp, C.accent400, modifier = Modifier.clickable { vm.backupNow() }.padding(vertical = 4.dp))
+        T("Змінити папку", 13.sp, C.accent400, modifier = Modifier.clickable { pickDir.launch(null) }.padding(vertical = 4.dp))
+        T("Вимкнути", 13.sp, C.neg, modifier = Modifier.clickable { vm.disableAutoBackup() }.padding(vertical = 4.dp))
+    }
+    if (vm.autoMsg.isNotEmpty()) T(vm.autoMsg, 12.sp, if (vm.autoMsg.startsWith("Не") || vm.autoMsg.startsWith("Спершу")) C.neg else C.n500, modifier = Modifier.padding(start = 32.dp))
+    val askPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> vm.setRemind(true, ok) }
+    SettingRow(Icons.Outlined.NotificationsActive, "Нагадування про ОВДП", if (vm.remindOn) "Увімкнено: за 3 дні й у день виплати купона чи погашення" else "Вимкнено") {
+        if (vm.remindOn) vm.setRemind(false)
+        else if (android.os.Build.VERSION.SDK_INT >= 33) askPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        else vm.setRemind(true, true)
+    }
+    if (vm.remindMsg.isNotEmpty()) T(vm.remindMsg, 12.sp, C.neg, modifier = Modifier.padding(start = 32.dp))
 }
 
 /** «Відмінити останні дії» — список, що розгортається: до 10 останніх змін, дотик відміняє її й усі новіші. */
@@ -381,18 +404,19 @@ private fun SecurityList(vm: BellaViewModel) {
 }
 
 private val HELP = listOf(
-    Icons.Outlined.Home to ("Головна" to "Тут чистий капітал, зміна за місяць, останні операції та розділи. Око в шапці ховає всі суми. Стрілка назад скасовує останню зміну даних. Шестерня відкриває налаштування."),
+    Icons.Outlined.Home to ("Головна" to "Тут чистий капітал, зміна за місяць, графік капіталу, останні операції та розділи. На графіку виберіть період (1М, 3М, 1Р, Усе); дотик або ведення пальцем показує капітал за день. Знімок капіталу зберігається щодня. Око в шапці ховає всі суми. Стрілка назад скасовує останню зміну даних. Шестерня відкриває налаштування."),
     Icons.Outlined.CurrencyExchange to ("Валюта" to "Кнопка з символом валюти в шапці перемикає гривню, долар, євро та злотий. Усі суми на всіх екранах перераховуються за курсами, закладеними в застосунку."),
     Icons.Outlined.Savings to ("Капітал та Рахунки" to "Показує склад капіталу: гроші на картках, заощадження, інвестиції, цілі та борги. Натисніть на рахунок, щоб змінити назву чи баланс, позначити його як заощадження або видалити. Кнопка «Переказ» переносить гроші між рахунками з конвертацією валют."),
     Icons.Outlined.Paid to ("Борги та позики" to "У розділі «Борги та позики» додайте запис «Мені винні» або «Я винен» з терміном. Дотик до запису — редагування (особа, сума, термін, напрям), часткове повернення й видалення. Позначка біля запису означає «повернено повністю»: запис зникає зі списку, а чистий капітал перераховується. Помилково прибраний запис повертає «Скасувати» або «Відмінити останні дії»."),
-    Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату."),
+    Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях (зі стовпчиками доходів і витрат: дотик до місяця показує суми) та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату."),
     Icons.Outlined.Search to ("Пошук і фільтри" to "У вкладці «Операції» є пошук за описом чи категорією, кнопки сортування за датою та сумою, фільтри за діапазоном дат і сум, а також вибір типу: усі, витрати, доходи, перекази."),
     Icons.Outlined.FileUpload to ("Імпорт виписки" to "Налаштування, Імпорт виписки. Підтримує Excel (.xlsx) з банку та CSV. Перекази між власними картками не рахуються доходом чи витратою. Якщо у файлі є повтори, з'явиться кнопка «Прибрати повтори». Файл читається лише на вашому пристрої."),
-    Icons.Outlined.TrendingUp to ("Інвестиції" to "Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. Внизу — калькулятор складного відсотка."),
+    Icons.Outlined.TrendingUp to ("Інвестиції" to "Кільцева діаграма вгорі показує структуру портфеля. Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. «Найближчі виплати ОВДП» — купони й погашення на 60 днів. Внизу — калькулятор складного відсотка."),
+    Icons.Outlined.NotificationsActive to ("Нагадування про ОВДП" to "Налаштування, Нагадування про ОВДП. Сповіщення приходить за 3 дні до виплати купона чи погашення і в день виплати, близько 9:00. Дати беруться з позиції: для позицій з калькулятора — від дати погашення з кроком виплат, для інших — від «наступної виплати» кожні 6 місяців. Суми орієнтовні."),
     Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються."),
     Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),
     Icons.Outlined.VerifiedUser to ("Безпека" to "Налаштування, Безпека: PIN-код із 4 цифр, відбиток пальця, автоблокування та ручне блокування. Після 5 хибних спроб потрібно зачекати 30 секунд."),
-    Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Стерти дані видаляє все без можливості відновлення."),
+    Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Автокопія щотижня: виберіть папку на телефоні (наприклад, Documents/Bella), і раз на тиждень туди зберігатиметься копія bella-auto-РРРР-ММ-ДД.json; лишаються 8 найновіших. Щоб копії були і в хмарі, синхронізуйте цю папку з Google Drive окремою програмою або час від часу копіюйте файл. Відновлення — «Відновити з копії». Налаштування, Стерти дані видаляє все без можливості відновлення."),
 )
 
 @Composable
