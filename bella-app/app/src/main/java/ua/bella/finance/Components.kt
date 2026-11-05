@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,7 +30,7 @@ import androidx.compose.ui.unit.sp
 
 /** Phosphor-іконки прототипу замінені на Material (Phosphor недоступний у Compose без стороннього пакета). */
 fun catIcon(cat: String): ImageVector = when (cat) {
-    "Перекази" -> Icons.Outlined.Send; "Надходження" -> Icons.Outlined.SouthWest; "Зняття готівки", "Зарплата" -> Icons.Outlined.Payments
+    "Перекази" -> Icons.AutoMirrored.Outlined.Send; "Надходження" -> Icons.Outlined.SouthWest; "Зняття готівки", "Зарплата" -> Icons.Outlined.Payments
     "Послуги" -> Icons.Outlined.Build; "Поповнення мобільного" -> Icons.Outlined.PhoneAndroid; "Побутова техніка" -> Icons.Outlined.Power
     "Харчування" -> Icons.Outlined.ShoppingCart; "Житло" -> Icons.Outlined.Home; "Транспорт" -> Icons.Outlined.DirectionsCar
     "Розваги" -> Icons.Outlined.Movie; "Здоров'я" -> Icons.Outlined.MonitorHeart; else -> Icons.Outlined.MoreHoriz
@@ -114,10 +115,10 @@ fun Dropdown(label: String, options: List<String>, selected: Int, modifier: Modi
 @Composable
 fun TopBar(title: String, vm: BellaViewModel, trailing: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconBtn(Icons.Outlined.ArrowBack, C.text) { vm.go(Screen.Home) }
+        IconBtn(Icons.AutoMirrored.Outlined.ArrowBack, C.text) { vm.go(Screen.Home) }
         T(title, 18.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f).padding(start = 4.dp), maxLines = 1)
         trailing()
-        IconBtn(Icons.Outlined.HelpOutline, C.n500) { vm.openHelp() }
+        IconBtn(Icons.AutoMirrored.Outlined.HelpOutline, C.n500) { vm.openHelp() }
     }
 }
 

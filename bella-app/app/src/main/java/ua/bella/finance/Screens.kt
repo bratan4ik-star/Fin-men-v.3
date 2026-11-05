@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -70,8 +71,8 @@ fun HomeScreen(vm: BellaViewModel) {
             Column(Modifier.weight(1f)) { T("BELLA FINANCE", 11.sp, C.n500, letter = 1.1.sp); T(monthLabel(CUR_MONTH), 18.sp, weight = FontWeight.Medium) }
             CurPicker(vm)
             IconBtn(if (vm.hide) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility) { vm.hide = !vm.hide }
-            IconBtn(Icons.Outlined.Undo, if (vm.undoN > 0) C.accent else C.n600) { vm.undo() }
-            IconBtn(Icons.Outlined.HelpOutline, C.n500) { vm.openHelp() }
+            IconBtn(Icons.AutoMirrored.Outlined.Undo, if (vm.undoN > 0) C.accent else C.n600) { vm.undo() }
+            IconBtn(Icons.AutoMirrored.Outlined.HelpOutline, C.n500) { vm.openHelp() }
             IconBtn(Icons.Outlined.Settings, C.n500) { vm.openSettings() }
         }
         Page {
@@ -93,7 +94,7 @@ fun HomeScreen(vm: BellaViewModel) {
                 SectionRow(Icons.Outlined.AccountBalanceWallet, C.accent, "Бюджет", "Доходи +${vm.m(inc)} · Витрати −${vm.m(ex)}", vm.m(t.novNet) + " " + vm.sym) { vm.go(Screen.Bud) }
                 SectionRow(Icons.Outlined.Savings, C.accent, "Капітал та Рахунки", "Картки ${vm.m(t.cash)} · Заощадження ${vm.m(t.savT)} · Інвестиції ${vm.m(t.invT)}", vm.m(t.net) + " " + vm.sym) { vm.go(Screen.Acc) }
                 SectionRow(Icons.Outlined.Calculate, GoldC, "Калькулятор ОВДП", "Дохідність, купони, прибуток", "%.2f%%".format(calcOvdp(vm.calcIn).ytm)) { vm.go(Screen.Calc) }
-                SectionRow(Icons.Outlined.TrendingUp, BlueC, "Інвестиції", "ОВДП, Депозити, ETF, Крипто", vm.m(t.invT) + " " + vm.sym) { vm.go(Screen.Inv) }
+                SectionRow(Icons.AutoMirrored.Outlined.TrendingUp, BlueC, "Інвестиції", "ОВДП, Депозити, ETF, Крипто", vm.m(t.invT) + " " + vm.sym) { vm.go(Screen.Inv) }
                 SectionRow(Icons.Outlined.Flag, PurpleC, "Цілі", "Накопичено ${vm.m(t.goalT)}", "${vm.data.goals.size} цілі") { vm.go(Screen.Goals) }
                 SectionRow(Icons.Outlined.Toll, C.pos, "Пасивний дохід", "ОВДП, Депозити, дивіденди ETF", "≈ ${vm.m(t.passM)} ${vm.sym}/міс") { vm.go(Screen.Pass) }
             }
