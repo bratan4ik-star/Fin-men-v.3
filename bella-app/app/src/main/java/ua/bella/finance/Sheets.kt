@@ -182,6 +182,9 @@ private fun IbkrForm(vm: BellaViewModel) {
         "3. Format: XML, Period: Last 365 Calendar Days. Збережіть і запишіть Query ID.\n" +
         "4. Там само: Flex Web Service Configuration → увімкнути → Generate New Token (термін — до 1 року).", 11.sp, C.n400)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+    if (vm.ibkrBusy) T("Синхронізація з IBKR… це може тривати до 4 хвилин. Не закривайте вікно.", 12.sp, C.accent400)
+    if (vm.ibkrMsg.isNotEmpty() && !vm.ibkrBusy) T(vm.ibkrMsg, 12.sp, if (vm.ibkrMsg.startsWith("IBKR") || vm.ibkrMsg.startsWith("Помилка") || vm.ibkrMsg.startsWith("Немає") || vm.ibkrMsg.startsWith("Токен")) C.neg else C.pos)
+    if (vm.ibkrOn && !vm.ibkrBusy) Btn("Закрити", false, Modifier.fillMaxWidth()) { vm.closeSheet() }
     if (vm.ibkrOn) T("Відключити IBKR (позиції лишаться, токен буде видалено)", 13.sp, C.neg, modifier = Modifier.clickable { vm.disconnectIbkr() }.padding(vertical = 4.dp))
 }
 

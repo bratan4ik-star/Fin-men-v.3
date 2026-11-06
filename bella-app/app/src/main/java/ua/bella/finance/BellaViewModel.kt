@@ -545,7 +545,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 if (q.isEmpty() || (t.isEmpty() && !ibkrOn)) { formErr = "Вкажіть токен і номер Flex-запиту (Query ID)"; return }
                 flexQueryError(q).let { if (it.isNotEmpty()) { formErr = it; return } }
                 try { IbkrStore.save(ctx, t.ifEmpty { IbkrStore.token(ctx) }, q) } catch (e: Throwable) { formErr = "Не вдалося зберегти токен на пристрої: ${e.javaClass.simpleName}"; return }
-                form = form.copy(ibTok = "", ibQ = ""); ibkrOn = true; closeSheet(); syncIbkr()
+                form = form.copy(ibTok = "", ibQ = ""); formErr = ""; ibkrOn = true; syncIbkr()  // вікно лишається відкритим, поки триває синхронізація і видно результат
             }
             Sheet.Rule -> {
                 val m = f.ruMatch.split(',').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
