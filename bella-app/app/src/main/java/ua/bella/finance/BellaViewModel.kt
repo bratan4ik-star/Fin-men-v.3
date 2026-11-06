@@ -105,9 +105,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var hiddenAt = 0L
 
     /** Читає ratesTick, щоб екрани перемальовувались після оновлення курсів. */
-    private fun r(c: String): Double { if (ratesTick < 0) return 1.0; return RATES[c]!! }
+    private fun r(c: String): Double { if (ratesTick < 0) return 1.0; return rateOf(c) }
     val rate get() = r(cur)
-    val sym get() = SYM[cur]!!.trim()
+    val sym get() = (SYM[cur] ?: cur).trim()
     fun cv(v: Double) = v / rate
     fun m(v: Double) = if (hide) "••••" else fmtInt(cv(v))
     fun base(a: Account) = a.bal * r(a.cur)
@@ -420,7 +420,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val fx = f.group == "ETF" && f.pCur != "UAH" && RATES.containsKey(f.pCur)
         val ticker = old?.ticker ?: ""  // лише зі старих даних, для зіставлення з IBKR
         if (fx) {
-            val rateNow = RATES[f.pCur]!!; val pxB = parseNum(f.pBuy); val pxN = parseNum(f.pNow).takeIf { it > 0 } ?: pxB
+            val rateNow = rateOf(f.pCur); val pxB = parseNum(f.pBuy); val pxN = parseNum(f.pNow).takeIf { it > 0 } ?: pxB
             val bfx = parseNum(f.pFx).takeIf { it > 0 } ?: rateNow
             return Pos(f.group, f.pName.trim(), q, pxB * bfx, pxN * rateNow, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc,
                 cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L,
@@ -461,9 +461,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 val fa = s.accs.getOrNull(f.from); val ta = s.accs.getOrNull(f.to); val amt = parseNum(f.amount)
                 formErr = when { fa == null || ta == null -> "Оберіть обидва рахунки"; f.from == f.to -> "Оберіть різні рахунки"; amt <= 0 -> "Вкажіть суму більше нуля"; amt > fa.bal -> "Недостатньо коштів на рахунку"; else -> "" }
                 if (formErr.isEmpty() && fa != null && ta != null) {
-                    val conv = amt * RATES[fa.cur]!! / RATES[ta.cur]!!
+                    val conv = amt * rateOf(fa.cur) / rateOf(ta.cur)
                     val ids = ensureAccIds(s); val fid = ids.accs[f.from].id; val tid = ids.accs[f.to].id
-                    commit(addTx(ids, Tx("Переказ: ${fa.name} → ${ta.name}", "Перекази", "transfer", amt * RATES[fa.cur]!!, todayIso(), "", fid, amt, tid, conv))); closeSheet()
+                    commit(addTx(ids, Tx("Переказ: ${fa.name} → ${ta.name}", "Перекази", "transfer", amt * rateOf(fa.cur), todayIso(), "", fid, amt, tid, conv))); closeSheet()
                 }
             }
             Sheet.Acc -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else { commit(s.copy(accs = s.accs + Account(f.name.trim(), f.cur, parseNum(f.bal), cash = f.cashF))); closeSheet() }
@@ -510,13 +510,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             }
             Sheet.Rec -> {
                 val r = s.recurring.getOrNull(f.rIdx) ?: run { closeSheet(); return }
-                val amt = parseNum(f.tAmt); val day = f.rDay.trim().toIntOrNull()
-                formErr = when { amt <= 0 -> "Вкажіть суму більше нуля"; day == null || day !in 1..31 -> "Число місяця від 1 до 31"; else -> "" }
-                if (formErr.isNotEmpty()) return
+                val amt = parseNum(f.tAmt); val day = f.rDay.trim().toIntOrNull()?.takeIf { it in 1..31 }
+                formErr = when { amt <= 0 -> "Вкажіть суму більше нуля"; day == null -> "Число місяця від 1 до 31"; else -> "" }
+                if (formErr.isNotEmpty() || day == null) return
                 // сума у валюті рахунку, якщо він є й існує; інакше у валюті перегляду
                 val acc = s.accs.firstOrNull { it.id == r.acc }
                 val uah = amt * (if (acc != null) RATES[acc.cur] ?: 1.0 else rate)
-                val nr = r.copy(desc = f.tDesc.trim().ifEmpty { r.cat }, amt = uah, accAmt = if (acc != null) amt else 0.0, day = day!!, active = f.rActive,
+                val nr = r.copy(desc = f.tDesc.trim().ifEmpty { r.cat }, amt = uah, accAmt = if (acc != null) amt else 0.0, day = day, active = f.rActive,
                     next = if (day != r.day) clampDay(java.time.YearMonth.from(LocalDate.parse(r.next)), day).let { d -> if (d.isBefore(LocalDate.parse(TODAY))) nextMonthly(d, day) else d }.toString() else r.next)
                 commit(s.copy(recurring = s.recurring.mapIndexed { i, x -> if (i == f.rIdx) nr else x })); closeSheet()
             }

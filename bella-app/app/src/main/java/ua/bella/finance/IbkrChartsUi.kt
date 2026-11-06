@@ -51,7 +51,7 @@ fun MultiLine(series: List<LSeries>, height: Dp, fmtV: (Double) -> String, zero:
     if (hi - lo < 1e-9) { hi += 1; lo -= 1 }
     val pad = (hi - lo) * 0.06; lo -= pad; hi += pad
     val at = sel?.let { f -> x0 + Math.round(f * (x1 - x0)) }
-    fun near(s: LSeries, x: Long) = s.pts.minByOrNull { Math.abs(it.first - x) }!!
+    fun near(s: LSeries, x: Long) = s.pts.minBy { Math.abs(it.first - x) }  // ss містить лише ряди з ≥ 2 точками
     val grid = C.divider; val axis = C.n500; val dotC = C.text
     Column {
         // шапка: дата й значення під пальцем, інакше назви й останні значення

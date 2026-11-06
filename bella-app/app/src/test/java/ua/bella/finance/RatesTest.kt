@@ -34,4 +34,8 @@ class RatesTest {
         assertEquals(120.0, convertAmount(100.0, "EUR", "USD", m), 1e-9)
         assertEquals(100.0, convertAmount(100.0, "PLN", "PLN", m), 1e-9)
     }
+
+    @Test fun unknownCurrencyDoesNotCrash() {
+        assertEquals(1.0, rateOf("XYZ"), 1e-9); assertEquals(RATES["USD"]!!, rateOf("USD"), 1e-9)
+    }
 }

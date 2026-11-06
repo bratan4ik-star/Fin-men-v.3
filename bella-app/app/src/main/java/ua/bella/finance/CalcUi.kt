@@ -90,7 +90,7 @@ fun FireSection(vm: BellaViewModel, capitalUah: Double, avgYieldPct: Double) {
         "yield" to String.format(java.util.Locale.US, "%.1f", avgYieldPct), "infl" to (if (vm.cur == "UAH") "8" else "3"),
         "swr" to "4", "target" to Math.round(vm.avgMonthlyExpenseUah() / vm.rate).toString(),
     )
-    fun v(k: String) = f[k] ?: defs[k]!!
+    fun v(k: String) = f[k] ?: defs[k] ?: ""
     fun lbl(k: String, t: String) = t + if (f.containsKey(k)) " ✎" else ""
     Collapsible("Прогноз фінансової незалежності", startOpen = true) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

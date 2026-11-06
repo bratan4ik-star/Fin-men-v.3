@@ -244,7 +244,7 @@ object Importer {
     private fun readRows(rows: List<Map<String, String>>, rules: List<CatRule>): ImportResult? {
         val hi = rows.indexOfFirst { findCols(it) != null }
         if (hi < 0) return null
-        val c = findCols(rows[hi])!!
+        val c = findCols(rows[hi]) ?: return null
         val txs = mutableListOf<Tx>(); val accs = mutableListOf<Account>(); val seen = HashSet<String>(); var bad = 0
         rows.drop(hi + 1).forEach { r ->
             fun g(col: String?) = col?.let { r[it] } ?: ""

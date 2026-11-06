@@ -6,6 +6,8 @@ import java.util.Locale
 /** Курси до гривні. Початкові значення з прототипу; після «Оновити курси» підміняються курсами НБУ (змінюється лише з головного потоку). */
 val RATES: MutableMap<String, Double> = mutableMapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0, "GBP" to 54.0, "CHF" to 49.0)
 val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł", "GBP" to "£", "CHF" to "Fr")
+/** Курс валюти до гривні; невідома валюта (напр. з пошкодженої копії) — 1, щоб застосунок не падав. */
+fun rateOf(cur: String): Double = RATES[cur]?.takeIf { it > 0 } ?: 1.0
 val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN", "GBP", "CHF")
 /** Сьогоднішня дата і поточний місяць телефону (раніше були зафіксовані на 2026-11-02 з прототипу). */
 val TODAY: String get() = java.time.LocalDate.now().toString()

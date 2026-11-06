@@ -69,7 +69,7 @@ private fun TransferForm(vm: BellaViewModel) {
     Field("Сума (${fa?.cur ?: ""})", f.amount, hint = "0", numeric = true) { vm.form = f.copy(amount = it) }
     val hint = when {
         f.from == f.to -> "Оберіть різні рахунки"; fa != null && amt > fa.bal -> "Недостатньо коштів"
-        amt > 0 && fa != null && ta != null -> "Надійде ${Math.round(amt * RATES[fa.cur]!! / RATES[ta.cur]!! * 100) / 100.0} ${ta.cur}"; else -> ""
+        amt > 0 && fa != null && ta != null -> "Надійде ${Math.round(amt * rateOf(fa.cur) / rateOf(ta.cur) * 100) / 100.0} ${ta.cur}"; else -> ""
     }
     T(hint, 12.sp, C.n500)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
