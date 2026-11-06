@@ -13,6 +13,8 @@ import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -469,12 +471,25 @@ fun InvScreen(vm: BellaViewModel) {
             }
             val up = vm.upcomingOvdp()
             if (up.isNotEmpty()) Column {
-                SectionHead("Найближчі виплати ОВДП", if (vm.remindOn) "нагадування увімк." else "нагадування вимк.", C.n500)
+                SectionHead("Найближчі виплати ОВДП", "календар →", C.accent) {
+                    vm.calcTab = 1
+                    vm.go(Screen.Calc)
+                }
                 up.take(5).forEach { e ->
                     Div()
-                    Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            vm.calcTab = 1
+                            vm.go(Screen.Calc)
+                        }.padding(vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         T(ddmmyy(e.date.toString()), 12.sp, C.n500)
-                        Column(Modifier.weight(1f)) { T(e.name, 13.sp, maxLines = 1); T(if (e.maturity) "погашення" + (if (e.coupon > 0) " + купон" else "") else "купон", 11.sp, C.n500) }
+                        Column(Modifier.weight(1f)) {
+                            T(e.name, 13.sp, maxLines = 1)
+                            T(if (e.maturity) "погашення" + (if (e.coupon > 0) " + купон" else "") else "купон", 11.sp, C.n500)
+                        }
                         T("+" + vm.m(e.total) + " " + vm.sym, 13.sp, C.pos, FontWeight.Medium, maxLines = 1)
                     }
                 }
@@ -562,55 +577,170 @@ fun PassScreen(vm: BellaViewModel) {
     }
 }
 
-// ================= КАЛЬКУЛЯТОР ОВДП =================
+// ================= КАЛЬКУЛЯТОР ТА КАЛЕНДАР ОВДП =================
 @Composable
 fun CalcScreen(vm: BellaViewModel) {
+    var tab by remember(vm.calcTab) { mutableStateOf(vm.calcTab) }
     val s = vm.calcIn; val c = calcOvdp(s)
-    fun n2(v: Double) = fmt2(v) + " ₴"
-    fun sg(v: Double) = (if (v >= 0) "+" else "−") + fmt2(Math.abs(v)) + " ₴"
+    val curSign = curSign(s.cur)
+    val fxRate = RATES[s.cur] ?: 1.0
+    fun curFmt(v: Double) = fmt2(v) + " " + curSign
+    fun sg(v: Double) = (if (v >= 0) "+" else "−") + fmt2(Math.abs(v)) + " " + curSign
+
     Column(Modifier.fillMaxSize()) {
-        TopBar("Калькулятор ОВДП", vm)
+        TopBar("ОВДП та Інвестиції", vm)
         Page {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Field("ISIN / назва", s.isin, hint = "UA4000236228") { vm.calcIn = s.copy(isin = it) }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Номінал (₴)", s.nom, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(nom = it) }; Field("Ставка купона, %", s.coupon, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(coupon = it) } }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { DateField("Дата купівлі", s.buy, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(buy = it) }; DateField("Дата погашення", s.mat, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(mat = it) } }
-                if (s.freq == 0) DateField("Початок купона (випуск)", s.issue, hint = "РРРР-ММ-ДД · порожньо = дата купівлі") { vm.calcIn = s.copy(issue = it) }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна купівлі (₴)", s.price, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(price = it) }; Field("Кількість", s.qty, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(qty = it) } }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Ціна продажу (₴)", s.sell, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(sell = it) }; DateField("Дата продажу", s.sellD, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(sellD = it) } }
-                T("Виплата купона", 12.sp, C.n500)
-                Seg(listOf(1 to "Щомісяця", 3 to "Щокв.", 6 to "6 міс.", 12 to "Рік", 0 to "В кінці"), s.freq) { vm.calcIn = s.copy(freq = it) }
+            // Перемикач режимів: Калькулятор, Календар виплат, Розподіл ОВДП, або Реінвестування
+            Seg(listOf(0 to "Калькулятор", 1 to "Календар", 2 to "Розподіл", 3 to "Реінвестування"), tab) {
+                tab = it
+                vm.calcTab = it
             }
-            Column {
-                Label("ДОХІДНІСТЬ ДО ПОГАШЕННЯ")
-                T("%.2f%%".format(c.ytm), 32.sp, C.pos, FontWeight.Medium, Modifier.padding(top = 4.dp))
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) { T(if (c.days > 0) "До погашення ${c.days} дн." else "Погашено", 11.sp, C.n500); T("${c.prog}%", 11.sp, C.n500) }
-                Bar(c.prog / 100f, C.accent, 4.dp, Modifier.padding(top = 4.dp))
-            }
-            Column { listOf("Кількість паперів" to "${fmtInt(c.qty.toDouble())} шт.", "Вкладення" to n2(c.inv), "Купонні виплати" to "+" + n2(c.cpn), "Різниця з номіналом" to sg(c.disc), "Усього отримаю" to n2(c.total), "Чистий прибуток" to sg(c.cpn + c.disc)).forEach { (a, b) ->
-                Div(); Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), horizontalArrangement = Arrangement.SpaceBetween) { T(a, 13.sp, C.n500); T(b, 13.sp, weight = FontWeight.Medium) }
-            } }
-            if (c.hasSell) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Label("ДОХІДНІСТЬ ПРОДАЖУ"); T("%.2f%%".format(c.sYield), 24.sp, if (c.sProfit >= 0) C.pos else C.neg, FontWeight.Medium)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T("Виручка", 13.sp, C.n500); T(n2(c.sTotal), 13.sp) }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T("Прибуток разом з купонами", 13.sp, C.n500); T(sg(c.sProfit), 13.sp, if (c.sProfit >= 0) C.pos else C.neg, FontWeight.Medium) }
-            }
-            Column {
-                Label("ГРАФІК ВИПЛАТ")
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) { T("Дата", 11.sp, C.n500, modifier = Modifier.weight(1.2f)); T("Виплата", 11.sp, C.n500, modifier = Modifier.weight(1f)); T("Я отримаю", 11.sp, C.n500, modifier = Modifier.weight(1f)) }
-                c.sched.forEach { r ->
-                    Div(); Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Row(Modifier.weight(1.2f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Ico(if (r.paid) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule, if (r.paid) C.pos else C.n500, 16.dp)
-                            Column { T("%02d.%02d.%d".format(r.date.dayOfMonth, r.date.monthValue, r.date.year), 12.sp); T(r.kind, 10.sp, C.n500, maxLines = 1) }
-                        }
-                        T(fmt2(r.amount), 12.sp, modifier = Modifier.weight(1f), maxLines = 1); T(fmt2(r.cum), 12.sp, C.n500, modifier = Modifier.weight(1f), maxLines = 1)
+
+            if (tab == 0) {
+                // Швидкі пресети випусків
+                OvdpPresetsRow(s.isin) { preset ->
+                    vm.calcIn = s.copy(
+                        isin = preset.isin,
+                        nom = preset.nom,
+                        coupon = preset.coupon,
+                        freq = preset.freq,
+                        mat = preset.mat,
+                        issue = preset.issue,
+                        cur = preset.cur
+                    )
+                }
+
+                // Вибір валюти паперу
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    T("Валюта облігації", 12.sp, C.n500)
+                    Seg(listOf("UAH" to "UAH ₴", "USD" to "USD $", "EUR" to "EUR €"), s.cur) {
+                        vm.calcIn = s.copy(cur = it)
                     }
                 }
-                Div(); Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) { T("ВСЬОГО", 12.sp, weight = FontWeight.Medium); T(n2(c.total), 12.sp, weight = FontWeight.Medium) }
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Field("ISIN / назва", s.isin, hint = "UA4000236228") { vm.calcIn = s.copy(isin = it) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Field("Номінал ($curSign)", s.nom, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(nom = it) }
+                        Field("Ставка купона, %", s.coupon, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(coupon = it) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DateField("Дата купівлі", s.buy, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(buy = it) }
+                        DateField("Дата погашення", s.mat, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(mat = it) }
+                    }
+                    if (s.freq == 0) {
+                        DateField("Початок купона (випуск)", s.issue, hint = "РРРР-ММ-ДД · порожньо = дата купівлі") { vm.calcIn = s.copy(issue = it) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Field("Ціна купівлі ($curSign)", s.price, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(price = it) }
+                        Field("Кількість (шт.)", s.qty, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(qty = it) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Field("Ціна продажу ($curSign)", s.sell, Modifier.weight(1f), numeric = true) { vm.calcIn = s.copy(sell = it) }
+                        DateField("Дата продажу", s.sellD, Modifier.weight(1f), "РРРР-ММ-ДД") { vm.calcIn = s.copy(sellD = it) }
+                    }
+                    T("Виплата купона", 12.sp, C.n500)
+                    Seg(listOf(1 to "Щомісяця", 3 to "Щокв.", 6 to "6 міс.", 12 to "Рік", 0 to "В кінці"), s.freq) { vm.calcIn = s.copy(freq = it) }
+                }
+
+                // Дохідність до погашення
+                Column {
+                    Label("ДОХІДНІСТЬ ДО ПОГАШЕННЯ (YTM)")
+                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        T("%.2f%%".format(c.ytm), 32.sp, C.pos, FontWeight.Bold)
+                        T("річних (чистими)", 13.sp, C.n500, modifier = Modifier.padding(bottom = 4.dp))
+                    }
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        T(if (c.days > 0) "До погашення ${c.days} дн." else "Погашено", 11.sp, C.n500)
+                        T("${c.prog}% строку", 11.sp, C.n500)
+                    }
+                    Bar(c.prog / 100f, C.accent, 4.dp, Modifier.padding(top = 4.dp))
+                }
+
+                // Картка податкової переваги над депозитом (0% vs 23%)
+                DepositAdvantageCard(c.ytm, s.cur, c.inv)
+
+                // Деталізований фінансовий підсумок
+                Column {
+                    val rows = mutableListOf(
+                        "Кількість паперів" to "${fmtInt(c.qty.toDouble())} шт.",
+                        "Вкладення" to curFmt(c.inv) + if (s.cur != "UAH") " (≈ ${vm.m(c.inv * fxRate)} ₴)" else "",
+                        "Чиста ціна / папір" to curFmt(c.cleanPrice),
+                        "НКД на дату купівлі" to curFmt(c.accruedInterest) + " / шт.",
+                        "Купонні виплати" to "+" + curFmt(c.cpn),
+                        "Різниця з номіналом" to sg(c.disc),
+                        "Усього отримаю" to curFmt(c.total) + if (s.cur != "UAH") " (≈ ${vm.m(c.total * fxRate)} ₴)" else "",
+                        "Чистий прибуток" to sg(c.cpn + c.disc) + if (s.cur != "UAH") " (≈ ${vm.m((c.cpn + c.disc) * fxRate)} ₴)" else ""
+                    )
+                    rows.forEach { (a, b) ->
+                        Div()
+                        Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            T(a, 13.sp, C.n500)
+                            T(b, 13.sp, weight = FontWeight.Medium)
+                        }
+                    }
+                }
+
+                // Достроковий продаж (якщо заданий)
+                if (c.hasSell) Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Label("ДОХІДНІСТЬ ПРИ ДОСТРОКОВОМУ ПРОДАЖУ")
+                    T("%.2f%%".format(c.sYield), 24.sp, if (c.sProfit >= 0) C.pos else C.neg, FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        T("Виручка від продажу", 13.sp, C.n500)
+                        T(curFmt(c.sTotal), 13.sp)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        T("Прибуток разом з отриманими купонами", 13.sp, C.n500)
+                        T(sg(c.sProfit), 13.sp, if (c.sProfit >= 0) C.pos else C.neg, FontWeight.SemiBold)
+                    }
+                }
+
+                // Графік виплат для цього випуску
+                Column {
+                    Label("ГРАФІК ВИПЛАТ ВИПУСКУ")
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
+                        T("Дата", 11.sp, C.n500, modifier = Modifier.weight(1.2f))
+                        T("Виплата", 11.sp, C.n500, modifier = Modifier.weight(1f))
+                        T("Накопичено", 11.sp, C.n500, modifier = Modifier.weight(1f))
+                    }
+                    c.sched.forEach { r ->
+                        Div()
+                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.weight(1.2f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Ico(if (r.paid) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule, if (r.paid) C.pos else C.n500, 16.dp)
+                                Column {
+                                    T("%02d.%02d.%d".format(r.date.dayOfMonth, r.date.monthValue, r.date.year), 12.sp)
+                                    T(r.kind, 10.sp, C.n500, maxLines = 1)
+                                }
+                            }
+                            T(curFmt(r.amount), 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                            T(curFmt(r.cum), 12.sp, C.n500, modifier = Modifier.weight(1f), maxLines = 1)
+                        }
+                    }
+                    Div()
+                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        T("ВСЬОГО ДО ВИПЛАТИ", 12.sp, weight = FontWeight.SemiBold)
+                        T(curFmt(c.total), 12.sp, weight = FontWeight.Bold)
+                    }
+                }
+
+                T("Військові та звичайні ОВДП для фізичних осіб повністю звільнені від оподаткування (0% ПДФО, 0% ВЗ).", 11.sp, C.n500)
+                Btn("Додати в інвестиції", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) {
+                    vm.addCalcToInv()
+                }
+            } else if (tab == 1) {
+                // Вкладка 1: Зведений календар та візуальний графік портфеля ОВДП
+                OvdpPortfolioCalendarSection(vm)
+            } else if (tab == 2) {
+                // Вкладка 2: Кругова діаграма розподілу ОВДП (за валютою та термінами погашення)
+                OvdpDistributionSection(vm)
+            } else {
+                // Вкладка 3: Симулятор складного відсотка при реінвестуванні купонів ОВДП
+                OvdpReinvestmentSection(vm)
             }
-            T("ОВДП для фізичних осіб не оподатковуються. Дохідність проста, у річних.", 11.sp, C.n500)
-            Btn("Додати в інвестиції", true, Modifier.fillMaxWidth(), Icons.Outlined.Add) { vm.addCalcToInv() }
         }
     }
 }

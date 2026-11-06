@@ -92,7 +92,7 @@ class IbkrChartsShotTest {
             vm.commit(vm.data.copy(pos = vm.data.pos.filterNot { it.src == "ibkr" } + Pos("ETF", "VOO", 0.7332, 0.0, 0.0, cur = "USD", pxBuy = 702.95, pxNow = 680.56, buyFx = 41.2, src = "ibkr", ibSym = "VOO")))
             vm.ibkr.seed((0..66).map { HistPoint(start.plusDays(it.toLong()).toString(), 500.0 + it % 9) }, emptyList())
         }
-        rule.setContent { BellaTheme(vm.light) { InvScreen(vm) } }
+        rule.setContent { BellaTheme(vm.light) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(C.bg)) { InvScreen(vm) } } }
         shot("09-investments-ibkr-card")
     }
 }

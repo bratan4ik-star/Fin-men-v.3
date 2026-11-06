@@ -38,9 +38,17 @@ object Jobs {
     fun schedule(ctx: Context) {
         val now = LocalDateTime.now()
         var at = now.toLocalDate().atTime(9, 0); if (!at.isAfter(now)) at = at.plusDays(1)
+        val initialDelayMinutes = Duration.between(now, at).toMinutes().coerceAtLeast(1)
         val req = PeriodicWorkRequestBuilder<DailyWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(Duration.between(now, at).toMinutes(), TimeUnit.MINUTES).build()
-        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("bella-daily", ExistingPeriodicWorkPolicy.KEEP, req)
+            .setInitialDelay(initialDelayMinutes, TimeUnit.MINUTES)
+            .build()
+        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("bella-daily", ExistingPeriodicWorkPolicy.UPDATE, req)
+    }
+
+    /** Запуск негайної фонової перевірки через WorkManager (OneTimeWorkRequest). */
+    fun runImmediateCheck(ctx: Context) {
+        val req = androidx.work.OneTimeWorkRequestBuilder<DailyWorker>().build()
+        WorkManager.getInstance(ctx).enqueue(req)
     }
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -126,15 +134,89 @@ object Jobs {
         val due = remindersDue(ovdpEvents(st.data.pos, today, today.plusDays(3)), today, notified)
         if (due.isEmpty()) { p.edit().putStringSet("notified", notified).apply(); return }
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CHANNEL, "Виплати ОВДП", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "Купони й погашення ОВДП: за 3 дні й у день виплати" })
-        val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        if (Build.VERSION.SDK_INT >= 26) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL, "Виплати ОВДП", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Купони й погашення ОВДП: за 3 дні й у день виплати"
+                    enableVibration(true)
+                }
+            )
+        }
+        val open = PendingIntent.getActivity(
+            ctx,
+            0,
+            Intent(ctx, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra("screen", "calc")
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
         due.forEach { r ->
             val n = NotificationCompat.Builder(ctx, CHANNEL).setSmallIcon(R.drawable.ic_launcher_monochrome)
-                .setContentTitle(reminderTitle(r)).setContentText(reminderText(r)).setStyle(NotificationCompat.BigTextStyle().bigText(reminderText(r)))
-                .setContentIntent(open).setAutoCancel(true).build()
+                .setContentTitle(reminderTitle(r))
+                .setContentText(reminderText(r, RATES))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(reminderText(r, RATES)))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .build()
             try { NotificationManagerCompat.from(ctx).notify(r.key.hashCode(), n) } catch (_: SecurityException) {}
         }
         p.edit().putStringSet("notified", notified + due.map { it.key }).apply()
+    }
+
+    /** Надсилає тестове сповіщення про ОВДП для миттєвої перевірки на пристрої користувача. */
+    fun sendTestOvdpNotification(ctx: Context): String {
+        if (!canNotify(ctx)) return "Сповіщення вимкнені у налаштуваннях Android. Дозвольте їх, будь ласка."
+        val st = state(ctx)
+        val today = LocalDate.parse(TODAY)
+        val nextEvents = if (st != null) ovdpEvents(st.data.pos, today, today.plusDays(365)) else emptyList()
+        val testEvent = nextEvents.firstOrNull() ?: OvdpEvent(
+            date = today.plusDays(3),
+            name = "ОВДП UA4000227045 (тест)",
+            coupon = 85.50,
+            principal = 1000.0,
+            cur = "UAH"
+        )
+        val daysLeft = java.time.temporal.ChronoUnit.DAYS.between(today, testEvent.date).coerceAtLeast(0)
+        val testReminder = Reminder("test|${testEvent.name}|${testEvent.date}", testEvent, daysLeft == 0L, daysLeft)
+
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL, "Виплати ОВДП", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Купони й погашення ОВДП: за 3 дні й у день виплати"
+                    enableVibration(true)
+                }
+            )
+        }
+
+        val open = PendingIntent.getActivity(
+            ctx,
+            0,
+            Intent(ctx, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra("screen", "calc")
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setContentTitle("🔔 " + reminderTitle(testReminder))
+            .setContentText(reminderText(testReminder, RATES))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(reminderText(testReminder, RATES)))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+
+        return try {
+            NotificationManagerCompat.from(ctx).notify(9999, n)
+            "Тестове сповіщення про виплату надіслано!"
+        } catch (_: SecurityException) {
+            "Немає дозволу на надсилання сповіщень"
+        }
     }
 }
 

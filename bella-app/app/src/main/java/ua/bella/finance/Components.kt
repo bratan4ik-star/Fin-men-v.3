@@ -38,8 +38,8 @@ fun catIcon(cat: String): ImageVector = when (cat) {
 fun goalIcon(k: String): ImageVector = when (k) { "shield" -> Icons.Outlined.VerifiedUser; "plane" -> Icons.Outlined.Flight; "laptop" -> Icons.Outlined.Laptop; else -> Icons.Outlined.Flag }
 
 @Composable
-fun T(text: String, size: TextUnit = 14.sp, color: Color = C.text, weight: FontWeight = FontWeight.Normal, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE, strike: Boolean = false, letter: TextUnit = TextUnit.Unspecified) =
-    Text(text, modifier, color = color, fontSize = size, fontWeight = weight, maxLines = maxLines, overflow = TextOverflow.Ellipsis, letterSpacing = letter,
+fun T(text: String, size: TextUnit = 14.sp, color: Color = C.text, weight: FontWeight = FontWeight.Normal, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE, strike: Boolean = false, letter: TextUnit = TextUnit.Unspecified, lineHeight: TextUnit = TextUnit.Unspecified) =
+    Text(text, modifier, color = color, fontSize = size, fontWeight = weight, maxLines = maxLines, overflow = TextOverflow.Ellipsis, letterSpacing = letter, lineHeight = lineHeight,
         textDecoration = if (strike) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
 
 @Composable fun Label(text: String) = T(text, 11.sp, C.n500, letter = .08.sp)

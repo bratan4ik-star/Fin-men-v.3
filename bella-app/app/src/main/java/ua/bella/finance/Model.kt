@@ -43,7 +43,7 @@ val DEFAULT_RULES = listOf(
     val acc: String = "", val accAmt: Double = 0.0, val toAcc: String = "", val toAmt: Double = 0.0,
 )
 @Serializable data class Debt(val who: String, val owedToMe: Boolean, val amt: Double, val done: Boolean = false, val due: String = "")
-@Serializable data class CalcExtra(val isin: String, val nom: Double, val freq: Int, val sell: String, val sellD: String, val buy: String)
+@Serializable data class CalcExtra(val isin: String, val nom: Double, val freq: Int, val sell: String, val sellD: String, val buy: String, val cur: String = "UAH")
 @Serializable data class Pos(val group: String, val name: String, val qty: Double, val buy: Double, val now: Double, val mat: String = "", val rate: Double = 0.0, val next: String = "", val calc: CalcExtra? = null,
     /** Депозит: щомісячна виплата відсотків у дохід на рахунок payAcc («» = без рахунку). */
     val monthly: Boolean = false, val payAcc: String = "",
@@ -121,6 +121,7 @@ object DemoData {
     val pos = listOf(
         Pos("ОВДП", "ОВДП UA4000227045", 100.0, 960.0, 985.0, "2027-05-12", 15.5, "2026-12-10"),
         Pos("ОВДП", "ОВДП UA4000225981", 50.0, 990.0, 1010.0, "2028-03-15", 16.0, "2027-01-20"),
+        Pos("ОВДП", "ОВДП валютні USD (приклад)", 2.0, 1000.0, 1000.0, "2027-04-20", 4.5, "2027-04-20", cur = "USD", calc = CalcExtra("UA4000229876", 1000.0, 6, "", "", "2026-04-20", "USD")),
         Pos("Депозити", "Депозит Моно, 12 міс.", 1.0, 50000.0, 52100.0, "2027-03-01", 13.0, "2026-12-01"),
         Pos("Депозити", "Депозит Приват, 6 міс.", 1.0, 25000.0, 26400.0, "2027-01-15", 12.5, "2026-12-15"),
         Pos("ETF", "VWCE", 20.0, 2300.0, 2480.0, "", 2.0, "2026-12-20"),
