@@ -438,7 +438,8 @@ fun InvScreen(vm: BellaViewModel) {
                                     val sp = plSplit(p, RATES); fun sg(v: Double) = (if (v >= 0) "+" else "−") + vm.m(Math.abs(v)) + " " + vm.sym
                                     val plc = posValueCur(p) - posCostCur(p)
                                     T("≈ ${vm.m(value)} ${vm.sym} · прибуток " + (if (plc >= 0) "+" else "−") + fx(Math.abs(plc)), 11.sp, if (plc >= 0) C.pos else C.neg, maxLines = 1)
-                                    T("ціна ${fx(p.pxNow)}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
+                                    if (fxPlausible(p.buyFx, RATES[p.cur] ?: 0.0)) T("ціна ${fx(p.pxNow)}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
+                                    else T("Курс купівлі ${fmt2(p.buyFx)} ₴ за 1 ${p.cur} схожий на помилку (НБУ ${fmt2(RATES[p.cur] ?: 0.0)}), тому вартість купівлі в гривнях неправильна. Торкніться позиції й виправте «Курс купівлі» або очистіть його.", 11.sp, C.neg, maxLines = 4)
                                 } else if (p.ticker.isNotEmpty()) T(p.ticker, 11.sp, C.n500)
                                 T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
                             }

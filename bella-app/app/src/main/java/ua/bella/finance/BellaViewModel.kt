@@ -379,10 +379,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             val rateNow = RATES[f.pCur]!!; val pxB = parseNum(f.pBuy); val pxN = parseNum(f.pNow).takeIf { it > 0 } ?: pxB
             val bfx = parseNum(f.pFx).takeIf { it > 0 } ?: rateNow
             return Pos(f.group, f.pName.trim(), q, pxB * bfx, pxN * rateNow, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc,
-                cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L)
+                cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L,
+                src = old?.src ?: "", ibSym = old?.ibSym ?: "")
         }
         val b = parseNum(f.pBuy) * rate; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * rate
-        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker)
+        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker,
+            src = old?.src ?: "", ibSym = old?.ibSym ?: "")
     }
 
     // ---------- котирування ETF ----------
@@ -481,14 +483,14 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 val o = s.pos.getOrNull(f.editIdx) ?: run { closeSheet(); return }
                 val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
                 val np = posFromForm(f, q, monthly, o)
-                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
+                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }; if (formErr.isNotEmpty()) return
                 open = open + f.group
                 commit(processDepositPayouts(s.copy(pos = s.pos.mapIndexed { i, x -> if (i == f.editIdx) np else x }), todayIso(), RATES)); closeSheet()
             }
             Sheet.Pos -> {
                 val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
                 val np = posFromForm(f, q, monthly, null)
-                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
+                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }; if (formErr.isNotEmpty()) return
                 open = open + f.group
                 commit(processDepositPayouts(s.copy(pos = s.pos + np), todayIso(), RATES)); closeSheet()
             }

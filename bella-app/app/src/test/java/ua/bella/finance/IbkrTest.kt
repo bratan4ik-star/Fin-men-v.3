@@ -60,6 +60,24 @@ class IbkrTest {
         assertFalse(st.ok); assertEquals("1015", st.code); assertEquals("Token is invalid.", st.message)
     }
 
+    @Test fun error1020IsExplained() {
+        val st = parseFlexStatus("<FlexStatementResponse timestamp='x'><Status>Fail</Status><ErrorCode>1020</ErrorCode><ErrorMessage>Invalid request or unable to validate request.</ErrorMessage></FlexStatementResponse>")!!
+        assertFalse(st.retry); assertTrue(flexError(st).contains("Query ID"))
+    }
+
+    @Test fun implausibleBuyFxIsDetectedAndNotKeptOnSync() {
+        // VOO зі скріншота: курс купівлі ≈703 ₴/$ замість ≈45
+        val voo = Pos("ETF", "VOO", 0.7332, 691.32 * 703, 673.97 * 45.44, cur = "USD", pxBuy = 691.32, pxNow = 673.97, buyFx = 703.0, ticker = "VOO")
+        val r = mapOf("UAH" to 1.0, "USD" to 45.44)
+        assertFalse(fxPlausible(703.0, 45.44)); assertTrue(fxPlausible(41.0, 45.44))
+        assertTrue(fxFormError(voo, r).contains("не схожий"))
+        assertEquals("", fxFormError(voo.copy(buyFx = 41.2), r))
+        val xml = statement.replace("symbol=\"VWRA\"", "symbol=\"VOO\"")
+        val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = listOf(voo), goals = emptyList(), demo = false)
+        val synced = applyFlex(d, parseFlexStatement(xml), r + ("EUR" to 48.0), 0L).first.pos.first { it.name == "VOO" }
+        assertEquals(45.44, synced.buyFx, 1e-9)
+    }
+
     @Test fun dates() {
         assertEquals("2026-11-05", flexDate("20261105")); assertEquals("2026-11-05", flexDate("2026-11-05")); assertEquals("2026-11-05", flexDate("20261105;101500"))
         assertEquals("2026-11-05", flexDate("11/05/2026")); assertEquals("", flexDate("щось"))

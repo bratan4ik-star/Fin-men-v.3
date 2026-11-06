@@ -52,6 +52,7 @@ fun flexError(s: FlexStatus): String = when (s.code) {
     "1013" -> "IBKR не приймає запити з цієї IP-адреси: у налаштуваннях Flex Web Service вимкніть обмеження IP."
     "1011" -> "Flex Web Service вимкнено для рахунку. Увімкніть його в Account Management."
     "1018" -> "Забагато запитів до IBKR. Спробуйте за хвилину."
+    "1020" -> "IBKR не прийняв запит (1020): токен і Query ID не підходять одне до одного. Перевірте, що Query ID — це номер саме Activity Flex Query (число в списку Flex Queries, не назва), токен створено в тому самому логіні IBKR і скопійовано повністю, без пробілів."
     "1019" -> "IBKR ще формує звіт. Спробуйте за хвилину."
     else -> "IBKR: " + s.message.ifEmpty { "помилка ${s.code}" }
 }
@@ -146,7 +147,7 @@ fun applyFlex(d: AppData, f: FlexData, rates: Map<String, Double>, now: Long): P
         val rate = rates[ip.cur]; if (rate == null) { skipped += "${ip.symbol} (${ip.cur})"; return@forEach }
         val i = pos.indexOfFirst { sameSym(it, ip.symbol) }
         if (i >= 0) {
-            val o = pos[i]; val fx = if (o.cur == ip.cur && o.buyFx > 0) o.buyFx else rate
+            val o = pos[i]; val fx = if (o.cur == ip.cur && o.buyFx > 0 && fxPlausible(o.buyFx, rate)) o.buyFx else rate
             pos = pos.mapIndexed { j, x -> if (j != i) x else o.copy(qty = ip.qty, cur = ip.cur, pxBuy = ip.cost, pxNow = ip.mark, buyFx = fx, buy = ip.cost * fx, now = ip.mark * rate,
                 pxAt = now, src = "ibkr", ibSym = ip.symbol, ticker = o.ticker.ifBlank { yahooTicker(ip.symbol, ip.exchange) }) }
             updated++

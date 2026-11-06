@@ -82,3 +82,14 @@ fun posCostCur(p: Pos): Double = if (isFxPos(p)) p.qty * p.pxBuy else 0.0
 
 /** Зміна ціни фонду у відсотках у його валюті (без впливу курсу). */
 fun plCurPct(p: Pos): Double = if (isFxPos(p) && p.pxBuy > 0) (p.pxNow - p.pxBuy) / p.pxBuy * 100 else 0.0
+
+/** Курс купівлі правдоподібний: не більш ніж утричі відрізняється від поточного курсу НБУ (захист від введення ціни чи суми замість курсу). */
+fun fxPlausible(buyFx: Double, rateNow: Double): Boolean = rateNow <= 0 || (buyFx >= rateNow / 3 && buyFx <= rateNow * 3)
+
+/** Помилка форми позиції у валюті: неправдоподібний курс купівлі. */
+fun fxFormError(p: Pos, rates: Map<String, Double>): String {
+    if (!isFxPos(p)) return ""
+    val now = rates[p.cur] ?: return ""
+    return if (fxPlausible(p.buyFx, now)) "" else
+        "Курс купівлі ${fmt2(p.buyFx)} ₴ за 1 ${p.cur} не схожий на справжній (НБУ зараз ${fmt2(now)}). Це курс гривні на день купівлі, а не ціна фонду. Якщо не знаєте — залиште поле порожнім."
+}
