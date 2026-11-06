@@ -27,11 +27,12 @@ import java.util.concurrent.TimeUnit
 /*
  * Фонові задачі раз на добу (WorkManager, близько 9:00): тижнева автокопія в обрану папку і нагадування про виплати ОВДП.
  * Ті самі перевірки запускаються й при відкритті застосунку, тож пропущена задача наздоганяється.
- * Налаштування — у SharedPreferences «bella» поруч зі станом: autoDir, autoAt, remindOvdp, notified.
+ * Налаштування — у SharedPreferences «bella» поруч зі станом: autoDir, autoAt, remindOvdp, notified, remindMoney, notifiedMoney.
  */
 object Jobs {
     private const val PREFS = "bella"
     private const val CHANNEL = "ovdp"
+    private const val CHANNEL_MONEY = "money"
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     fun schedule(ctx: Context) {
@@ -90,7 +91,33 @@ object Jobs {
     fun setRemind(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("remindOvdp", on).apply() }
     fun canNotify(ctx: Context) = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    fun moneyOn(ctx: Context) = prefs(ctx).getBoolean("remindMoney", true)
+    fun setMoney(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("remindMoney", on).apply() }
+
+    /** Ліміти (80% / 100%) і терміни боргів; викликається щодня, при відкритті й після кожної зміни даних. */
+    @Synchronized
+    fun runMoneyAlerts(ctx: Context) {
+        if (!moneyOn(ctx) || !canNotify(ctx)) return
+        val st = state(ctx) ?: return
+        val today = LocalDate.parse(TODAY)
+        val p = prefs(ctx)
+        val notified = pruneNotified(p.getStringSet("notifiedMoney", emptySet()) ?: emptySet(), today)
+        val due = limitAlerts(st.data.txs, st.data.limits, today, notified) + debtAlerts(st.data.debts, today, notified)
+        if (due.isEmpty()) { p.edit().putStringSet("notifiedMoney", notified).apply(); return }
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CHANNEL_MONEY, "Ліміти й борги", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "Витрати досягли 80% або 100% ліміту; термін повернення боргу" })
+        val open = PendingIntent.getActivity(ctx, 1, Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        due.forEach { a ->
+            val n = NotificationCompat.Builder(ctx, CHANNEL_MONEY).setSmallIcon(R.drawable.ic_launcher_monochrome)
+                .setContentTitle(a.title).setContentText(a.text).setStyle(NotificationCompat.BigTextStyle().bigText(a.text))
+                .setContentIntent(open).setAutoCancel(true).build()
+            try { NotificationManagerCompat.from(ctx).notify(a.key.replace("|80|", "|100|").hashCode(), n) } catch (_: SecurityException) {}
+        }
+        p.edit().putStringSet("notifiedMoney", notified + due.flatMap { alertKeys(it) }).apply()
+    }
+
     fun runReminders(ctx: Context) {
+        try { runMoneyAlerts(ctx) } catch (_: Exception) {}
         if (!remindOn(ctx) || !canNotify(ctx)) return
         val st = state(ctx) ?: return
         val today = LocalDate.parse(TODAY)

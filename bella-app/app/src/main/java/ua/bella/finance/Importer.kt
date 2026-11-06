@@ -26,14 +26,6 @@ data class ImportResult(val txs: List<Tx>, val accs: List<Account>, val bad: Int
 }
 
 object Importer {
-    private val CAT = listOf(
-        Regex("сільпо|атб|novus|ашан|silpo|продукт", RegexOption.IGNORE_CASE) to "Харчування",
-        Regex("uber|bolt|uklon|метро|таксі|wog|okko", RegexOption.IGNORE_CASE) to "Транспорт",
-        Regex("netflix|кіно|spotify|steam", RegexOption.IGNORE_CASE) to "Розваги",
-        Regex("аптек|лікар|apteka", RegexOption.IGNORE_CASE) to "Здоров'я",
-        Regex("оренд", RegexOption.IGNORE_CASE) to "Житло",
-        Regex("зарплат|salary|фріланс", RegexOption.IGNORE_CASE) to "Зарплата",
-    )
     private val CMAP = mapOf(
         "Супермаркети та продукти" to "Харчування", "Ресторани, кафе, бари" to "Харчування", "Таксі" to "Транспорт", "Авто" to "Транспорт",
         "АЗС" to "Транспорт", "Квитки на поїзд" to "Транспорт", "Аптеки" to "Здоров'я", "Медичні послуги" to "Здоров'я", "Краса" to "Здоров'я",
@@ -84,16 +76,28 @@ object Importer {
         return LocalDate.of(1899, 12, 30).plusDays(n.toLong()).toString()
     }
 
-    /** Число з пробілами/нерозривними пробілами, комою як десятковим роздільником, юнікодним мінусом. */
+    private val UAH_MARK = Regex("грн\\.?|₴|uah", RegexOption.IGNORE_CASE)
+
+    /**
+     * Число з виписки: пробіли й нерозривні пробіли, юнікодний мінус, позначка гривні («грн», «₴», «UAH»).
+     * Якщо є і крапка, і кома, десятковий роздільник — той, що останній: 1,234.50 і 1.234,50 — це 1234,5.
+     * Кілька однакових роздільників — розряди (1.234.567 або 1,234,567); одна кома — десяткова.
+     */
     fun num(raw: String): Double? {
-        var s = raw.replace(Regex("[\\s\\u00A0\\u202F]"), "").replace('−', '-').replace('–', '-')
+        var s = UAH_MARK.replace(raw, "").replace(Regex("[\\s\\u00A0\\u202F]"), "").replace('−', '-').replace('–', '-')
         if (s.isEmpty()) return null
-        s = if (s.contains(',') && s.contains('.')) s.replace(",", "") else s.replace(',', '.')
+        val c = s.count { it == ',' }; val d = s.count { it == '.' }
+        s = when {
+            c > 0 && d > 0 -> if (s.lastIndexOf(',') > s.lastIndexOf('.')) s.replace(".", "").replace(',', '.') else s.replace(",", "")
+            c > 1 -> s.replace(",", "")
+            d > 1 -> s.replace(".", "")
+            else -> s.replace(',', '.')
+        }
         return s.toDoubleOrNull()
     }
 
     /** CSV: дата; опис; сума. Від'ємна сума — витрата. Суми у файлі вважаються в гривнях. */
-    fun parseCsv(text: String, curRate: Double): ImportResult {
+    fun parseCsv(text: String, curRate: Double, rules: List<CatRule> = DEFAULT_RULES): ImportResult {
         val out = mutableListOf<Tx>(); var bad = 0
         text.removePrefix("﻿").lines().forEach { raw ->
             val l = raw.trim(); if (l.isEmpty()) return@forEach
@@ -101,10 +105,10 @@ object Importer {
             if (p.size < 3) { bad++; return@forEach }
             val d = toIso(p[0])
             val a = num(p.last())
-            if (d == null || a == null) { bad++; return@forEach }
+            if (d == null || a == null || a == 0.0) { bad++; return@forEach }
             val desc = p.drop(1).dropLast(1).joinToString(" ").trim()
-            val c = CAT.firstOrNull { it.first.containsMatchIn(desc) }; val inc = a > 0
-            out.add(Tx(desc, c?.second ?: if (inc) "Зарплата" else "Інше", if (inc) "income" else "expense", Math.abs(a) * curRate, d, "$d|$desc|$a"))
+            val c = ruleFor(desc, rules); val inc = a > 0
+            out.add(Tx(desc, c ?: if (inc) "Зарплата" else "Інше", if (inc) "income" else "expense", Math.abs(a) * curRate, d, "$d|$desc|$a"))
         }
         return ImportResult(out, emptyList(), bad)
     }
@@ -237,7 +241,7 @@ object Importer {
         )
     }
 
-    private fun readRows(rows: List<Map<String, String>>): ImportResult? {
+    private fun readRows(rows: List<Map<String, String>>, rules: List<CatRule>): ImportResult? {
         val hi = rows.indexOfFirst { findCols(it) != null }
         if (hi < 0) return null
         val c = findCols(rows[hi])!!
@@ -249,11 +253,13 @@ object Importer {
                 val d = num(g(c.debit)); val cr = num(g(c.credit))
                 if (d == null && cr == null) null else Math.abs(cr ?: 0.0) - Math.abs(d ?: 0.0)
             }
-            if (iso == null || a == null) { bad++; return@forEach }
+            if (iso == null || a == null || a == 0.0) { bad++; return@forEach }
             val card = g(c.card); val cur = g(c.cur).uppercase().ifEmpty { "UAH" }; val cat = g(c.cat)
             val desc = g(c.desc).ifEmpty { cat }.ifEmpty { "Операція" }
             val type = classifyType(cat, desc, a)
-            val c2 = if (type == "income" && cat.startsWith("Зарахування")) "Надходження" else (CMAP[cat] ?: cat.ifEmpty { "Інше" })
+            val c1 = if (type == "income" && cat.startsWith("Зарахування")) "Надходження" else (CMAP[cat] ?: cat.ifEmpty { "Інше" })
+            // правило користувача важливіше за категорію банку (перекази не чіпаємо)
+            val c2 = if (type == "transfer") c1 else ruleFor(desc, rules) ?: c1
             txs.add(Tx(desc, c2, type, Math.abs(a) * (RATES[cur] ?: 1.0), iso, "$dRaw|$card|$a|$desc"))
             if (card.isNotEmpty() && seen.add(card)) {
                 val bc = g(c.balCur).uppercase().ifEmpty { cur }
@@ -265,7 +271,7 @@ object Importer {
 
     fun parseXlsx(ins: InputStream): ImportResult = parseXlsx(ins.readBytes())
 
-    fun parseXlsx(bytes: ByteArray): ImportResult = try {
+    fun parseXlsx(bytes: ByteArray, rules: List<CatRule> = DEFAULT_RULES): ImportResult = try {
         val files = readZip(bytes)
         val sheets = files.keys.filter { SHEET_NAME.matches(it) }.sortedWith(compareBy({ it.length }, { it }))
         if (sheets.isEmpty()) ImportResult(emptyList(), emptyList(), 0, ERR_NOT_XLSX)
@@ -274,7 +280,7 @@ object Importer {
             var res: ImportResult? = null
             for (s in sheets) {
                 val h = SheetHandler(sst).also { saxParse(files.getValue(s), it) }
-                res = readRows(h.rows)
+                res = readRows(h.rows, rules)
                 if (res != null) break
             }
             res ?: ImportResult(emptyList(), emptyList(), 0, ERR_NO_HEADER)
@@ -286,6 +292,6 @@ object Importer {
     }
 
     /** Точка входу для UI: сама визначає тип (xlsx за сигнатурою, інакше CSV). */
-    fun parseBytes(b: ByteArray, curRate: Double): ImportResult =
-        if (isZip(b)) parseXlsx(b) else parseCsv(decodeText(b), curRate)
+    fun parseBytes(b: ByteArray, curRate: Double, rules: List<CatRule> = DEFAULT_RULES): ImportResult =
+        if (isZip(b)) parseXlsx(b, rules) else parseCsv(decodeText(b), curRate, rules)
 }

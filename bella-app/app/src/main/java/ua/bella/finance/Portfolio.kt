@@ -25,3 +25,20 @@ fun normalize(vs: List<Double>): List<Double> {
     val mn = vs.min(); val mx = vs.max()
     return if (mx - mn < 1e-9) vs.map { 0.5 } else vs.map { (it - mn) / (mx - mn) }
 }
+
+/** Рядок ребалансування: частки у %, diffUah > 0 — докупити, < 0 — зменшити; ok — відхилення менше 1% портфеля. */
+data class RebRow(val group: String, val valueUah: Double, val nowPct: Double, val targetPct: Double, val diffUah: Double, val ok: Boolean)
+
+/**
+ * Порівнює поточний розподіл інвестицій з цільовим (як у PWA). База — уся вартість інвестицій без готівки.
+ * Групи беруться з цілей і з наявних позицій (порядок: цілі, потім інші).
+ */
+fun rebalance(values: Map<String, Double>, targets: Map<String, Double>): List<RebRow> {
+    val total = values.values.sum()
+    val groups = (targets.keys + values.filterValues { it > 0 }.keys).distinct()
+    return groups.map { g ->
+        val v = values[g] ?: 0.0; val tg = targets[g] ?: 0.0
+        val diff = tg / 100 * total - v
+        RebRow(g, v, if (total > 0) v / total * 100 else 0.0, tg, diff, Math.abs(diff) < total * 0.01)
+    }
+}

@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -40,6 +40,8 @@ data class Form(
     // повторювана операція: галочка в новій операції; редагування шаблону (індекс, число місяця, активність)
     val dIdx: Int = -1, val dPay: String = "",
     val tRepeat: Boolean = false, val rIdx: Int = -1, val rDay: String = "", val rActive: Boolean = true,
+    // правило категорії: текст (фрагменти через кому), категорія, індекс (-1 — нове)
+    val ruMatch: String = "", val ruCat: String = "Харчування", val ruIdx: Int = -1,
 )
 
 data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
@@ -203,13 +205,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val nd = ensureAccIds(raw)
         if (nd == data) return
         stack.addLast(data); labels.addLast(describeChange(data, nd)); if (stack.size > 20) { stack.removeFirst(); labels.removeFirst() }
-        data = nd; undoN = stack.size; persist()
+        data = nd; undoN = stack.size; clearSel(); persist(); checkMoneyAlerts()
         val t = System.currentTimeMillis(); toastAt = t
         viewModelScope.launch { delay(6000); if (toastAt == t) toastAt = 0 }
     }
     fun undo() {
         if (stack.isEmpty()) return
-        data = stack.removeLast(); labels.removeLastOrNull(); undoN = stack.size; toastAt = 0; persist()
+        data = stack.removeLast(); labels.removeLastOrNull(); undoN = stack.size; toastAt = 0; clearSel(); persist()
     }
 
     /** Останні дії (найновіша перша), до 10: текст і скільки дій треба відмінити, щоб скасувати саме її разом з новішими. */
@@ -218,7 +220,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun undoLast(k: Int) {
         val (restored, rest) = undoSteps(stack.toList(), k) ?: return
         stack.clear(); stack.addAll(rest); repeat(k) { labels.removeLastOrNull() }
-        data = restored; undoN = stack.size; toastAt = 0; persist()
+        data = restored; undoN = stack.size; toastAt = 0; clearSel(); persist()
     }
 
     @JvmName("selectCurrency") fun setCur(c: String) { cur = c; curOpen = false; persist() }
@@ -276,6 +278,48 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val i = form.txIdx; if (data.txs.getOrNull(i) == null) { closeSheet(); return }
         commit(ua.bella.finance.deleteTx(data, i)); closeSheet()
     }
+    /** Зберігає цільовий розподіл (%, від'ємні відкидаються; 0 — групу прибрано з цілей). */
+    fun setTargets(t: Map<String, Double>) { commit(data.copy(targets = t.filterValues { it > 0 }.mapValues { Math.min(100.0, it.value) })) }
+
+    // ---------- правила категорій ----------
+    /** Пропозиція «Завжди ставити …» після ручної зміни категорії операції (null — немає). */
+    var ruleAsk by mutableStateOf<CatRule?>(null); private set
+    var rulesMsg by mutableStateOf(""); private set
+    fun acceptRule() { val r = ruleAsk ?: return; ruleAsk = null; commit(data.copy(rules = addRule(data.rules, r))); rulesMsg = "Правило додано: «${r.match}» → ${r.cat}" }
+    fun dismissRule() { ruleAsk = null }
+    fun openRule(i: Int) {
+        val r = data.rules.getOrNull(i); formErr = ""; delAsk = false
+        form = form.copy(ruIdx = if (r != null) i else -1, ruMatch = r?.match ?: "", ruCat = r?.cat ?: data.cats.firstOrNull { it == "Харчування" } ?: data.cats.firstOrNull() ?: "Інше")
+        formOrig = if (r != null) form else null; sheet = Sheet.Rule
+    }
+    fun deleteRule() {
+        if (!delAsk) { delAsk = true; return }; delAsk = false
+        val i = form.ruIdx; if (i in data.rules.indices) commit(data.copy(rules = data.rules.filterIndexed { j, _ -> j != i })); closeSheet()
+    }
+    /** Застосовує правила до вже наявних операцій (одна дія «Скасувати»). */
+    fun applyRulesToOld() {
+        val (txs, n) = applyRules(data.txs, data.rules)
+        if (n == 0) { rulesMsg = "Усі операції вже відповідають правилам"; return }
+        commit(data.copy(txs = txs)); rulesMsg = "Змінено категорію в операціях: $n"
+    }
+
+    // ---------- масові дії з операціями («Вибрати» на вкладці «Операції») ----------
+    /** Режим вибору і вибрані операції (індекси в data.txs; скидаються після будь-якої зміни даних). */
+    var selMode by mutableStateOf(false); private set
+    var sel by mutableStateOf(setOf<Int>()); private set
+    var bulkDelAsk by mutableStateOf(false); private set
+    fun clearSel() { sel = emptySet(); bulkDelAsk = false }
+    fun toggleSelMode() { selMode = !selMode; clearSel() }
+    fun toggleSel(i: Int) { sel = if (i in sel) sel - i else sel + i; bulkDelAsk = false }
+    /** Вибрати всі знайдені або, якщо вони вже всі вибрані, зняти вибір. */
+    fun selectAll(idx: Collection<Int>) { sel = if (idx.isNotEmpty() && sel.containsAll(idx)) sel - idx.toSet() else sel + idx; bulkDelAsk = false }
+    fun bulkCat(cat: String) { if (sel.isNotEmpty()) commit(bulkSetCat(data, sel, cat)) }
+    fun bulkDel() {
+        if (sel.isEmpty()) return
+        if (!bulkDelAsk) { bulkDelAsk = true; return }
+        commit(bulkDelete(data, sel))
+    }
+
     /** Підпис рахунку для рядка операції: «Monobank» або «Monobank → Готівка USD». */
     fun accLabel(t: Tx): String {
         val a = data.accs.firstOrNull { it.id == t.acc }?.name ?: ""
@@ -439,10 +483,18 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 val (lim, e) = buildLimits(catsEdit, limEdit, rate); formErr = e
                 if (lim != null) { commit(s.copy(cats = catsEdit, limits = lim)); closeSheet() }
             }
+            Sheet.Rule -> {
+                val m = f.ruMatch.split(',').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
+                if (m.isEmpty()) { formErr = "Вкажіть текст, який шукати в описі (можна кілька через кому)"; return }
+                val r = CatRule(m, f.ruCat)
+                val rules = if (f.ruIdx in s.rules.indices) s.rules.mapIndexed { i, x -> if (i == f.ruIdx) r else x } else addRule(s.rules, r)
+                commit(s.copy(rules = rules)); closeSheet()
+            }
             Sheet.TxE -> {
                 val old = s.txs.getOrNull(f.txIdx) ?: run { closeSheet(); return }
                 val t = txFromForm(f, old.key) ?: return
                 commit(replaceTx(s, f.txIdx, t)); closeSheet()
+                ruleAsk = suggestRule(old, t, data.rules)
             }
             else -> {}
         }
@@ -541,6 +593,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- імпорт ----------
     fun importUri(uri: Uri, name: String) {
         impBusy = true; impResult = null
+        val rules = data.rules
         viewModelScope.launch {
             val r = withContext(Dispatchers.IO) {
                 try {
@@ -548,13 +601,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                         ?: return@withContext ImportResult(emptyList(), emptyList(), 0, "Не вдалося відкрити файл «$name» (немає доступу)")
                     val bytes = ins.use { it.readBytes() }
                     if (bytes.isEmpty()) ImportResult(emptyList(), emptyList(), 0, "Файл порожній")
-                    else Importer.parseBytes(bytes, rate)
+                    else Importer.parseBytes(bytes, rate, rules)
                 } catch (e: Throwable) { ImportResult(emptyList(), emptyList(), 0, "Не вдалося прочитати файл (${e.javaClass.simpleName}: ${e.message?.take(80) ?: "—"})") }
             }
             impResult = r; impBusy = false
         }
     }
-    fun importSample() { impResult = Importer.parseCsv("01.11.2026;Сільпо;-1250,40\n01.11.2026;Uber;-310\n02.11.2026;Аптека Доба;-480\n02.11.2026;Зарплата;45000\n02.11.2026;Spotify;-169", rate) }
+    fun importSample() { impResult = Importer.parseCsv("01.11.2026;Сільпо;-1250,40\n01.11.2026;Uber;-310\n02.11.2026;Аптека Доба;-480\n02.11.2026;Зарплата;45000\n02.11.2026;Spotify;-169", rate, data.rules) }
     private fun existingKeys(): Set<String> = if (data.demo && impResult?.accs?.isNotEmpty() == true) emptySet() else data.txs.mapNotNull { it.key.ifEmpty { null } }.toSet()
     val dupN: Int get() { val h = existingKeys(); return impResult?.txs?.count { it.key.isNotEmpty() && it.key in h } ?: 0 }
     fun removeImportDups() { val r = impResult ?: return; val h = existingKeys(); impResult = r.copy(txs = r.txs.filter { it.key.isEmpty() || it.key !in h }) }
@@ -641,7 +694,17 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         remindMsg = if (on && !granted) "Сповіщення заборонені. Дозвольте їх у налаштуваннях Android: Програми → Bella Finance → Сповіщення" else ""
         if (on && granted) viewModelScope.launch(Dispatchers.IO) { try { Jobs.runReminders(ctx) } catch (_: Exception) {} }
     }
-    fun refreshNotifyState() { remindOn = Jobs.remindOn(ctx) && Jobs.canNotify(ctx) }
+    fun refreshNotifyState() { remindOn = Jobs.remindOn(ctx) && Jobs.canNotify(ctx); moneyOn = Jobs.moneyOn(ctx) && Jobs.canNotify(ctx) }
+
+    /** Сповіщення про ліміти (80% / 100%) і терміни боргів. */
+    var moneyOn by mutableStateOf(Jobs.moneyOn(ctx) && Jobs.canNotify(ctx)); private set
+    fun setMoney(on: Boolean, granted: Boolean = Jobs.canNotify(ctx)) {
+        Jobs.setMoney(ctx, on); moneyOn = on && granted
+        remindMsg = if (on && !granted) "Сповіщення заборонені. Дозвольте їх у налаштуваннях Android: Програми → Bella Finance → Сповіщення" else ""
+        if (on && granted) checkMoneyAlerts()
+    }
+    /** Перевіряє ліміти й борги у фоні (після кожної зміни даних, щоб сповіщення про ліміт прийшло одразу). */
+    private fun checkMoneyAlerts() { viewModelScope.launch(Dispatchers.IO) { try { Jobs.runMoneyAlerts(ctx) } catch (_: Exception) {} } }
     /** Виплати ОВДП на найближчі 60 днів (для екрана «Інвестиції»). */
     fun upcomingOvdp(): List<OvdpEvent> = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(60)) }
 

@@ -69,3 +69,57 @@ fun smartAnalytics(allTxs: List<Tx>, periodTxs: List<Tx>, cashUah: Double, today
 
     return SmartResult(runway, projected, burn, insights, expenses.sortedByDescending { it.amt }.take(5))
 }
+
+/**
+ * «Вільно до кінця місяця» (як у PWA). Усі суми в гривнях.
+ * free = доходи місяця − витрати місяця − повторювані витрати, що ще будуть цього місяця − невикористаний залишок лімітів.
+ */
+data class FreeLeft(
+    val freeUah: Double,
+    val perDayUah: Double,
+    val daysLeft: Int,
+    val incomeUah: Double,
+    val expenseUah: Double,
+    val recurringUah: Double,
+    val limitsUah: Double,
+)
+
+/**
+ * @param recurring шаблони повторюваних операцій; враховуються активні витрати з наступною датою пізніше today у поточному місяці
+ *   (ті, що вже настали, створені як операції і входять у витрати)
+ * @param limits місячні ліміти за категоріями; невитрачений залишок ліміту резервується
+ */
+fun freeLeft(allTxs: List<Tx>, recurring: List<Recurring>, limits: Map<String, Double>, today: String): FreeLeft {
+    val cm = today.take(7)
+    val day = (if (today.length >= 10) today.substring(8, 10).toIntOrNull() else null)?.coerceAtLeast(1) ?: 1
+    val dim = try { YearMonth.parse(cm).lengthOfMonth() } catch (_: Exception) { 30 }
+    val daysLeft = Math.max(1, dim - day + 1)
+
+    val cmTxs = allTxs.filter { it.date.startsWith(cm) }
+    val income = cmTxs.filter { it.type == "income" }.sumOf { it.amt }
+    val expense = cmTxs.filter { it.type == "expense" }.sumOf { it.amt }
+    val pending = recurring.filter { it.active && it.type == "expense" && it.next.startsWith(cm) && it.next > today }
+    val rec = pending.sumOf { it.amt }
+    val lim = limits.entries.filter { it.value > 0 }.sumOf { (c, l) ->
+        val spent = cmTxs.filter { it.type == "expense" && it.cat == c }.sumOf { it.amt }
+        val planned = pending.filter { it.cat == c }.sumOf { it.amt }
+        Math.max(0.0, l - spent - planned)
+    }
+    val free = income - expense - rec - lim
+    return FreeLeft(free, Math.max(0.0, free) / daysLeft, daysLeft, income, expense, rec, lim)
+}
+
+/**
+ * Витрати за категоріями в порівнянному періоді попереднього місяця.
+ * Для поточного місяця — ті самі дні (1…сьогоднішнє число, не більше довжини попереднього місяця), для минулих — увесь місяць.
+ */
+fun prevMonthByCat(allTxs: List<Tx>, month: String, today: String): Map<String, Double> {
+    val ym = try { YearMonth.parse(month) } catch (_: Exception) { return emptyMap() }
+    val prev = ym.minusMonths(1); val pk = prev.toString()
+    val lastDay = if (month == today.take(7)) Math.min(today.substring(8, 10).toIntOrNull() ?: prev.lengthOfMonth(), prev.lengthOfMonth()) else prev.lengthOfMonth()
+    val until = "%s-%02d".format(pk, lastDay)
+    return allTxs.filter { it.type == "expense" && it.date.startsWith(pk) && it.date <= until }.groupBy { it.cat }.mapValues { e -> e.value.sumOf { it.amt } }
+}
+
+/** Зміна витрат категорії, %: null, якщо в попередньому періоді витрат не було. */
+fun changePct(now: Double, prev: Double): Int? = if (prev > 0) Math.round((now - prev) / prev * 100).toInt() else null

@@ -241,7 +241,8 @@ fun BudgetScreen(vm: BellaViewModel) {
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Stat("Доходи", "+" + vm.m(inc), C.pos, Modifier.weight(1f)); Stat("Витрати", "−" + vm.m(exp), C.neg, Modifier.weight(1f))
-                    Stat(if (isLast) "Вільно на день" else "Витрати на день", "≈ " + vm.m(if (isLast) (if (nb > 0) nb / daysLeft else 0.0) else exp / dim) + " " + vm.sym, C.text, Modifier.weight(1f))
+                    // для поточного місяця — середні витрати за минулі дні; скільки ще можна витрачати на день — у картці «Вільно до кінця місяця»
+                    Stat("Витрати на день", "≈ " + vm.m(exp / (if (isLast) Math.max(1, dim - daysLeft + 1) else dim)) + " " + vm.sym, C.text, Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     T("Норма заощаджень", 12.sp, C.n500, maxLines = 1); Bar((savePct / 100).toFloat(), C.pos, 4.dp, Modifier.weight(1f)); T("%.1f%%".format(savePct), 12.sp, C.n500)
@@ -249,12 +250,18 @@ fun BudgetScreen(vm: BellaViewModel) {
             }
             Seg(listOf(0 to "Огляд", 1 to "Операції", 2 to "Звіт", 3 to "Ліміти"), vm.tab) { vm.tab = it }
             when (vm.tab) {
-                0 -> Column(verticalArrangement = Arrangement.spacedBy(22.dp)) { Column { cats.entries.sortedByDescending { it.value }.forEach { (c, v) ->
+                0 -> Column(verticalArrangement = Arrangement.spacedBy(22.dp)) { if (isLast) FreeLeftCard(vm)
+                    val prevCats = prevMonthByCat(s.txs, mk, TODAY)
+                    if (cats.isNotEmpty() && prevCats.isNotEmpty()) T(if (isLast) "Стрілки — порівняно з тими самими днями минулого місяця" else "Стрілки — порівняно з минулим місяцем", 11.sp, C.n500)
+                    Column { cats.entries.sortedByDescending { it.value }.forEach { (c, v) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Ico(catIcon(c), C.accent, 20.dp)
                         Column(Modifier.weight(1f)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(c, 14.sp, maxLines = 1); T(vm.m(v) + " " + vm.sym, 14.sp, weight = FontWeight.Medium, maxLines = 1) }
-                            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Bar((v / exp).toFloat(), modifier = Modifier.weight(1f)); T("${Math.round(v / exp * 100)}%", 11.sp, C.n500) }
+                            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Bar((v / exp).toFloat(), modifier = Modifier.weight(1f)); T("${Math.round(v / exp * 100)}%", 11.sp, C.n500)
+                                if (prevCats.isNotEmpty()) { val ch = changePct(v, prevCats[c] ?: 0.0)
+                                    T(when { ch == null -> "нова"; ch > 0 -> "↑$ch%"; ch < 0 -> "↓${-ch}%"; else -> "=" }, 11.sp, when { ch == null -> C.n500; ch > 0 -> C.neg; ch < 0 -> C.pos; else -> C.n500 }, FontWeight.Medium) }
+                            }
                         }
                     }
                 } }
@@ -289,6 +296,20 @@ fun BudgetScreen(vm: BellaViewModel) {
                             }
                         }
                     }
+                    Column {
+                        SectionHead("Правила категорій", "+ Правило") { vm.openRule(-1) }
+                        if (s.rules.isEmpty()) T("Немає. Правило ставить категорію за текстом в описі, напр. «Сільпо» → Харчування.", 12.sp, C.n500)
+                        s.rules.forEachIndexed { i, r ->
+                            Div()
+                            Row(Modifier.fillMaxWidth().clickable { vm.openRule(i) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Ico(catIcon(r.cat), C.accent, 20.dp)
+                                Column(Modifier.weight(1f)) { T(r.cat, 14.sp, weight = FontWeight.Medium, maxLines = 1); T(r.match, 11.sp, C.n500, maxLines = 2) }
+                            }
+                        }
+                        if (s.rules.isNotEmpty()) T("Застосувати до старих операцій", 13.sp, C.accent400, modifier = Modifier.clickable { vm.applyRulesToOld() }.padding(vertical = 8.dp))
+                        if (vm.rulesMsg.isNotEmpty()) T(vm.rulesMsg, 12.sp, C.n500)
+                        T("Правила діють під час імпорту виписки (CSV і Excel) і важливіші за категорію банку. Перекази не змінюються.", 11.sp, C.n500)
+                    }
                     if (s.limits.isEmpty()) T("Лімітів ще немає. Задайте місячний ліміт для потрібних категорій.", 12.sp, C.n500)
                     s.limits.forEach { (c, l) ->
                     val sp = cats[c] ?: 0.0; val over = l > 0 && sp > l
@@ -310,8 +331,9 @@ fun BudgetScreen(vm: BellaViewModel) {
 private fun OpsTab(vm: BellaViewModel) {
     val f = vm.filters; val q = f.q.trim().lowercase(); val rt = vm.rate
     val mn = f.min.takeIf { it.isNotEmpty() }?.let { parseNum(it) }; val mx = f.max.takeIf { it.isNotEmpty() }?.let { parseNum(it) }
-    val found = vm.data.txs.filter { f.acc == "*" || it.acc == f.acc || (f.acc.isNotEmpty() && it.toAcc == f.acc) }.filter { (f.tf == "all" || it.type == f.tf) && (q.isEmpty() || it.desc.lowercase().contains(q) || it.cat.lowercase().contains(q)) && (f.dateFrom.isEmpty() || it.date >= f.dateFrom) && (f.dateTo.isEmpty() || it.date <= f.dateTo) && (mn == null || it.amt / rt >= mn) && (mx == null || it.amt / rt <= mx) }
-        .let { l -> when (f.sort) { "dateA" -> l.sortedBy { it.date }; "amtD" -> l.sortedByDescending { it.amt }; "amtA" -> l.sortedBy { it.amt }; else -> l.sortedByDescending { it.date } } }
+    val found0 = vm.data.txs.withIndex().filter { (_, it) -> f.acc == "*" || it.acc == f.acc || (f.acc.isNotEmpty() && it.toAcc == f.acc) }.filter { (_, it) -> (f.tf == "all" || it.type == f.tf) && (q.isEmpty() || it.desc.lowercase().contains(q) || it.cat.lowercase().contains(q)) && (f.dateFrom.isEmpty() || it.date >= f.dateFrom) && (f.dateTo.isEmpty() || it.date <= f.dateTo) && (mn == null || it.amt / rt >= mn) && (mx == null || it.amt / rt <= mx) }
+        .let { l -> when (f.sort) { "dateA" -> l.sortedBy { it.value.date }; "amtD" -> l.sortedByDescending { it.value.amt }; "amtA" -> l.sortedBy { it.value.amt }; else -> l.sortedByDescending { it.value.date } } }
+    val found = found0.map { it.value }
     val fi = found.filter { it.type == "income" }.sumOf { it.amt }; val fe = found.filter { it.type == "expense" }.sumOf { it.amt }
     val cnt = listOf(f.dateFrom, f.dateTo, f.min, f.max).count { it.isNotEmpty() } + if (f.acc != "*") 1 else 0
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -334,8 +356,29 @@ private fun OpsTab(vm: BellaViewModel) {
             T("Скинути все", 12.sp, C.accent400, modifier = Modifier.clickable { vm.filters = Filters(show = true) })
         }
         Seg(listOf("all" to "Усі", "expense" to "Витрати", "income" to "Доходи", "transfer" to "Перекази"), f.tf) { vm.filters = f.copy(tf = it) }
-        T("За весь період · знайдено: ${found.size}" + (if (found.size > 100) " (перші 100)" else "") + " · −${vm.m(fe)} · +${vm.m(fi)} ${vm.sym}", 11.sp, C.n500)
-        Column { found.take(100).forEach { Div(); TxRowView(it, vm) } }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            T("За весь період · знайдено: ${found.size}" + (if (found.size > 100) " (перші 100)" else "") + " · −${vm.m(fe)} · +${vm.m(fi)} ${vm.sym}", 11.sp, C.n500, modifier = Modifier.weight(1f))
+            if (found.isNotEmpty() || vm.selMode) T(if (vm.selMode) "Готово" else "Вибрати", 13.sp, C.accent400, modifier = Modifier.clickable { vm.toggleSelMode() }.padding(vertical = 6.dp))
+        }
+        if (vm.selMode) BulkBar(vm, found0.take(100).map { it.index })
+        Column { found0.take(100).forEach { (i, t) -> Div(); if (vm.selMode) TxRowView(t, vm, i in vm.sel) { vm.toggleSel(i) } else TxRowView(t, vm) } }
+    }
+}
+
+/** Панель масових дій: вибрати всі знайдені, змінити категорію, видалити (з підтвердженням). */
+@Composable
+private fun BulkBar(vm: BellaViewModel, shown: List<Int>) {
+    val n = vm.sel.size; val all = shown.isNotEmpty() && vm.sel.containsAll(shown)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            T("Вибрано: $n", 13.sp, weight = FontWeight.Medium)
+            T(if (all) "Зняти вибір" else "Вибрати всі (${shown.size})", 13.sp, C.accent400, modifier = Modifier.clickable { vm.selectAll(shown) })
+        }
+        if (n > 0) {
+            Dropdown("Змінити категорію (крім переказів)", vm.data.cats, -1) { vm.bulkCat(vm.data.cats[it]) }
+            Btn(if (vm.bulkDelAsk) "Точно видалити $n? Торкніться ще раз" else "Видалити вибрані ($n)", false, Modifier.fillMaxWidth(), Icons.Outlined.Delete) { vm.bulkDel() }
+            T("Видалення змінює баланси рахунків. Скасувати можна кнопкою «Скасувати» або в «Налаштуваннях».", 11.sp, C.n500)
+        } else T("Торкніться операцій, щоб вибрати їх.", 11.sp, C.n500)
     }
 }
 
@@ -423,6 +466,7 @@ fun InvScreen(vm: BellaViewModel) {
                     }
                 }
             }
+            if (t.invT > 0) RebalanceSection(vm, t.invGroups.associate { it.first to it.third.first })
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Позиція", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openPos() }; Btn("ОВДП", false, Modifier.weight(1f), Icons.Outlined.Calculate) { vm.go(Screen.Calc) } }
             CompoundSection(vm, t.invT)
         }
