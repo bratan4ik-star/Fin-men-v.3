@@ -47,6 +47,8 @@ val DEFAULT_RULES = listOf(
     val monthly: Boolean = false, val payAcc: String = "",
     /** ETF: валюта ціни, ціни купівлі й поточна у ній, курс купівлі, тікер Yahoo і час котирування (див. Etf.kt). */
     val cur: String = "UAH", val pxBuy: Double = 0.0, val pxNow: Double = 0.0, val buyFx: Double = 0.0, val ticker: String = "", val pxAt: Long = 0L,
+    /** Звідки позиція: «» — введена вручну, «ibkr» — синхронізується з Interactive Brokers (символ IBKR — ibSym). */
+    val src: String = "", val ibSym: String = "",
 )
 /** Ціль: суми в гривнях; deadline — РРРР-ММ-ДД або «». */
 @Serializable data class Goal(val name: String, val saved: Double, val target: Double, val icon: String, val step: Double, val deadline: String = "",

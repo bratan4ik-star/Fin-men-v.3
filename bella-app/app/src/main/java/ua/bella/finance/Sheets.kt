@@ -29,10 +29,10 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.DebtE to "Редагувати борг", Sheet.Rec to "Повторювана операція", Sheet.Rule to "Правило категорії", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.DebtE to "Редагувати борг", Sheet.Rec to "Повторювана операція", Sheet.Rule to "Правило категорії", Sheet.Ibkr to "Interactive Brokers", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
 )
 private const val EDIT_NOTE = "Щоб побачити, що було, очистіть поле: старе значення з'явиться сірим. Порожнє поле під час збереження лишається як було."
-private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.DebtE to "Зберегти", Sheet.Rec to "Зберегти", Sheet.Rule to "Зберегти", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
+private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.DebtE to "Зберегти", Sheet.Rec to "Зберегти", Sheet.Rule to "Зберегти", Sheet.Ibkr to "Зберегти й синхронізувати", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +45,7 @@ fun SheetHost(vm: BellaViewModel) {
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (sh) {
-                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm, false); Sheet.DebtE -> DebtForm(vm, true); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Rec -> RecForm(vm); Sheet.Rule -> RuleForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
+                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm, false); Sheet.DebtE -> DebtForm(vm, true); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Rec -> RecForm(vm); Sheet.Rule -> RuleForm(vm); Sheet.Ibkr -> IbkrForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
                     Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
@@ -171,6 +171,24 @@ private fun RecForm(vm: BellaViewModel) {
 }
 
 @Composable
+private fun IbkrForm(vm: BellaViewModel) {
+    val f = vm.form
+    T("Застосунок забирає з IBKR позиції ETF і акцій, гроші на рахунку й дивіденди через Flex Web Service. Токен дає лише читання звітів — торгувати чи виводити гроші ним не можна. Він шифрується на телефоні й не потрапляє в резервні копії.", 12.sp, C.n500)
+    Field(if (vm.ibkrOn) "Новий токен (порожньо — залишити збережений)" else "Токен Flex Web Service", f.ibTok, hint = "напр. 1234567890123456789012") { vm.form = f.copy(ibTok = it) }
+    Field("Номер Flex-запиту (Query ID)", f.ibQ, hint = "напр. 987654", numeric = true) { vm.form = f.copy(ibQ = it) }
+    T("Як отримати (один раз, на комп'ютері в Client Portal IBKR):\n" +
+        "1. Performance & Reports → Flex Queries → «+» у розділі Activity Flex Query.\n" +
+        "2. Розділи: Open Positions (Options: Summary), Cash Report, Cash Transactions (Dividends, Withholding Tax, Payment In Lieu Of Dividends). Поля — усі.\n" +
+        "3. Format: XML, Period: Last 365 Calendar Days. Збережіть і запишіть Query ID.\n" +
+        "4. Там само: Flex Web Service Configuration → увімкнути → Generate New Token (термін — до 1 року).", 11.sp, C.n400)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+    if (vm.ibkrBusy) T("Синхронізація з IBKR… це може тривати до 4 хвилин. Не закривайте вікно.", 12.sp, C.accent400)
+    if (vm.ibkrMsg.isNotEmpty() && !vm.ibkrBusy) T(vm.ibkrMsg, 12.sp, if (vm.ibkrMsg.startsWith("IBKR") || vm.ibkrMsg.startsWith("Помилка") || vm.ibkrMsg.startsWith("Немає") || vm.ibkrMsg.startsWith("Токен")) C.neg else C.pos)
+    if (vm.ibkrOn && !vm.ibkrBusy) Btn("Закрити", false, Modifier.fillMaxWidth()) { vm.closeSheet() }
+    if (vm.ibkrOn) T("Відключити IBKR (позиції лишаться, токен буде видалено)", 13.sp, C.neg, modifier = Modifier.clickable { vm.disconnectIbkr() }.padding(vertical = 4.dp))
+}
+
+@Composable
 private fun RuleForm(vm: BellaViewModel) {
     val f = vm.form; val cats = vm.data.cats
     Field("Текст в описі операції", f.ruMatch, hint = vm.was { it.ruMatch }.ifEmpty { "напр. Сільпо, АТБ" }) { vm.form = f.copy(ruMatch = it) }
@@ -264,7 +282,7 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Field("Поточна ціна ($cs)", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }.ifEmpty { if (edit) "" else "= ціна купівлі" }, numeric = true) { vm.form = f.copy(pNow = it) }
-            if (f.pCur != "UAH") Field("Курс купівлі, ₴ за 1 ${f.pCur}", f.pFx, Modifier.weight(1f), hint = vm.was { it.pFx }.ifEmpty { "НБУ: " + fmt2(RATES[f.pCur] ?: 0.0) }, numeric = true) { vm.form = f.copy(pFx = it) }
+            if (f.pCur != "UAH") Field("Курс гривні на день купівлі, ₴ за 1 ${f.pCur} (не ціна фонду)", f.pFx, Modifier.weight(1f), hint = vm.was { it.pFx }.ifEmpty { "порожньо = НБУ " + fmt2(RATES[f.pCur] ?: 0.0) }, numeric = true) { vm.form = f.copy(pFx = it) }
         }
         Field("Дивідендна дохідність, % річних", f.pRate, hint = vm.was { it.pRate }.ifEmpty { "0 для накопичувальних" }, numeric = true) { vm.form = f.copy(pRate = it) }
         if (f.pCur != "UAH") {
@@ -376,6 +394,7 @@ private fun AutoBackupRows(vm: BellaViewModel) {
         else if (android.os.Build.VERSION.SDK_INT >= 33) askPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         else vm.setRemind(true, true)
     }
+    SettingRow(Icons.Outlined.AccountBalance, "Interactive Brokers", if (vm.ibkrOn) "Підключено · синхронізація при кожному відкритті (не частіше раз на годину)" + (if (vm.ibkrAt > 0) " · остання: ${fmtSavedAt(vm.ibkrAt)}" else "") else "Позиції ETF, гроші й дивіденди з IBKR", trailing = true) { vm.openIbkr() }
     val askPerm2 = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> vm.setMoney(true, ok) }
     SettingRow(Icons.Outlined.NotificationsActive, "Сповіщення про ліміти й борги", if (vm.moneyOn) "Увімкнено: витрати досягли 80% і 100% ліміту; за 3 дні й у день терміну боргу" else "Вимкнено") {
         if (vm.moneyOn) vm.setMoney(false)
@@ -425,10 +444,10 @@ private val HELP = listOf(
     Icons.Outlined.CurrencyExchange to ("Валюта" to "Кнопка з символом валюти в шапці перемикає гривню, долар, євро та злотий. Усі суми на всіх екранах перераховуються за курсами, закладеними в застосунку."),
     Icons.Outlined.Savings to ("Капітал та Рахунки" to "Показує склад капіталу: гроші на картках, заощадження, інвестиції, цілі та борги. Натисніть на рахунок, щоб змінити назву чи баланс, позначити його як заощадження або видалити. Кнопка «Переказ» переносить гроші між рахунками з конвертацією валют."),
     Icons.Outlined.Paid to ("Борги та позики" to "У розділі «Борги та позики» додайте запис «Мені винні» або «Я винен» з терміном. Дотик до запису — редагування (особа, сума, термін, напрям), часткове повернення й видалення. Позначка біля запису означає «повернено повністю»: запис зникає зі списку, а чистий капітал перераховується. Помилково прибраний запис повертає «Скасувати» або «Відмінити останні дії»."),
-    Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях (зі стовпчиками доходів і витрат: дотик до місяця показує суми) та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату. «Огляд» поточного місяця: картка «Вільно до кінця місяця» (доходи − витрати − заплановані повторювані − залишок лімітів) і стрілки біля категорій — зміна витрат порівняно з тими самими днями минулого місяця. «Операції → Вибрати» — масова зміна категорії чи видалення. Сповіщення про 80% і 100% ліміту та про терміни боргів вмикаються в «Налаштуваннях». «Ліміти → Правила категорій»: текст в описі (кілька через кому) → категорія; діють під час імпорту виписки, до старих операцій — кнопкою «Застосувати до старих». Коли вручну міняєте категорію операції, застосунок запропонує створити таке правило."),
+    Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях (зі стовпчиками доходів і витрат: дотик до місяця показує суми) та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату. «Огляд» поточного місяця: картка «Вільно до кінця місяця» (доходи − витрати − заплановані повторювані − залишок лімітів) і стрілки біля категорій — зміна витрат порівняно з тими самими днями минулого місяця. «Операції → Вибрати» — масова зміна категорії чи видалення. Сповіщення про 80% і 100% ліміту та про терміни боргів вмикаються в «Налаштуваннях». «Ліміти → Правила категорій»: текст в описі (кілька через кому) → категорія; діють під час імпорту виписки, до старих операцій — кнопкою «Застосувати до старих». Коли вручну міняєте категорію операції, застосунок запропонує створити таке правило. «Звіт → Рік / 12 міс.»: доходи, витрати й норма заощаджень порівняно з минулим періодом, витрати за категоріями, зростання капіталу й інвестиційний дохід (купони, відсотки, дивіденди), експорт у Excel."),
     Icons.Outlined.Search to ("Пошук і фільтри" to "У вкладці «Операції» є пошук за описом чи категорією, кнопки сортування за датою та сумою, фільтри за діапазоном дат і сум, а також вибір типу: усі, витрати, доходи, перекази."),
     Icons.Outlined.FileUpload to ("Імпорт виписки" to "Налаштування, Імпорт виписки. Підтримує Excel (.xlsx) з банку та CSV. Перекази між власними картками не рахуються доходом чи витратою. Якщо у файлі є повтори, з'явиться кнопка «Прибрати повтори». Файл читається лише на вашому пристрої."),
-    Icons.AutoMirrored.Outlined.TrendingUp to ("Інвестиції" to "Кільцева діаграма вгорі показує структуру портфеля. Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. «Найближчі виплати ОВДП» — купони й погашення на 60 днів. Внизу — калькулятор складного відсотка."),
+    Icons.AutoMirrored.Outlined.TrendingUp to ("Інвестиції" to "Кільцева діаграма вгорі показує структуру портфеля. Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. «Найближчі виплати ОВДП» — купони й погашення на 60 днів. Внизу — калькулятор складного відсотка. Interactive Brokers: «Налаштування → Interactive Brokers» — токен і номер Flex-запиту; далі при кожному відкритті застосунку, не частіше раз на годину (і кнопкою «Синхронізувати з IBKR» у групі ETF) оновлюються кількість і ціни ETF, гроші на рахунку («IBKR USD» тощо) і дивіденди."),
     Icons.Outlined.NotificationsActive to ("Нагадування про ОВДП" to "Налаштування, Нагадування про ОВДП. Сповіщення приходить за 3 дні до виплати купона чи погашення і в день виплати, близько 9:00. Дати беруться з позиції: для позицій з калькулятора — від дати погашення з кроком виплат, для інших — від «наступної виплати» кожні 6 місяців. Суми орієнтовні."),
     Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються."),
     Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),

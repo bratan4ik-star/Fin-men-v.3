@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Ibkr, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -42,6 +42,8 @@ data class Form(
     val tRepeat: Boolean = false, val rIdx: Int = -1, val rDay: String = "", val rActive: Boolean = true,
     // правило категорії: текст (фрагменти через кому), категорія, індекс (-1 — нове)
     val ruMatch: String = "", val ruCat: String = "Харчування", val ruIdx: Int = -1,
+    // IBKR: токен і номер Flex-запиту (у формі лише під час введення; зберігаються зашифровано в IbkrStore)
+    val ibTok: String = "", val ibQ: String = "",
 )
 
 data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
@@ -130,6 +132,22 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 try { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } != null } catch (_: Exception) { false }
             }
             backupMsg = if (ok) "Копію збережено: операцій ${data.txs.size}, рахунків ${data.accs.size}" else "Не вдалося записати файл копії"
+        }
+    }
+    /** «Бюджет → Звіт»: 0 — по місяцях, 1 — календарний рік, 2 — останні 12 місяців; repYear — вибраний рік. */
+    var repMode by mutableStateOf(0)
+    var repYear by mutableStateOf(LocalDate.now().year)
+    fun yearReportNow(): YearReport {
+        val today = LocalDate.parse(TODAY)
+        return yearReport(data.txs, hist, if (repMode == 2) last12Period(today) else yearPeriod(repYear, today))
+    }
+    fun exportYearXlsx(uri: Uri) {
+        val r = yearReportNow()
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try { val bytes = buildYearXlsx(r); getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null } catch (_: Exception) { false }
+            }
+            backupMsg = if (ok) "Звіт експортовано в Excel" else "Не вдалося записати файл Excel"
         }
     }
     fun exportXlsx(uri: Uri) {
@@ -281,6 +299,43 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Зберігає цільовий розподіл (%, від'ємні відкидаються; 0 — групу прибрано з цілей). */
     fun setTargets(t: Map<String, Double>) { commit(data.copy(targets = t.filterValues { it > 0 }.mapValues { Math.min(100.0, it.value) })) }
 
+    // ---------- Interactive Brokers (Flex Web Service, див. Ibkr.kt) ----------
+    var ibkrOn by mutableStateOf(try { IbkrStore.configured(getApplication()) } catch (_: Exception) { false }); private set
+    var ibkrAt by mutableStateOf(try { IbkrStore.lastAt(getApplication()) } catch (_: Exception) { 0L }); private set
+    var ibkrBusy by mutableStateOf(false); private set
+    var ibkrMsg by mutableStateOf(""); private set
+    /** ETF з IBKR, яких більше немає в рахунку: чекають рішення «прибрати / залишити». */
+    var ibkrGone by mutableStateOf(listOf<String>()); private set
+    fun openIbkr() { form = form.copy(ibTok = "", ibQ = try { IbkrStore.query(ctx) } catch (_: Exception) { "" }); formErr = ""; sheet = Sheet.Ibkr }
+    fun syncIbkr() {
+        if (ibkrBusy || !ibkrOn) return
+        ibkrBusy = true; ibkrMsg = ""
+        viewModelScope.launch {
+            try {
+                val (f, err) = withContext(Dispatchers.IO) { try { fetchFlex(IbkrStore.token(ctx), IbkrStore.query(ctx)) } catch (e: Throwable) { null to "Помилка IBKR: ${e.javaClass.simpleName}: ${e.message?.take(120) ?: ""}" } }
+                if (f == null) ibkrMsg = err
+                else {
+                    val (nd, sum) = applyFlex(data, f, RATES, System.currentTimeMillis())
+                    commit(nd); ibkrGone = sum.gone
+                    val t = System.currentTimeMillis(); IbkrStore.setLastAt(ctx, t); ibkrAt = t
+                    ibkrMsg = (if (f.asOf.isNotEmpty()) "Дані IBKR на ${ddmmyyyy(f.asOf)}. " else "") + sum.text
+                }
+            } catch (e: Throwable) {
+                ibkrMsg = "Помилка застосунку під час синхронізації: ${e.javaClass.simpleName}: ${e.message?.take(160) ?: ""}"
+            } finally { ibkrBusy = false }
+        }
+    }
+    private var ibkrTryAt = 0L
+    /** Синхронізація IBKR при кожному відкритті чи поверненні до застосунку, але не частіше ніж раз на годину (і після невдалої спроби теж). */
+    fun autoSyncIbkr() {
+        val now = System.currentTimeMillis()
+        if (!ibkrOn || !ibkrDue(ibkrAt, ibkrTryAt, now)) return
+        ibkrTryAt = now; syncIbkr()
+    }
+    fun removeIbkrGone() { if (ibkrGone.isNotEmpty()) commit(removeGone(data, ibkrGone)); ibkrGone = emptyList() }
+    fun keepIbkrGone() { ibkrGone = emptyList() }
+    fun disconnectIbkr() { try { IbkrStore.clear(ctx) } catch (_: Exception) {}; ibkrOn = false; ibkrAt = 0L; ibkrMsg = "IBKR відключено. Позиції лишились як є."; closeSheet() }
+
     // ---------- правила категорій ----------
     /** Пропозиція «Завжди ставити …» після ручної зміни категорії операції (null — немає). */
     var ruleAsk by mutableStateOf<CatRule?>(null); private set
@@ -334,10 +389,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             val rateNow = RATES[f.pCur]!!; val pxB = parseNum(f.pBuy); val pxN = parseNum(f.pNow).takeIf { it > 0 } ?: pxB
             val bfx = parseNum(f.pFx).takeIf { it > 0 } ?: rateNow
             return Pos(f.group, f.pName.trim(), q, pxB * bfx, pxN * rateNow, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc,
-                cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L)
+                cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L,
+                src = old?.src ?: "", ibSym = old?.ibSym ?: "")
         }
         val b = parseNum(f.pBuy) * rate; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * rate
-        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker)
+        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker,
+            src = old?.src ?: "", ibSym = old?.ibSym ?: "")
     }
 
     // ---------- котирування ETF ----------
@@ -436,14 +493,14 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 val o = s.pos.getOrNull(f.editIdx) ?: run { closeSheet(); return }
                 val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
                 val np = posFromForm(f, q, monthly, o)
-                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
+                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }; if (formErr.isNotEmpty()) return
                 open = open + f.group
                 commit(processDepositPayouts(s.copy(pos = s.pos.mapIndexed { i, x -> if (i == f.editIdx) np else x }), todayIso(), RATES)); closeSheet()
             }
             Sheet.Pos -> {
                 val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
                 val np = posFromForm(f, q, monthly, null)
-                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat); if (formErr.isNotEmpty()) return
+                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }; if (formErr.isNotEmpty()) return
                 open = open + f.group
                 commit(processDepositPayouts(s.copy(pos = s.pos + np), todayIso(), RATES)); closeSheet()
             }
@@ -482,6 +539,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             Sheet.Cats -> {
                 val (lim, e) = buildLimits(catsEdit, limEdit, rate); formErr = e
                 if (lim != null) { commit(s.copy(cats = catsEdit, limits = lim)); closeSheet() }
+            }
+            Sheet.Ibkr -> {
+                val t = f.ibTok.trim(); val q = f.ibQ.trim()
+                if (q.isEmpty() || (t.isEmpty() && !ibkrOn)) { formErr = "Вкажіть токен і номер Flex-запиту (Query ID)"; return }
+                flexQueryError(q).let { if (it.isNotEmpty()) { formErr = it; return } }
+                try { IbkrStore.save(ctx, t.ifEmpty { IbkrStore.token(ctx) }, q) } catch (e: Throwable) { formErr = "Не вдалося зберегти токен на пристрої: ${e.javaClass.simpleName}"; return }
+                form = form.copy(ibTok = "", ibQ = ""); formErr = ""; ibkrOn = true; syncIbkr()  // вікно лишається відкритим, поки триває синхронізація і видно результат
             }
             Sheet.Rule -> {
                 val m = f.ruMatch.split(',').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
@@ -641,7 +705,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelPin() { kmode = KMode.None; entry = ""; kerr = ""; tmp = "" }
     fun unlockByBio() { kmode = KMode.None; entry = ""; kerr = "" }
     fun onStopped() { hiddenAt = System.currentTimeMillis() }
-    fun onStarted() { runRecurring(); refreshNotifyState(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
+    fun onStarted() { runRecurring(); refreshNotifyState(); autoSyncIbkr(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
     fun backspace() { entry = entry.dropLast(1) }
     fun press(d: String) {
         if (kmode == KMode.None) return

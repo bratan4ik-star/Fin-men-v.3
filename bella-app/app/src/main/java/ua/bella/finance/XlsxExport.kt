@@ -76,6 +76,13 @@ fun buildXlsx(d: AppData): ByteArray {
 
     val names = listOf("Операції", "По місяцях", "По категоріях")
     val sheets = listOf(sheet(ops, listOf(12, 10, 20, 34, 24, 14, 22, 14)), sheet(months, listOf(12, 16, 16, 16)), sheet(catRows, listOf(24, 16, 12)))
+    return workbook(names, sheets)
+}
+
+fun xlsxFileName(date: String): String = "bella-operations-$date.xlsx"
+
+/** Книга .xlsx з аркушів (назви й готовий XML аркушів). */
+private fun workbook(names: List<String>, sheets: List<String>): ByteArray {
     val out = ByteArrayOutputStream()
     ZipOutputStream(out).use { z ->
         fun put(n: String, s: String) { z.putNextEntry(ZipEntry(n)); z.write(s.toByteArray(Charsets.UTF_8)); z.closeEntry() }
@@ -90,4 +97,33 @@ fun buildXlsx(d: AppData): ByteArray {
     return out.toByteArray()
 }
 
-fun xlsxFileName(date: String): String = "bella-operations-$date.xlsx"
+/** Річний звіт в Excel: «Підсумок», «По місяцях», «По категоріях». Суми в гривнях. */
+fun buildYearXlsx(r: YearReport): ByteArray {
+    fun row(l: String, v: Double?, note: String = "") = listOf(Cell.S(l), if (v == null) Cell.E else Cell.N(v), Cell.S(note))
+    val sum = mutableListOf(head("Показник", "Сума, ₴", "Примітка"))
+    sum += listOf(Cell.S("Період", true), Cell.S("${ddmmyyyy(r.period.from.toString())} – ${ddmmyyyy(r.period.to.toString())}"), Cell.E)
+    sum += row("Доходи", r.income, "минулий період: ${fmtInt(r.prevIncome)}")
+    sum += row("Витрати", r.expense, "минулий період: ${fmtInt(r.prevExpense)}")
+    sum += row("Баланс (доходи − витрати)", r.net)
+    sum += listOf(Cell.S("Норма заощаджень, %"), r.savingsPct?.let { Cell.N(it.toDouble()) } ?: Cell.E, Cell.E)
+    sum += row("Доходи в середньому за місяць", r.avgIncome, "місяців: ${r.months}")
+    sum += row("Витрати в середньому за місяць", r.avgExpense)
+    r.maxMonth?.let { sum += row("Найбільші витрати: ${monthLabel(it.month)}", it.exp) }
+    r.minMonth?.let { sum += row("Найменші витрати: ${monthLabel(it.month)}", it.exp) }
+    r.netStart?.let { sum += row("Капітал на ${ddmmyyyy(it.d)}", it.v) }
+    r.netEnd?.let { sum += row("Капітал на ${ddmmyyyy(it.d)}", it.v) }
+    r.netChange?.let { sum += row("Зміна капіталу", it) }
+    if (r.invest.isNotEmpty()) {
+        sum += listOf(Cell.S("Інвестиційний дохід", true), Cell.N(r.investTotal), Cell.E)
+        r.invest.forEach { (k, v) -> sum += row("  $k", v, when (k) { "ОВДП" -> "купони ОВДП не оподатковуються"; "Депозити" -> "після податку; утримано ≈ ${fmtInt(r.depositTax)}"; else -> "" }) }
+    }
+    val months = mutableListOf(head("Місяць", "Доходи, ₴", "Витрати, ₴", "Баланс, ₴"))
+    r.flows.forEach { m -> months += listOf(Cell.S(m.month), Cell.N(m.inc), Cell.N(m.exp), Cell.N(m.inc - m.exp)) }
+    months += listOf(Cell.S("Разом", true), Cell.N(r.income), Cell.N(r.expense), Cell.N(r.net))
+    val cats = mutableListOf(head("Категорія", "Витрати, ₴", "Частка, %", "У середньому за місяць, ₴"))
+    r.cats.forEach { (c, v) -> cats += listOf(Cell.S(c), Cell.N(v), Cell.N(if (r.expense > 0) v / r.expense * 100 else 0.0), Cell.N(v / r.months)) }
+    return workbook(listOf("Підсумок", "По місяцях", "По категоріях"),
+        listOf(sheet(sum, listOf(36, 16, 40)), sheet(months, listOf(12, 16, 16, 16)), sheet(cats, listOf(24, 16, 12, 22))))
+}
+
+fun yearXlsxName(r: YearReport): String = "bella-report-${r.period.from}-${r.period.to}.xlsx"
