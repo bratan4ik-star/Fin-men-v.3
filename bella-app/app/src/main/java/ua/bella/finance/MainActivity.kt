@@ -21,7 +21,17 @@ class MainActivity : FragmentActivity() {
     private val vm: BellaViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIntent(intent)
         setContent { BellaTheme(vm.light) { BellaApp(vm) } }
+    }
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.getStringExtra("screen") == "calc") {
+            vm.screen = Screen.Calc
+        }
     }
     override fun onStop() { super.onStop(); vm.onStopped() }
     override fun onStart() { super.onStart(); vm.onStarted() }

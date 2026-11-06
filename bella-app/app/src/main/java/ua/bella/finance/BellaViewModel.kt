@@ -85,6 +85,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var impResult by mutableStateOf<ImportResult?>(null); private set
     var impBusy by mutableStateOf(false); private set
     var impAcc by mutableStateOf(true)
+    var impItems by mutableStateOf<List<ImportItem>>(emptyList()); private set
+    var impSkipDuplicates by mutableStateOf(true)
 
     // undo
     private val stack = ArrayDeque<AppData>()
@@ -488,7 +490,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Довідка з будь-якого екрана: відкривається на розділі, що відповідає поточному екрану. */
     fun openHelp(section: Int = helpSectionFor(screen)) { help = section; helpTop = section; sheet = Sheet.Help }
     fun openSettings() { eraseAsk = false; sheet = Sheet.Settings }
-    fun openImport() { impResult = null; sheet = Sheet.Import }
+    fun openImport() { impResult = null; impItems = emptyList(); sheet = Sheet.Import }
 
     // ---------- сабміти ----------
     fun submit() {
@@ -677,7 +679,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun openPosInCalc(p: Pos) {
         val x = p.calc
-        calcIn = CalcInput(x?.isin ?: p.name.removePrefix("ОВДП "), (x?.nom ?: 1000.0).toString().removeSuffix(".0"), x?.buy ?: TODAY, p.mat, p.buy.toString(), p.qty.toString(), p.rate.toString(), x?.freq ?: 6, x?.sell ?: p.now.toString(), x?.sellD ?: p.mat)
+        calcIn = CalcInput(x?.isin ?: p.name.removePrefix("ОВДП "), (x?.nom ?: 1000.0).toString().removeSuffix(".0"), x?.buy ?: TODAY, p.mat, p.buy.toString(), p.qty.toString(), p.rate.toString(), x?.freq ?: 6, x?.sell ?: p.now.toString(), x?.sellD ?: p.mat, cur = x?.cur ?: p.cur)
         screen = Screen.Calc
     }
     fun addCalcToInv() {
@@ -685,13 +687,14 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (c.qty > 0) {
             open = open + "ОВДП"; screen = Screen.Inv
             commit(data.copy(pos = data.pos + Pos("ОВДП", "ОВДП " + calcIn.isin.ifEmpty { "без ISIN" }, c.qty.toDouble(), pr, pr, calcIn.mat, parseNum(calcIn.coupon), "",
-                CalcExtra(calcIn.isin, parseNum(calcIn.nom).takeIf { it != 0.0 } ?: 1000.0, calcIn.freq, calcIn.sell, calcIn.sellD, calcIn.buy))))
+                CalcExtra(calcIn.isin, parseNum(calcIn.nom).takeIf { it != 0.0 } ?: 1000.0, calcIn.freq, calcIn.sell, calcIn.sellD, calcIn.buy, calcIn.cur),
+                cur = calcIn.cur)))
         }
     }
 
     // ---------- імпорт ----------
     fun importUri(uri: Uri, name: String) {
-        impBusy = true; impResult = null
+        impBusy = true; impResult = null; impItems = emptyList()
         val rules = data.rules
         viewModelScope.launch {
             val r = withContext(Dispatchers.IO) {
@@ -703,13 +706,42 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                     else Importer.parseBytes(bytes, rate, rules)
                 } catch (e: Throwable) { ImportResult(emptyList(), emptyList(), 0, "Не вдалося прочитати файл (${e.javaClass.simpleName}: ${e.message?.take(80) ?: "—"})") }
             }
-            impResult = r; impBusy = false
+            impResult = r
+            val existing = if (data.demo && r.accs.isNotEmpty()) emptyList() else data.txs
+            impItems = detectDuplicates(r.txs, existing)
+            impSkipDuplicates = true
+            impBusy = false
         }
     }
-    fun importSample() { impResult = Importer.parseCsv("01.11.2026;Сільпо;-1250,40\n01.11.2026;Uber;-310\n02.11.2026;Аптека Доба;-480\n02.11.2026;Зарплата;45000\n02.11.2026;Spotify;-169", rate, data.rules) }
+
+    fun importSample() {
+        val r = Importer.parseCsv("01.11.2026;Сільпо;-1250,40\n01.11.2026;Uber;-310\n02.11.2026;Аптека Доба;-480\n02.11.2026;Зарплата;45000\n02.11.2026;Spotify;-169", rate, data.rules)
+        impResult = r
+        val existing = if (data.demo && r.accs.isNotEmpty()) emptyList() else data.txs
+        impItems = detectDuplicates(r.txs, existing)
+        impSkipDuplicates = true
+    }
+
+    fun toggleImportItem(index: Int) {
+        if (index in impItems.indices) {
+            impItems = impItems.mapIndexed { i, itm -> if (i == index) itm.copy(selected = !itm.selected) else itm }
+        }
+    }
+
+    fun toggleSkipDuplicates(skip: Boolean) {
+        impSkipDuplicates = skip
+        impItems = impItems.map { itm -> if (itm.isDuplicate) itm.copy(selected = !skip) else itm }
+    }
+
+    fun selectAllImport(select: Boolean) {
+        impItems = impItems.map { it.copy(selected = select) }
+    }
+
     private fun existingKeys(): Set<String> = if (data.demo && impResult?.accs?.isNotEmpty() == true) emptySet() else data.txs.mapNotNull { it.key.ifEmpty { null } }.toSet()
-    val dupN: Int get() { val h = existingKeys(); return impResult?.txs?.count { it.key.isNotEmpty() && it.key in h } ?: 0 }
-    fun removeImportDups() { val r = impResult ?: return; val h = existingKeys(); impResult = r.copy(txs = r.txs.filter { it.key.isEmpty() || it.key !in h }) }
+    val dupN: Int get() = impItems.count { it.isDuplicate }
+    fun removeImportDups() {
+        impItems = impItems.filter { !it.isDuplicate }
+    }
     private fun dedupe(txs: List<Tx>): List<Tx> { val seen = HashSet<String>(); return txs.filter { it.key.isEmpty() || seen.add(it.key) } }
     val dupInStore: Int get() = data.txs.size - dedupe(data.txs).size
     fun dedupeStore() { sheet = Sheet.None; commit(data.copy(txs = dedupe(data.txs))) }
@@ -720,9 +752,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         return out
     }
     private fun importCommit() {
-        val r = impResult ?: return; if (r.txs.isEmpty()) return; val s = data
-        val rep = s.demo && r.accs.isNotEmpty(); val keep = if (rep) emptyList() else s.txs
-        val txs = r.txs + keep
+        val r = impResult ?: return
+        val selectedTxs = impItems.filter { it.selected }.map { it.tx }
+        if (selectedTxs.isEmpty()) return
+        val s = data
+        val rep = s.demo && r.accs.isNotEmpty()
+        val keep = if (rep) emptyList() else s.txs
+        val txs = selectedTxs + keep
         var nd = s.copy(txs = txs, demo = s.demo && !rep)
         if (rep) nd = nd.copy(pos = emptyList(), goals = emptyList(), debts = emptyList())
         if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(s.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
@@ -806,6 +842,16 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     private fun checkMoneyAlerts() { viewModelScope.launch(Dispatchers.IO) { try { Jobs.runMoneyAlerts(ctx) } catch (_: Exception) {} } }
     /** Виплати ОВДП на найближчі 60 днів (для екрана «Інвестиції»). */
     fun upcomingOvdp(): List<OvdpEvent> = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(60)) }
+
+    /** Наступна очікувана виплата купона або погашення ОВДП (для банера нагадувань). */
+    fun nextOvdpEvent(): OvdpEvent? = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(365)).firstOrNull() }
+
+    /** Надсилає тестове сповіщення про виплату ОВДП на пристрій для перевірки. */
+    fun testOvdpNotification() {
+        val msg = Jobs.sendTestOvdpNotification(ctx)
+        remindMsg = msg
+        try { android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
+    }
 
     // Наприкінці класу: на цей момент усі поля (зокрема quoteBusy/quoteMsg) уже ініціалізовані.
     init {

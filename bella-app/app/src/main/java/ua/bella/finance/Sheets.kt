@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -485,19 +487,127 @@ private fun ImportForm(vm: BellaViewModel) {
             vm.importUri(uri, name)
         }
     }
-    T("Виписка Excel (.xlsx) або CSV: дата; опис; сума (від'ємна сума це витрата).", 12.sp, C.n500)
-    Btn("Обрати файл", false, Modifier.fillMaxWidth(), Icons.Outlined.FileUpload) { picker.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv", "text/plain", "application/octet-stream", "*/*")) }
-    T("Спробувати на прикладі", 13.sp, C.accent400, modifier = Modifier.clickable { vm.importSample() })
+
+    T("Виписка банку в Excel (.xlsx) або CSV: дата; опис; сума (від'ємна сума це витрата).", 12.sp, C.n500)
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Btn("Обрати файл виписки", false, Modifier.weight(1f), Icons.Outlined.FileUpload) {
+            picker.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv", "text/plain", "application/octet-stream", "*/*"))
+        }
+        Btn("Демо-приклад", false) { vm.importSample() }
+    }
+
+    if (vm.impBusy) {
+        Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CircularProgressIndicator(Modifier.size(18.dp), color = C.accent, strokeWidth = 2.dp)
+            T("Обробка виписки та перевірка дублікатів…", 13.sp, C.n500)
+        }
+    }
+
     val r = vm.impResult
-    if (vm.impBusy) T("Читаю файл…", 12.sp)
+    val items = vm.impItems
+
     if (r != null) {
-        T(r.info, 12.sp); if (r.info2.isNotEmpty()) T(r.info2, 12.sp, C.n500)
-        if (vm.dupN > 0) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Ico(Icons.Outlined.ContentCopy, C.n500, 16.dp); T("Повторів: ${vm.dupN}", 12.sp, modifier = Modifier.weight(1f)); Btn("Прибрати повтори", false) { vm.removeImportDups() }
+        if (r.error.isNotEmpty()) {
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(C.neg.copy(alpha = 0.15f)).padding(12.dp)) {
+                T(r.error, 13.sp, C.neg)
+            }
+        } else {
+            // Загальна інформація про діапазон дат та файлу
+            T(r.info, 12.sp, C.text, FontWeight.Medium)
+            if (r.info2.isNotEmpty()) T(r.info2, 11.sp, C.n500)
+
+            val selectedCount = items.count { it.selected }
+            val dupCount = items.count { it.isDuplicate }
+
+            // Метрики підсумку виписки
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(C.surface).padding(8.dp)) {
+                    Column {
+                        T("У виписці", 10.sp, C.n500)
+                        T("${items.size}", 16.sp, C.text, FontWeight.Bold)
+                    }
+                }
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(C.surface).padding(8.dp)) {
+                    Column {
+                        T("До імпорту", 10.sp, C.n500)
+                        T("$selectedCount", 16.sp, C.pos, FontWeight.Bold)
+                    }
+                }
+                if (dupCount > 0) {
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(C.surface).padding(8.dp)) {
+                        Column {
+                            T("Дублікатів", 10.sp, C.n500)
+                            T("$dupCount", 16.sp, Color(0xFFFBBF24), FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // Перемикач пропуску дублікатів
+            if (dupCount > 0) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { vm.toggleSkipDuplicates(!vm.impSkipDuplicates) }.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Ico(if (vm.impSkipDuplicates) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp)
+                    T("Автоматично пропускати виявлені дублікати ($dupCount)", 12.sp, C.text)
+                }
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                T("Попередній перегляд операцій:", 12.sp, C.n500, FontWeight.Medium)
+                val allSel = items.isNotEmpty() && items.all { it.selected }
+                T(if (allSel) "Зняти всі" else "Обрати всі", 12.sp, C.accent, modifier = Modifier.clickable { vm.selectAllImport(!allSel) })
+            }
+
+            // Картки залишків рахунків, якщо виписка містить картки
+            if (r.accs.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { vm.impAcc = !vm.impAcc }.padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Ico(if (vm.impAcc) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp)
+                    T("Оновити рахунки за залишками карток (${r.accs.size})", 12.sp)
+                }
+            }
+
+            // Список операцій для перегляду з можливістю індивідуального вибору
+            Column {
+                items.take(40).forEachIndexed { i, item ->
+                    Div()
+                    Column(Modifier.fillMaxWidth().clickable { vm.toggleImportItem(i) }) {
+                        TxRowView(
+                            t = item.tx,
+                            vm = vm,
+                            selected = item.selected,
+                            onClick = { vm.toggleImportItem(i) }
+                        )
+                        if (item.isDuplicate) {
+                            Row(
+                                Modifier.padding(start = 32.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    Modifier.clip(RoundedCornerShape(3.dp))
+                                        .background(Color(0xFFFBBF24).copy(alpha = 0.2f))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    T("ДУБЛІКАТ", 9.sp, Color(0xFFFBBF24), FontWeight.Bold)
+                                }
+                                T(item.duplicateReason, 10.sp, C.n500, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+                if (items.size > 40) {
+                    Div()
+                    T("…ще ${items.size - 40} операцій буде імпортовано згідно з вибором.", 11.sp, C.n500, modifier = Modifier.padding(vertical = 8.dp))
+                }
+            }
         }
-        if (r.accs.isNotEmpty()) Row(Modifier.clickable { vm.impAcc = !vm.impAcc }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Ico(if (vm.impAcc) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Оновити рахунки за залишками карток", 13.sp)
-        }
-        Column { r.txs.take(8).forEach { Div(); TxRowView(it, vm) } }
     }
 }

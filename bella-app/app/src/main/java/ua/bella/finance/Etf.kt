@@ -20,11 +20,15 @@ fun isFxPos(p: Pos): Boolean = p.cur != "UAH" && p.pxNow > 0
 
 /** Поточна вартість у гривнях. */
 fun posValueUah(p: Pos, rates: Map<String, Double>): Double =
-    if (isFxPos(p)) p.qty * p.pxNow * (rates[p.cur] ?: 1.0) else p.qty * p.now
+    if (isFxPos(p)) p.qty * p.pxNow * (rates[p.cur] ?: 1.0)
+    else if (p.cur != "UAH") p.qty * p.now * (rates[p.cur] ?: 1.0)
+    else p.qty * p.now
 
 /** Вартість купівлі в гривнях. */
 fun posCostUah(p: Pos): Double =
-    if (isFxPos(p) && p.pxBuy > 0 && p.buyFx > 0) p.qty * p.pxBuy * p.buyFx else p.qty * p.buy
+    if (isFxPos(p) && p.pxBuy > 0 && p.buyFx > 0) p.qty * p.pxBuy * p.buyFx
+    else if (p.cur != "UAH") p.qty * p.buy * (RATES[p.cur] ?: 1.0)
+    else p.qty * p.buy
 
 /** Прибуток у гривнях: усього, від ціни фонду, від курсу. Для гривневих позицій курсова частина 0. */
 data class PlSplit(val total: Double, val price: Double, val fx: Double)

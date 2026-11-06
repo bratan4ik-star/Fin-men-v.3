@@ -11,6 +11,13 @@ import java.time.LocalDate
 import java.util.zip.ZipFile
 import javax.xml.parsers.SAXParserFactory
 
+data class ImportItem(
+    val tx: Tx,
+    val isDuplicate: Boolean,
+    val duplicateReason: String = "",
+    val selected: Boolean = !isDuplicate
+)
+
 data class ImportResult(val txs: List<Tx>, val accs: List<Account>, val bad: Int, val error: String = "") {
     val info: String get() {
         if (error.isNotEmpty()) return error
@@ -22,6 +29,58 @@ data class ImportResult(val txs: List<Tx>, val accs: List<Account>, val bad: Int
     val info2: String get() {
         val tr = txs.count { it.type == "transfer" }
         return if (tr > 0) "Між власними картками та заощадженнями: $tr. Вони не рахуються доходом чи витратою." else ""
+    }
+}
+
+/** Нормалізація рядка опису для нечутливого до регістру та розділових знаків порівняння. */
+fun normDesc(s: String): String =
+    s.lowercase()
+        .replace(Regex("[^a-zа-яіїєґ0-9]"), "")
+        .trim()
+
+/**
+ * Розумний пошук дублікатів операцій при періодичному імпорті:
+ * 1. Збіг за точним технічним ключем виписки (key).
+ * 2. Збіг за комбінацією: однакова дата, однаковий тип (income/expense), сума (з точністю до копійки),
+ *    і схожий/ідентичний нормалізований опис.
+ * 3. Запобігає дублюванню однакових рядків всередині одного файлу.
+ */
+fun detectDuplicates(newTxs: List<Tx>, existingTxs: List<Tx>): List<ImportItem> {
+    val existingKeys = existingTxs.mapNotNull { it.key.ifEmpty { null } }.toSet()
+    val existingSignatures = existingTxs.map { tx ->
+        Triple(tx.date, Math.round(tx.amt * 100) / 100.0, tx.type) to normDesc(tx.desc)
+    }
+
+    val seenInBatchKeys = mutableSetOf<String>()
+    val seenInBatchSig = mutableListOf<Pair<Triple<String, Double, String>, String>>()
+
+    return newTxs.map { tx ->
+        val amtRounded = Math.round(tx.amt * 100) / 100.0
+        val sig = Triple(tx.date, amtRounded, tx.type)
+        val dNorm = normDesc(tx.desc)
+
+        if (tx.key.isNotEmpty() && tx.key in existingKeys) {
+            ImportItem(tx, isDuplicate = true, duplicateReason = "Точний ключ операції вже є у базі", selected = false)
+        } else if (tx.key.isNotEmpty() && !seenInBatchKeys.add(tx.key)) {
+            ImportItem(tx, isDuplicate = true, duplicateReason = "Повтор рядка у файлі виписки", selected = false)
+        } else {
+            val match = existingSignatures.firstOrNull { (s, desc) ->
+                s == sig && (desc == dNorm || (desc.isNotEmpty() && dNorm.isNotEmpty() && (desc.contains(dNorm) || dNorm.contains(desc) || desc.take(10) == dNorm.take(10))))
+            }
+            if (match != null) {
+                ImportItem(tx, isDuplicate = true, duplicateReason = "Вже збережено: ${tx.date} на ${fmt2(amtRounded)} ₴", selected = false)
+            } else {
+                val batchMatch = seenInBatchSig.firstOrNull { (s, desc) ->
+                    s == sig && (desc == dNorm || (desc.isNotEmpty() && dNorm.isNotEmpty() && (desc.contains(dNorm) || dNorm.contains(desc))))
+                }
+                if (batchMatch != null) {
+                    ImportItem(tx, isDuplicate = true, duplicateReason = "Повторюється у виписці", selected = false)
+                } else {
+                    seenInBatchSig.add(sig to dNorm)
+                    ImportItem(tx, isDuplicate = false, duplicateReason = "", selected = true)
+                }
+            }
+        }
     }
 }
 

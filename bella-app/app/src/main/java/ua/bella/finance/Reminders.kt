@@ -3,8 +3,14 @@ package ua.bella.finance
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-/** Виплата за ОВДП: купон і/або номінал (при погашенні), суми в гривнях. */
-data class OvdpEvent(val date: LocalDate, val name: String, val coupon: Double, val principal: Double) {
+/** Виплата за ОВДП: купон і/або номінал (при погашенні), суми у валюті облігації. */
+data class OvdpEvent(
+    val date: LocalDate,
+    val name: String,
+    val coupon: Double,
+    val principal: Double,
+    val cur: String = "UAH"
+) {
     val total get() = coupon + principal
     val maturity get() = principal > 0
 }
@@ -15,13 +21,14 @@ private fun pdate(s: String): LocalDate? = try { LocalDate.parse(s.trim()) } cat
  * Майбутні виплати ОВДП у проміжку [from, until].
  * Позиція з калькулятора (є calc) — купони від дати погашення назад з кроком calc.freq місяців (0 — лише погашення).
  * Позиція без calc — купони від «наступної виплати» вперед кожні 6 місяців до погашення.
- * Купон = к-сть × номінал × ставка / 100 × крок / 12; номінал без calc — 1000 ₴.
+ * Купон = к-сть × номінал × ставка / 100 × крок / 12; номінал без calc — 1000.
  */
 fun ovdpEvents(pos: List<Pos>, from: LocalDate, until: LocalDate): List<OvdpEvent> {
     val out = mutableListOf<OvdpEvent>()
     pos.filter { it.group == "ОВДП" && it.qty > 0 }.forEach { p ->
         val nom = p.calc?.nom?.takeIf { it > 0 } ?: 1000.0
         val freq = p.calc?.freq ?: 6
+        val cur = p.cur.ifEmpty { p.calc?.cur ?: "UAH" }
         val mat = pdate(p.mat)
         val per = if (freq > 0) p.qty * nom * p.rate / 100 * freq / 12 else 0.0
         val dates = sortedSetOf<LocalDate>()
@@ -34,7 +41,7 @@ fun ovdpEvents(pos: List<Pos>, from: LocalDate, until: LocalDate): List<OvdpEven
         }
         dates.filter { !it.isBefore(from) && !it.isAfter(until) }.forEach { d ->
             val atMat = mat != null && d == mat
-            out.add(OvdpEvent(d, p.name, if (atMat && freq == 0) 0.0 else per, if (atMat) p.qty * nom else 0.0))
+            out.add(OvdpEvent(d, p.name, if (atMat && freq == 0) 0.0 else per, if (atMat) p.qty * nom else 0.0, cur = cur))
         }
     }
     return out.sortedWith(compareBy({ it.date }, { it.name }))
@@ -59,9 +66,19 @@ fun reminderTitle(r: Reminder): String {
     return if (r.today) "Сьогодні $what" else "Через ${r.daysLeft} ${dayWord(r.daysLeft)} $what"
 }
 
-fun reminderText(r: Reminder): String =
-    "${r.event.name}: ≈ ${fmtInt(r.event.total)} ₴ · ${ddmmyyyy(r.event.date.toString())}" +
-        if (r.event.maturity && r.event.coupon == 0.0) " (номінал, купон окремо)" else ""
+fun reminderText(r: Reminder, rates: Map<String, Double> = RATES): String {
+    val sign = curSign(r.event.cur)
+    val fx = rates[r.event.cur] ?: 1.0
+    val totalOrig = r.event.total
+    val totalUah = totalOrig * fx
+    val amtFormatted = if (r.event.cur != "UAH") {
+        "${fmt2(totalOrig)} $sign (≈ ${fmtInt(totalUah)} ₴)"
+    } else {
+        "≈ ${fmtInt(totalOrig)} ₴"
+    }
+    val note = if (r.event.maturity && r.event.coupon == 0.0) " (номінал, купон окремо)" else ""
+    return "${r.event.name}: $amtFormatted · ${ddmmyyyy(r.event.date.toString())}$note"
+}
 
 fun dayWord(n: Long): String { val a = n % 100; val b = n % 10
     return if (a in 11..14) "днів" else if (b == 1L) "день" else if (b in 2..4) "дні" else "днів" }
