@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.DebtE to "Редагувати борг", Sheet.Rec to "Повторювана операція", Sheet.Rule to "Правило категорії", Sheet.Ibkr to "Interactive Brokers", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.DebtE to "Редагувати борг", Sheet.Rec to "Повторювана операція", Sheet.Rule to "Правило категорії", Sheet.Ibkr to "Interactive Brokers", Sheet.IbkrCharts to "Графіки IBKR", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
 )
 private const val EDIT_NOTE = "Щоб побачити, що було, очистіть поле: старе значення з'явиться сірим. Порожнє поле під час збереження лишається як було."
 private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.DebtE to "Зберегти", Sheet.Rec to "Зберегти", Sheet.Rule to "Зберегти", Sheet.Ibkr to "Зберегти й синхронізувати", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
@@ -47,7 +47,7 @@ fun SheetHost(vm: BellaViewModel) {
                 when (sh) {
                     Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm, false); Sheet.DebtE -> DebtForm(vm, true); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Rec -> RecForm(vm); Sheet.Rule -> RuleForm(vm); Sheet.Ibkr -> IbkrForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
-                    Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
+                    Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.IbkrCharts -> IbkrChartsView(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
                 }
             }
@@ -178,7 +178,7 @@ private fun IbkrForm(vm: BellaViewModel) {
     Field("Номер Flex-запиту (Query ID)", f.ibQ, hint = "напр. 987654", numeric = true) { vm.form = f.copy(ibQ = it) }
     T("Як отримати (один раз, на комп'ютері в Client Portal IBKR):\n" +
         "1. Performance & Reports → Flex Queries → «+» у розділі Activity Flex Query.\n" +
-        "2. Розділи: Open Positions (Options: Summary), Cash Report, Cash Transactions (Dividends, Withholding Tax, Payment In Lieu Of Dividends). Поля — усі.\n" +
+        "2. Розділи: Open Positions (Options: Summary), Cash Report, Cash Transactions (Dividends, Withholding Tax, Payment In Lieu Of Dividends, Deposits & Withdrawals), Net Asset Value (NAV) in Base, Account Information. Поля — усі. Останні три потрібні для графіка вартості рахунку.\n" +
         "3. Format: XML, Period: Last 365 Calendar Days. Збережіть і запишіть Query ID.\n" +
         "4. Там само: Flex Web Service Configuration → увімкнути → Generate New Token (термін — до 1 року).", 11.sp, C.n400)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)

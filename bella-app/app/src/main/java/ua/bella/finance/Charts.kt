@@ -86,7 +86,7 @@ data class Slice(val label: String, val color: Color, val value: Double)
 
 /** Кільцева діаграма структури портфеля з легендою. */
 @Composable
-fun PortfolioDonut(vm: BellaViewModel, slices: List<Slice>) {
+fun PortfolioDonut(vm: BellaViewModel, slices: List<Slice>, unit: Pair<String, String> = "клас" to "класи") {
     val ss = slices.filter { it.value > 0 }; val total = ss.sumOf { it.value }
     if (total <= 0) return
     val bg = C.bg
@@ -100,7 +100,7 @@ fun PortfolioDonut(vm: BellaViewModel, slices: List<Slice>) {
                     if (ss.size > 1) drawArc(bg, start + sw - 0.8f, 0.8f, false, tl, r, style = Stroke(w))
                     start += sw }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) { T("${ss.size}", 16.sp, weight = FontWeight.Medium); T(if (ss.size == 1) "клас" else "класи", 10.sp, C.n500) }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) { T("${ss.size}", 16.sp, weight = FontWeight.Medium); T(if (ss.size == 1) unit.first else unit.second, 10.sp, C.n500) }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             ss.sortedByDescending { it.value }.forEach { s ->

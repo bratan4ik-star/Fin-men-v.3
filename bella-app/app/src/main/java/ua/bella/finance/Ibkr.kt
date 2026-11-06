@@ -17,7 +17,14 @@ const val FLEX_SEND = "https://ndcdyn.interactivebrokers.com/AccountManagement/F
 
 data class IbPos(val symbol: String, val desc: String, val exchange: String, val cur: String, val qty: Double, val mark: Double, val cost: Double, val category: String)
 data class IbDiv(val id: String, val date: String, val symbol: String, val cur: String, val amount: Double, val tax: Double)
-data class FlexData(val account: String, val asOf: String, val positions: List<IbPos>, val cash: Map<String, Double>, val dividends: List<IbDiv>)
+/** Поповнення (+) чи виведення (−) грошей у базовій валюті рахунку. */
+data class IbFlowIn(val id: String, val date: String, val amount: Double)
+/**
+ * base — базова валюта рахунку; fromDate — початок періоду звіту; nav — щоденна вартість рахунку в базовій валюті
+ * (розділ «Net Asset Value (NAV) in Base», якщо його ввімкнено у Flex-запиті); flows — поповнення й виведення.
+ */
+data class FlexData(val account: String, val asOf: String, val positions: List<IbPos>, val cash: Map<String, Double>, val dividends: List<IbDiv>,
+    val base: String = "", val fromDate: String = "", val nav: List<HistPoint> = emptyList(), val flows: List<IbFlowIn> = emptyList())
 
 /** Відповідь SendRequest / GetStatement зі статусом: ref і url — коли звіт замовлено; code/message — помилка чи «ще готується». */
 data class FlexStatus(val ok: Boolean, val ref: String, val url: String, val code: String, val message: String) {
@@ -73,13 +80,19 @@ fun flexDate(raw: String): String {
 /** Розбирає FlexQueryResponse. Позиції — рівень SUMMARY (або всі, якщо рівня немає); дивіденди об'єднуються з утриманим податком. */
 fun parseFlexStatement(xml: String): FlexData {
     val pos = mutableListOf<IbPos>(); val cash = LinkedHashMap<String, Double>()
-    data class Ct(val id: String, val date: String, val symbol: String, val cur: String, val amount: Double, val type: String)
-    val cts = mutableListOf<Ct>(); var account = ""; var asOf = ""
+    data class Ct(val id: String, val date: String, val symbol: String, val cur: String, val amount: Double, val type: String, val fx: Double)
+    val cts = mutableListOf<Ct>(); var account = ""; var asOf = ""; var base = ""; var from = ""
+    val nav = java.util.TreeMap<String, Double>()
     sax(xml, object : DefaultHandler() {
         override fun resolveEntity(publicId: String?, systemId: String?) = InputSource(StringReader(""))
         override fun startElement(u: String?, l: String?, q: String, a: Attributes) {
             when (q) {
-                "FlexStatement" -> { account = str(a, "accountId"); asOf = flexDate(str(a, "toDate")) }
+                "FlexStatement" -> { account = str(a, "accountId"); asOf = flexDate(str(a, "toDate")); from = flexDate(str(a, "fromDate")) }
+                "AccountInformation" -> str(a, "currency").uppercase().takeIf { it.length == 3 }?.let { base = it }
+                "EquitySummaryByReportDateInBase" -> {
+                    val day = flexDate(str(a, "reportDate")); val t = a.getValue("total")?.replace(",", "")?.toDoubleOrNull()
+                    if (day.isNotEmpty() && t != null) nav[day] = t
+                }
                 "OpenPosition" -> {
                     val lvl = str(a, "levelOfDetail"); if (lvl.isNotEmpty() && !lvl.equals("SUMMARY", true)) return
                     val cost = d(a, "costBasisPrice").takeIf { it != 0.0 } ?: d(a, "openPrice")
@@ -93,7 +106,7 @@ fun parseFlexStatement(xml: String): FlexData {
                 "CashTransaction" -> {
                     val lvl = str(a, "levelOfDetail"); if (lvl.equals("SUMMARY", true)) return
                     val date = flexDate(str(a, "dateTime").ifEmpty { str(a, "reportDate") }.ifEmpty { str(a, "settleDate") })
-                    cts += Ct(str(a, "transactionID"), date, str(a, "symbol"), str(a, "currency").uppercase(), d(a, "amount"), str(a, "type"))
+                    cts += Ct(str(a, "transactionID"), date, str(a, "symbol"), str(a, "currency").uppercase(), d(a, "amount"), str(a, "type"), d(a, "fxRateToBase"))
                 }
             }
         }
@@ -105,7 +118,12 @@ fun parseFlexStatement(xml: String): FlexData {
         val tx = taxes.filter { it.symbol == k.first && it.date == k.second && it.cur == k.third }.map { it.id }
         IbDiv((l.map { it.id } + tx).filter { it.isNotEmpty() }.distinct().sorted().joinToString("+").ifEmpty { "${k.first}_${k.second}" }, k.second, k.first, k.third, l.sumOf { it.amount }, tax)
     }.filter { it.amount > 0 }.sortedBy { it.date }
-    return FlexData(account, asOf, pos.filter { it.qty != 0.0 }, cash, out)
+    val flows = cts.filter { it.type.contains("Deposit", true) || it.type.contains("Withdrawal", true) }
+        .distinctBy { it.id.ifEmpty { "${it.date}|${it.amount}|${it.cur}" } }
+        .filter { it.date.isNotEmpty() && it.amount != 0.0 }
+        .map { IbFlowIn(it.id.ifEmpty { "${it.date}|${it.amount}|${it.cur}" }, it.date, it.amount * (if (it.fx > 0) it.fx else 1.0)) }
+        .sortedBy { it.date }
+    return FlexData(account, asOf, pos.filter { it.qty != 0.0 }, cash, out, base, from, nav.map { HistPoint(it.key, it.value) }, flows)
 }
 
 /** Тікер Yahoo для оновлення цін з біржі: суфікс за біржею IBKR (IBIS → .DE, LSEETF → .L тощо). */
