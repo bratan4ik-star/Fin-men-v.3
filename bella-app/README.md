@@ -61,6 +61,11 @@ ETF у валюті фонду показуються в ній же: варті
 2. Скопіюйте `keystore.properties.example` у `keystore.properties` і заповніть (файл, `*.jks` та `*.keystore` ігноруються git). Або задайте змінні середовища `BELLA_KEYSTORE`, `BELLA_STORE_PASSWORD`, `BELLA_KEY_ALIAS`, `BELLA_KEY_PASSWORD` (зручно для CI).
 3. `./gradlew :app:assembleRelease` дасть підписаний APK.
 
+Постійний ключ проєкту (з 1.17.0): сертифікат `CN=Bella Finance, O=Bella, C=UA`, відбиток SHA-256
+`51:8C:30:3A:E7:65:B4:FB:52:9A:2F:73:41:B3:27:6C:5C:6B:52:FD:A9:EF:38:E9:94:C8:31:45:4F:5D:70:57`.
+Ключ і паролі зберігаються поза репозиторієм; у CI вони задаються секретами `BELLA_KEYSTORE_BASE64` (файл `.jks` у base64), `BELLA_STORE_PASSWORD`, `BELLA_KEY_ALIAS` (`bella`), `BELLA_KEY_PASSWORD`. Коли секрети є, артефакт `bella-app-apk` містить підписаний `app-release.apk` — саме його ставити на телефон: наступні версії встановлюються поверх без видалення й втрати даних. Debug-APK підписується випадковим ключем машини збірки, тож не оновлюється поверх release.
+Перевірити підпис: `apksigner verify --print-certs app-release.apk`.
+
 ## Відхилення від прототипу
 - Phosphor-іконки замінено на Material Icons (extended); шрифт Inter не вбудовано, використовується системний.
 - Поля дат: текст `РРРР-ММ-ДД` замість `<input type=date>`.
