@@ -132,6 +132,22 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             backupMsg = if (ok) "Копію збережено: операцій ${data.txs.size}, рахунків ${data.accs.size}" else "Не вдалося записати файл копії"
         }
     }
+    /** «Бюджет → Звіт»: 0 — по місяцях, 1 — календарний рік, 2 — останні 12 місяців; repYear — вибраний рік. */
+    var repMode by mutableStateOf(0)
+    var repYear by mutableStateOf(LocalDate.now().year)
+    fun yearReportNow(): YearReport {
+        val today = LocalDate.parse(TODAY)
+        return yearReport(data.txs, hist, if (repMode == 2) last12Period(today) else yearPeriod(repYear, today))
+    }
+    fun exportYearXlsx(uri: Uri) {
+        val r = yearReportNow()
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try { val bytes = buildYearXlsx(r); getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } != null } catch (_: Exception) { false }
+            }
+            backupMsg = if (ok) "Звіт експортовано в Excel" else "Не вдалося записати файл Excel"
+        }
+    }
     fun exportXlsx(uri: Uri) {
         val d = data
         viewModelScope.launch {

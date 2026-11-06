@@ -269,6 +269,9 @@ fun BudgetScreen(vm: BellaViewModel) {
                 }
                 1 -> OpsTab(vm)
                 2 -> Column {
+                    Seg(listOf(0 to "Місяці", 1 to "Рік", 2 to "12 міс."), vm.repMode) { vm.repMode = it }
+                    Spacer(Modifier.height(14.dp))
+                    if (vm.repMode != 0) { YearReportView(vm); return@Column }
                     FlowBars(vm, monthlyFlows(s.txs, CUR_MONTH, mos.size.coerceIn(6, 12)))
                     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) { listOf("Місяць", "Доходи", "Витрати", "Баланс").forEach { T(it, 11.sp, C.n500, modifier = Modifier.weight(1f)) } }
                     mos.reversed().forEach { k ->
