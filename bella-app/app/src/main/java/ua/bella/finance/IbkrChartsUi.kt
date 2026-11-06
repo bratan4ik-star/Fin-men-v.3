@@ -138,7 +138,7 @@ fun IbkrChartsView(vm: BellaViewModel) {
             if (w.capped) T("Історія рахунку — з ${ddmmyyyy(w.pts.first().d)}, коротша за обраний період, тож показано всю.", 11.sp, C.n500)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Fig("Вартість", money(w.value), C.text, "на початку ${money(w.start)}", Modifier.weight(1f))
-                Fig("Внесено", signed(w.deposits), C.text, "зміна разом із внесками ${signed(w.change)}", Modifier.weight(1f))
+                Fig("Внесено", signed(w.deposits), C.text, "зміна ${signed(w.change)}", Modifier.weight(1f))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Fig("Результат інвестицій", signed(w.gain), tone(w.gain), "зміна мінус внесене", Modifier.weight(1f))

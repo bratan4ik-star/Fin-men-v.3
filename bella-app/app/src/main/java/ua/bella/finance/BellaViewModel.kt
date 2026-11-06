@@ -379,6 +379,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             ibPxBusy = false
         }
     }
+    /** Лише для знімків екранів у тестах: підставляє історію рахунку IBKR без синхронізації. */
+    @androidx.annotation.VisibleForTesting
+    internal fun seedIbkrHistory(nav: List<HistPoint>, flows: List<IbFlow>, base: String = "USD") { ibNav = nav; ibFlows = flows; ibBase = base }
     fun removeIbkrGone() { if (ibkrGone.isNotEmpty()) commit(removeGone(data, ibkrGone)); ibkrGone = emptyList() }
     fun keepIbkrGone() { ibkrGone = emptyList() }
     fun disconnectIbkr() { try { IbkrStore.clear(ctx) } catch (_: Exception) {}; ibkrOn = false; ibkrAt = 0L; ibNav = emptyList(); ibFlows = emptyList(); persist(); ibkrMsg = "IBKR відключено. Позиції лишились як є."; closeSheet() }

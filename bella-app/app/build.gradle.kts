@@ -56,6 +56,12 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
+    // Robolectric для знімків екранів (ScreenshotTest): потрібні ресурси застосунку в юніт-тестах
+    testOptions { unitTests {
+        isIncludeAndroidResources = true
+        // справжній рендер вікон для знімків (captureToImage) у Robolectric
+        all { it.systemProperty("robolectric.pixelCopyRenderMode", "hardware") }
+    } }
 }
 dependencies {
     val bom = platform("androidx.compose:compose-bom:2024.09.00")
@@ -70,4 +76,9 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     testImplementation("junit:junit:4.13.2")
+    // знімки екранів без емулятора: Robolectric малює Compose справжнім рушієм Android (Native Graphics)
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation(bom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

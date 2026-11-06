@@ -43,6 +43,16 @@ class IbkrChartsTest {
         val w7 = ibWindow(nav, flows, "7D"); assertTrue(w7.capped)
     }
 
+    @Test fun depositDatedBeforeNavReflectsItDoesNotBreakTwr() {
+        // поповнення 200 датоване 13.09, а вартість зросла лише 14.09
+        val nav = listOf(HistPoint("2026-09-12", 100.0), HistPoint("2026-09-13", 101.0), HistPoint("2026-09-14", 302.0), HistPoint("2026-09-15", 305.0))
+        val w = ibWindow(nav, listOf(IbFlow("1", "2026-09-13", 200.0)), "1Y")
+        // 13.09: +1%; 14.09: (302 − 200) / 101 → +0,99%; 15.09: 305 / 302
+        assertEquals(1.01 * (102.0 / 101.0) * (305.0 / 302.0) - 1, w.twr, 1e-9)
+        assertEquals(300.0, w.pts[1].invested, 1e-9)   // «внесено» — за датою операції
+        assertEquals(5.0, w.gain, 1e-9)
+    }
+
     @Test fun mergeKeepsOldHistoryAndAddsSnapshotWithoutDuplicates() {
         val f = parseFlexStatement(xml)
         val old = listOf(HistPoint("2026-08-01", 50.0), HistPoint("2026-09-12", 1.0))

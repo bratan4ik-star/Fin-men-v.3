@@ -68,6 +68,15 @@ jobs:
             bella-app/app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
+      # Знімки екранів на демо-даних (ScreenshotTest, Robolectric): видно, як виглядає кожен екран, без телефону
+      - name: Знімки екранів
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bella-app-screenshots
+          path: bella-app/app/build/screenshots/
+          if-no-files-found: warn
+
       - name: Звіт тестів
         if: always()
         uses: actions/upload-artifact@v7

@@ -76,13 +76,21 @@ fun ibWindow(nav: List<HistPoint>, flows: List<IbFlow>, period: String): IbWin {
     val from = periodStart(h.last().d, period)
     val bi = h.indexOfLast { it.d <= from }; val capped = bi < 0
     val w = h.subList(if (capped) 0 else bi, h.size)
-    val out = ArrayList<IbPt>(w.size); var inv = w[0].v; var g = 1.0
+    val out = ArrayList<IbPt>(w.size); var inv = w[0].v; var g = 1.0; var carry = 0.0
     out += IbPt(w[0].d, w[0].v, inv, 0.0, 0.0)
     for (k in 1 until w.size) {
         val prev = w[k - 1]; val cur = w[k]
         val fl = flows.filter { it.d > prev.d && it.d <= cur.d }.sumOf { it.amt }
         inv += fl
-        if (prev.v > 0) g *= (cur.v - fl) / prev.v
+        // Поповнення буває датоване раніше, ніж вартість рахунку його відображає (дата операції й дата звіту).
+        // Тоді день виглядає як падіння більш ніж наполовину (чи зліт удвічі для виведення) — таке поповнення
+        // переноситься в дохідність наступного дня, а лінія «внесено» лишається за датою операції.
+        val f = carry + fl
+        if (prev.v > 0) {
+            val r = (cur.v - f) / prev.v
+            if (f != 0.0 && (r < 0.5 || r > 2.0) && k < w.size - 1) { carry = f; g *= cur.v / prev.v }
+            else { carry = 0.0; g *= r }
+        }
         out += IbPt(cur.d, cur.v, inv, g - 1, fl)
     }
     return IbWin(out, capped)
