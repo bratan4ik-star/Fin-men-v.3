@@ -322,6 +322,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             ibkrBusy = false
         }
     }
+    private var ibkrTryAt = 0L
+    /** Синхронізація IBKR при кожному відкритті чи поверненні до застосунку, але не частіше ніж раз на годину (і після невдалої спроби теж). */
+    fun autoSyncIbkr() {
+        val now = System.currentTimeMillis()
+        if (!ibkrOn || !ibkrDue(ibkrAt, ibkrTryAt, now)) return
+        ibkrTryAt = now; syncIbkr()
+    }
     fun removeIbkrGone() { if (ibkrGone.isNotEmpty()) commit(removeGone(data, ibkrGone)); ibkrGone = emptyList() }
     fun keepIbkrGone() { ibkrGone = emptyList() }
     fun disconnectIbkr() { try { IbkrStore.clear(ctx) } catch (_: Exception) {}; ibkrOn = false; ibkrAt = 0L; ibkrMsg = "IBKR відключено. Позиції лишились як є."; closeSheet() }
@@ -695,7 +702,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelPin() { kmode = KMode.None; entry = ""; kerr = ""; tmp = "" }
     fun unlockByBio() { kmode = KMode.None; entry = ""; kerr = "" }
     fun onStopped() { hiddenAt = System.currentTimeMillis() }
-    fun onStarted() { runRecurring(); refreshNotifyState(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
+    fun onStarted() { runRecurring(); refreshNotifyState(); autoSyncIbkr(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
     fun backspace() { entry = entry.dropLast(1) }
     fun press(d: String) {
         if (kmode == KMode.None) return
@@ -770,8 +777,6 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             if (m != null) autoMsg = m; autoAt = Jobs.autoAt(ctx)
             withContext(Dispatchers.IO) { try { Jobs.runReminders(ctx) } catch (_: Exception) {} }
         }
-        // IBKR — раз на добу при відкритті (Flex-звіти IBKR оновлюються раз на робочий день)
-        if (ibkrOn && System.currentTimeMillis() - ibkrAt > 20 * 3600_000L) syncIbkr()
         // ціни ETF за тікером — не частіше ніж раз на 6 годин
         val lastQuote = data.pos.filter { it.ticker.isNotBlank() }.maxOfOrNull { it.pxAt }
         if (lastQuote != null && System.currentTimeMillis() - lastQuote > 6 * 3600_000L) refreshQuotes()

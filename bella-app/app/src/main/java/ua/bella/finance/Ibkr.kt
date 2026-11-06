@@ -188,3 +188,6 @@ fun flexQueryError(q: String): String = when {
     !Regex("^\\d{3,}$").matches(q.trim()) -> "Query ID — це лише цифри, напр. 987654 (номер запиту в списку Flex Queries, не назва)."
     else -> ""
 }
+
+/** Чи час синхронізувати IBKR автоматично: минула година від останньої вдалої синхронізації й від останньої спроби. */
+fun ibkrDue(lastOk: Long, lastTry: Long, now: Long, gapMs: Long = 3600_000L): Boolean = now - lastOk >= gapMs && now - lastTry >= gapMs

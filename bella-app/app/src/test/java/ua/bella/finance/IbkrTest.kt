@@ -84,6 +84,14 @@ class IbkrTest {
         assertEquals("", flexQueryError(" 987654 "))
     }
 
+    @Test fun autoSyncAtMostHourly() {
+        val h = 3600_000L
+        assertTrue(ibkrDue(0L, 0L, 10 * h))
+        assertFalse(ibkrDue(10 * h - 10, 0L, 10 * h))        // щойно синхронізовано
+        assertFalse(ibkrDue(0L, 10 * h - 60_000, 10 * h))    // щойно була невдала спроба
+        assertTrue(ibkrDue(8 * h, 9 * h, 10 * h))
+    }
+
     @Test fun dates() {
         assertEquals("2026-11-05", flexDate("20261105")); assertEquals("2026-11-05", flexDate("2026-11-05")); assertEquals("2026-11-05", flexDate("20261105;101500"))
         assertEquals("2026-11-05", flexDate("11/05/2026")); assertEquals("", flexDate("щось"))
