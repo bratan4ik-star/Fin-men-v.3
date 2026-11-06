@@ -65,13 +65,13 @@ fun fetchFlex(token: String, query: String, sleep: (Long) -> Unit = { Thread.sle
     if (!st.ok) return null to flexError(st)
     val base = st.url.ifEmpty { FLEX_SEND.replace("SendRequest", "GetStatement") }
     var wait = 3000L
-    repeat(8) {
+    repeat(14) {
         sleep(wait)
         val body = try { get("$base?q=${e(st.ref)}&t=${e(token)}&v=3") } catch (x: Exception) { return null to "Немає зв'язку з IBKR (${x.message ?: x.javaClass.simpleName})" }
         val s2 = parseFlexStatus(body)
         if (s2 == null) return try { parseFlexStatement(body) to "" } catch (_: Exception) { null to "Не вдалося прочитати звіт IBKR" }
         if (!s2.retry) return null to flexError(s2)
-        wait = Math.min(wait * 2, 15000L)
+        wait = Math.min(wait * 2, 20000L)
     }
-    return null to "IBKR довго формує звіт. Спробуйте за кілька хвилин."
+    return null to "IBKR не встиг сформувати звіт за ~4 хвилини. Натисніть «Синхронізувати» ще раз: звіт зазвичай уже готовий. Якщо знову так, перевірте в Client Portal, що Flex-запит запускається вручну (Run)."
 }
