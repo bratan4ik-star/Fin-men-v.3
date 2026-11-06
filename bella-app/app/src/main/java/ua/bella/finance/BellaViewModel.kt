@@ -203,7 +203,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val nd = ensureAccIds(raw)
         if (nd == data) return
         stack.addLast(data); labels.addLast(describeChange(data, nd)); if (stack.size > 20) { stack.removeFirst(); labels.removeFirst() }
-        data = nd; undoN = stack.size; clearSel(); persist()
+        data = nd; undoN = stack.size; clearSel(); persist(); checkMoneyAlerts()
         val t = System.currentTimeMillis(); toastAt = t
         viewModelScope.launch { delay(6000); if (toastAt == t) toastAt = 0 }
     }
@@ -661,7 +661,17 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         remindMsg = if (on && !granted) "Сповіщення заборонені. Дозвольте їх у налаштуваннях Android: Програми → Bella Finance → Сповіщення" else ""
         if (on && granted) viewModelScope.launch(Dispatchers.IO) { try { Jobs.runReminders(ctx) } catch (_: Exception) {} }
     }
-    fun refreshNotifyState() { remindOn = Jobs.remindOn(ctx) && Jobs.canNotify(ctx) }
+    fun refreshNotifyState() { remindOn = Jobs.remindOn(ctx) && Jobs.canNotify(ctx); moneyOn = Jobs.moneyOn(ctx) && Jobs.canNotify(ctx) }
+
+    /** Сповіщення про ліміти (80% / 100%) і терміни боргів. */
+    var moneyOn by mutableStateOf(Jobs.moneyOn(ctx) && Jobs.canNotify(ctx)); private set
+    fun setMoney(on: Boolean, granted: Boolean = Jobs.canNotify(ctx)) {
+        Jobs.setMoney(ctx, on); moneyOn = on && granted
+        remindMsg = if (on && !granted) "Сповіщення заборонені. Дозвольте їх у налаштуваннях Android: Програми → Bella Finance → Сповіщення" else ""
+        if (on && granted) checkMoneyAlerts()
+    }
+    /** Перевіряє ліміти й борги у фоні (після кожної зміни даних, щоб сповіщення про ліміт прийшло одразу). */
+    private fun checkMoneyAlerts() { viewModelScope.launch(Dispatchers.IO) { try { Jobs.runMoneyAlerts(ctx) } catch (_: Exception) {} } }
     /** Виплати ОВДП на найближчі 60 днів (для екрана «Інвестиції»). */
     fun upcomingOvdp(): List<OvdpEvent> = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(60)) }
 

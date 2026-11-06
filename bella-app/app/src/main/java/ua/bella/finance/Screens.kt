@@ -241,7 +241,8 @@ fun BudgetScreen(vm: BellaViewModel) {
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Stat("Доходи", "+" + vm.m(inc), C.pos, Modifier.weight(1f)); Stat("Витрати", "−" + vm.m(exp), C.neg, Modifier.weight(1f))
-                    Stat(if (isLast) "Вільно на день" else "Витрати на день", "≈ " + vm.m(if (isLast) (if (nb > 0) nb / daysLeft else 0.0) else exp / dim) + " " + vm.sym, C.text, Modifier.weight(1f))
+                    // для поточного місяця — середні витрати за минулі дні; скільки ще можна витрачати на день — у картці «Вільно до кінця місяця»
+                    Stat("Витрати на день", "≈ " + vm.m(exp / (if (isLast) Math.max(1, dim - daysLeft + 1) else dim)) + " " + vm.sym, C.text, Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     T("Норма заощаджень", 12.sp, C.n500, maxLines = 1); Bar((savePct / 100).toFloat(), C.pos, 4.dp, Modifier.weight(1f)); T("%.1f%%".format(savePct), 12.sp, C.n500)
@@ -250,12 +251,17 @@ fun BudgetScreen(vm: BellaViewModel) {
             Seg(listOf(0 to "Огляд", 1 to "Операції", 2 to "Звіт", 3 to "Ліміти"), vm.tab) { vm.tab = it }
             when (vm.tab) {
                 0 -> Column(verticalArrangement = Arrangement.spacedBy(22.dp)) { if (isLast) FreeLeftCard(vm)
+                    val prevCats = prevMonthByCat(s.txs, mk, TODAY)
+                    if (cats.isNotEmpty() && prevCats.isNotEmpty()) T(if (isLast) "Стрілки — порівняно з тими самими днями минулого місяця" else "Стрілки — порівняно з минулим місяцем", 11.sp, C.n500)
                     Column { cats.entries.sortedByDescending { it.value }.forEach { (c, v) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Ico(catIcon(c), C.accent, 20.dp)
                         Column(Modifier.weight(1f)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { T(c, 14.sp, maxLines = 1); T(vm.m(v) + " " + vm.sym, 14.sp, weight = FontWeight.Medium, maxLines = 1) }
-                            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Bar((v / exp).toFloat(), modifier = Modifier.weight(1f)); T("${Math.round(v / exp * 100)}%", 11.sp, C.n500) }
+                            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Bar((v / exp).toFloat(), modifier = Modifier.weight(1f)); T("${Math.round(v / exp * 100)}%", 11.sp, C.n500)
+                                if (prevCats.isNotEmpty()) { val ch = changePct(v, prevCats[c] ?: 0.0)
+                                    T(when { ch == null -> "нова"; ch > 0 -> "↑$ch%"; ch < 0 -> "↓${-ch}%"; else -> "=" }, 11.sp, when { ch == null -> C.n500; ch > 0 -> C.neg; ch < 0 -> C.pos; else -> C.n500 }, FontWeight.Medium) }
+                            }
                         }
                     }
                 } }

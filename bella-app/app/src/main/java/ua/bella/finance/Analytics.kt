@@ -108,3 +108,18 @@ fun freeLeft(allTxs: List<Tx>, recurring: List<Recurring>, limits: Map<String, D
     val free = income - expense - rec - lim
     return FreeLeft(free, Math.max(0.0, free) / daysLeft, daysLeft, income, expense, rec, lim)
 }
+
+/**
+ * Витрати за категоріями в порівнянному періоді попереднього місяця.
+ * Для поточного місяця — ті самі дні (1…сьогоднішнє число, не більше довжини попереднього місяця), для минулих — увесь місяць.
+ */
+fun prevMonthByCat(allTxs: List<Tx>, month: String, today: String): Map<String, Double> {
+    val ym = try { YearMonth.parse(month) } catch (_: Exception) { return emptyMap() }
+    val prev = ym.minusMonths(1); val pk = prev.toString()
+    val lastDay = if (month == today.take(7)) Math.min(today.substring(8, 10).toIntOrNull() ?: prev.lengthOfMonth(), prev.lengthOfMonth()) else prev.lengthOfMonth()
+    val until = "%s-%02d".format(pk, lastDay)
+    return allTxs.filter { it.type == "expense" && it.date.startsWith(pk) && it.date <= until }.groupBy { it.cat }.mapValues { e -> e.value.sumOf { it.amt } }
+}
+
+/** Зміна витрат категорії, %: null, якщо в попередньому періоді витрат не було. */
+fun changePct(now: Double, prev: Double): Int? = if (prev > 0) Math.round((now - prev) / prev * 100).toInt() else null
