@@ -38,15 +38,16 @@ jobs:
         with:
           cache-provider: basic # відкритий кеш на actions/cache, без пропрієтарного компонента
 
-      - name: Юніт-тести
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
+      # Тести й debug-APK одним запуском Gradle: один старт JVM і одна конфігурація проєкту.
+      - name: Юніт-тести й debug-APK
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
 
-      - name: Debug-APK
-        run: ./gradlew --no-daemon :app:assembleDebug
 
       # Підписаний release збирається, лише коли задано секрети BELLA_KEYSTORE_BASE64, BELLA_STORE_PASSWORD, BELLA_KEY_ALIAS
       # (і за потреби BELLA_KEY_PASSWORD). Без них цей крок пропускається.
+      # Лише для main і ручного запуску: у PR достатньо тестів і debug-APK, release-збірка займає ще кілька хвилин.
       - name: Release-APK (підписаний)
+        if: github.event_name != 'pull_request'
         env:
           KEYSTORE_B64: ${{ secrets.BELLA_KEYSTORE_BASE64 }}
           BELLA_STORE_PASSWORD: ${{ secrets.BELLA_STORE_PASSWORD }}

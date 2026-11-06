@@ -189,6 +189,14 @@ class IbkrTest {
         assertEquals(4, calls.size)
     }
 
+    @Test fun firstCheckIsQuickAndWaitingStopsAfterAboutFourMinutes() {
+        val sleeps = mutableListOf<Long>()
+        val (f, err) = fetchFlex("tok", "42", sleep = { sleeps += it }, get = { u -> if (u.contains("SendRequest")) sendOk else inProgress })
+        assertEquals(null, f); assertTrue(err.contains("4 хвилини"))
+        assertEquals(1500L, sleeps.first()); assertTrue(sleeps.all { it <= 15000L })
+        assertTrue(sleeps.sum() in 240_000L..256_000L)
+    }
+
     @Test fun fetchReportsBadToken() {
         val (f, err) = fetchFlex("bad", "42", sleep = {}, get = { badToken })
         assertNull(f); assertTrue(err.contains("недійсний"))

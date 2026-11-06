@@ -9,6 +9,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -357,7 +359,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (need.isEmpty()) return
         ibPxBusy = true; ibPxMsg = ""
         viewModelScope.launch {
-            val got = withContext(Dispatchers.IO) { need.map { t -> t to (try { fetchHistory(t, w) } catch (_: Exception) { emptyList() }) } }
+            val got = withContext(Dispatchers.IO) { need.map { t -> async { t to (try { fetchHistory(t, w) } catch (_: Exception) { emptyList() }) } }.awaitAll() }
             ibPx = ibPx + got.filter { it.second.isNotEmpty() }.associate { (t, h) -> (t + suf) to h }
             val miss = got.filter { it.second.isEmpty() }.map { it.first }
             ibPxMsg = if (miss.isNotEmpty()) "Немає історії цін для: ${miss.joinToString(", ")}. Перевірте інтернет або тікер позиції." else ""
@@ -438,7 +440,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val targets = data.pos.withIndex().filter { it.value.ticker.isNotBlank() }; if (targets.isEmpty()) { quoteMsg = "Немає позицій із тікером"; return }
         quoteBusy = true; quoteMsg = ""
         viewModelScope.launch {
-            val quotes = withContext(Dispatchers.IO) { targets.map { (i, p) -> i to (try { fetchQuote(p.ticker) } catch (_: Exception) { null }) } }
+            // котирування всіх позицій паралельно, а не по черзі
+            val quotes = withContext(Dispatchers.IO) { targets.map { (i, p) -> async { i to (try { fetchQuote(p.ticker) } catch (_: Exception) { null }) } }.awaitAll() }
             var pos = data.pos; val errs = mutableListOf<String>(); var ok = 0
             quotes.forEach { (i, q) ->
                 val p = pos[i]
