@@ -421,6 +421,7 @@ fun InvScreen(vm: BellaViewModel) {
                         T(if (vm.quoteBusy) "Оновлення цін…" else "↻ Оновити ціни з біржі", 13.sp, C.accent400, modifier = Modifier.clickable { vm.refreshQuotes() }.padding(vertical = 4.dp))
                         if (vm.quoteMsg.isNotEmpty() && vm.sheet == Sheet.None) T(vm.quoteMsg, 11.sp, C.n500)
                         T(if (vm.ibkrBusy) "Синхронізація з IBKR…" else if (vm.ibkrOn) "↻ Синхронізувати з IBKR" else "Підключити Interactive Brokers", 13.sp, C.accent400, modifier = Modifier.clickable { if (vm.ibkrOn) vm.syncIbkr() else vm.openIbkr() }.padding(vertical = 4.dp))
+                        if (vm.ibkrOn || vm.data.pos.any { it.src == "ibkr" }) T("Графіки рахунку IBKR", 13.sp, C.accent400, modifier = Modifier.clickable { vm.openIbkrCharts() }.padding(vertical = 4.dp))
                         if (vm.ibkrMsg.isNotEmpty()) T(vm.ibkrMsg, 11.sp, if (vm.ibkrMsg.startsWith("Немає") || vm.ibkrMsg.startsWith("IBKR") || vm.ibkrMsg.startsWith("Токен") || vm.ibkrMsg.startsWith("Помилка") || vm.ibkrMsg.startsWith("Не ")) C.neg else C.n500)
                     }
                     if (isOpen) vm.data.pos.forEachIndexed { ix, p ->

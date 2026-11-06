@@ -57,7 +57,7 @@ private fun httpGet(url: String): String {
     } finally { c.disconnect() }
 }
 
-/** Завантажує Flex-звіт: замовлення, потім до ~1 хв очікування готовності. Повертає дані або текст помилки. Лише поза головним потоком. */
+/** Завантажує Flex-звіт: замовлення, потім до ~4 хв очікування готовності. Повертає дані або текст помилки. Лише поза головним потоком. */
 fun fetchFlex(token: String, query: String, sleep: (Long) -> Unit = { Thread.sleep(it) }, get: (String) -> String = ::httpGet): Pair<FlexData?, String> {
     fun e(s: String) = URLEncoder.encode(s, "UTF-8")
     val sent = try { get("$FLEX_SEND?t=${e(token)}&q=${e(query)}&v=3") } catch (x: Exception) { return null to "Немає зв'язку з IBKR (${x.message ?: x.javaClass.simpleName})" }
@@ -65,14 +65,15 @@ fun fetchFlex(token: String, query: String, sleep: (Long) -> Unit = { Thread.sle
     if (!st.ok) return null to flexError(st)
     // Адресу звіту з відповіді IBKR (gdcdyn.…) на деяких телефонах не резольвить DNS; той самий шлях на ndcdyn.… працює.
     val base = FLEX_SEND.replace("SendRequest", "GetStatement")
-    var wait = 3000L
-    repeat(14) {
-        sleep(wait)
+    // Звіт зазвичай готовий за кілька секунд: перша перевірка через 1,5 с, далі інтервал росте в 1,5 раза до 15 с; разом до ~4 хв.
+    var wait = 1500L; var waited = 0L
+    while (waited < 240_000L) {
+        sleep(wait); waited += wait
         val body = try { get("$base?q=${e(st.ref)}&t=${e(token)}&v=3") } catch (x: Exception) { return null to "Немає зв'язку з IBKR (${x.message ?: x.javaClass.simpleName})" }
         val s2 = parseFlexStatus(body)
         if (s2 == null) return try { parseFlexStatement(body) to "" } catch (_: Exception) { null to "Не вдалося прочитати звіт IBKR" }
         if (!s2.retry) return null to flexError(s2)
-        wait = Math.min(wait * 2, 20000L)
+        wait = Math.min(wait * 3 / 2, 15000L)
     }
     return null to "IBKR не встиг сформувати звіт за ~4 хвилини. Натисніть «Синхронізувати» ще раз: звіт зазвичай уже готовий. Якщо знову так, перевірте в Client Portal, що Flex-запит запускається вручну (Run)."
 }

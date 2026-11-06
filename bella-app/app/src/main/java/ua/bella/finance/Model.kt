@@ -91,6 +91,10 @@ data class Persisted(
     val ratesAt: Long = 0L,
     /** Щоденні знімки чистого капіталу для графіка на головній (поза журналом «Скасувати»). */
     val hist: List<HistPoint> = emptyList(),
+    /** Рахунок IBKR: щоденна вартість у базовій валюті, поповнення/виведення й сама базова валюта (для графіків). */
+    val ibNav: List<HistPoint> = emptyList(),
+    val ibFlows: List<IbFlow> = emptyList(),
+    val ibBase: String = "USD",
 )
 
 object DemoData {
