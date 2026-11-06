@@ -192,14 +192,27 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
-    private fun persist() {
-        try {
-            val t = System.currentTimeMillis()
-            hist = upsertHist(hist, TODAY, Totals(this).net)
-            prefs.edit().putString("state", json.encodeToString(snapshot())).putLong("savedAt", t).apply()
-            savedAt = t
-        } catch (_: Exception) {}
+    /**
+     * Збереження: знімок стану береться в головному потоці (це лише посилання на незмінні дані), а кодування в JSON
+     * і запис — в одному фоновому потоці, по черзі. Якщо поки писався один стан, надійшли новіші, пишеться лише
+     * найновіший. after виконується після запису (напр. перевірка лімітів читає вже збережений стан).
+     */
+    private fun persist(after: (() -> Unit)? = null) {
+        val t = System.currentTimeMillis()
+        try { hist = upsertHist(hist, TODAY, Totals(this).net) } catch (_: Exception) {}
+        val snap = snapshot(); val seq = ++saveSeq
+        saveScope.launch {
+            if (seq == saveSeq) try {
+                prefs.edit().putString("state", json.encodeToString(snap)).putLong("savedAt", t).commit()
+                withContext(Dispatchers.Main) { savedAt = t }
+            } catch (_: Exception) {}
+            after?.invoke()
+        }
     }
+    @Volatile private var saveSeq = 0L
+    /** Поза viewModelScope, щоб останній запис не обривався, коли екран закривається. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val saveScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
     init {
         loaded.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
@@ -230,7 +243,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val nd = ensureAccIds(raw)
         if (nd == data) return
         stack.addLast(data); labels.addLast(describeChange(data, nd)); if (stack.size > 20) { stack.removeFirst(); labels.removeFirst() }
-        data = nd; undoN = stack.size; clearSel(); persist(); checkMoneyAlerts()
+        data = nd; undoN = stack.size; clearSel(); persist { checkMoneyAlerts() }
         val t = System.currentTimeMillis(); toastAt = t
         viewModelScope.launch { delay(6000); if (toastAt == t) toastAt = 0 }
     }
