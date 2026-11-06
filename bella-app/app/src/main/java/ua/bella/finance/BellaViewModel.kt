@@ -34,8 +34,8 @@ data class Form(
     // операція: дата, рахунок, для переказу — рахунок і сума зарахування; txIdx — індекс операції, що редагується
     val tDate: String = "", val tAcc: String = "", val tToAcc: String = "", val tToAmt: String = "", val txIdx: Int = -1,
     val pMonthly: Boolean = false, val pPayAcc: String = "", val cashF: Boolean = false,
-    // ETF: валюта ціни, тікер Yahoo, курс купівлі (₴ за 1 одиницю валюти)
-    val pCur: String = "UAH", val pTicker: String = "", val pFx: String = "",
+    // ETF: валюта ціни, курс купівлі (₴ за 1 одиницю валюти)
+    val pCur: String = "UAH", val pFx: String = "",
     // ціль: поля форми, індекс цілі; внесок/зняття — напрям, рахунок, сума
     val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1, val gMonthly: String = "",
     val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
@@ -124,8 +124,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var ibNav by mutableStateOf(loaded.ibNav); private set
     var ibFlows by mutableStateOf(loaded.ibFlows); private set
     var ibBase by mutableStateOf(loaded.ibBase); private set
+    /** Історія цін ETF з IBKR за символом (з Flex-звітів), до 5 років. */
+    var ibPx by mutableStateOf(loaded.ibPx); private set
 
-    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibNav, ibFlows, ibBase)
+    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibNav, ibFlows, ibBase, ibPx)
 
     // ---------- резервна копія ----------
     var backupMsg by mutableStateOf(""); private set
@@ -184,7 +186,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val p = b.state
         p.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
         ratesDate = p.ratesDate; ratesAt = p.ratesAt; ratesTick++
-        cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibNav = p.ibNav; ibFlows = p.ibFlows; ibBase = p.ibBase
+        cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibNav = p.ibNav; ibFlows = p.ibFlows; ibBase = p.ibBase; ibPx = p.ibPx
         month = p.month.coerceAtLeast(0)
         commit(p.data)
         pendingRestore = null
@@ -340,6 +342,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                     if (base != ibBase) { ibNav = emptyList(); ibFlows = emptyList() }
                     ibBase = base
                     mergeIbHist(ibNav, ibFlows, f, ibkrSnapshot(nd, RATES, base), TODAY).let { (n, fl) -> ibNav = n; ibFlows = fl }
+                    ibPx = mergeIbPrices(ibPx, f)
                     commit(nd); ibkrGone = sum.gone
                     val t = System.currentTimeMillis(); IbkrStore.setLastAt(ctx, t); ibkrAt = t
                     ibkrMsg = (if (f.asOf.isNotEmpty()) "Дані IBKR на ${ddmmyyyy(f.asOf)}. " else "") + sum.text
@@ -358,33 +361,14 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     }
     // ---------- графіки IBKR ----------
     var ibPeriod by mutableStateOf("1Y")
-    /** Ціни ETF з Yahoo: ключ «тікер|W» (тижневі, 5 років) або «тікер|D» (денні, рік); у пам'яті до закриття застосунку. */
-    var ibPx by mutableStateOf(mapOf<String, List<HistPoint>>()); private set
-    var ibPxBusy by mutableStateOf(false); private set
-    var ibPxMsg by mutableStateOf(""); private set
-    fun openIbkrCharts() { sheet = Sheet.IbkrCharts; loadIbPrices() }
-    fun setIbkrPeriod(p: String) { ibPeriod = p; loadIbPrices() }
-    /** Підвантажує історію цін ETF рахунку IBKR для поточного періоду (лише ті, яких ще немає). */
-    fun loadIbPrices() {
-        if (ibPxBusy) return
-        val w = weeklyPeriod(ibPeriod); val suf = if (w) "|W" else "|D"
-        val need = data.pos.filter { it.src == "ibkr" && it.ticker.isNotBlank() }.map { it.ticker }.distinct().filter { (it + suf) !in ibPx }
-        if (need.isEmpty()) return
-        ibPxBusy = true; ibPxMsg = ""
-        viewModelScope.launch {
-            val got = withContext(Dispatchers.IO) { need.map { t -> async { t to (try { fetchHistory(t, w) } catch (_: Exception) { emptyList() }) } }.awaitAll() }
-            ibPx = ibPx + got.filter { it.second.isNotEmpty() }.associate { (t, h) -> (t + suf) to h }
-            val miss = got.filter { it.second.isEmpty() }.map { it.first }
-            ibPxMsg = if (miss.isNotEmpty()) "Немає історії цін для: ${miss.joinToString(", ")}. Перевірте інтернет або тікер позиції." else ""
-            ibPxBusy = false
-        }
-    }
+    fun openIbkrCharts() { sheet = Sheet.IbkrCharts }
+    fun setIbkrPeriod(p: String) { ibPeriod = p }
     /** Лише для знімків екранів у тестах: підставляє історію рахунку IBKR без синхронізації. */
     @androidx.annotation.VisibleForTesting
-    internal fun seedIbkrHistory(nav: List<HistPoint>, flows: List<IbFlow>, base: String = "USD") { ibNav = nav; ibFlows = flows; ibBase = base }
+    internal fun seedIbkrHistory(nav: List<HistPoint>, flows: List<IbFlow>, base: String = "USD", px: Map<String, List<HistPoint>> = emptyMap()) { ibNav = nav; ibFlows = flows; ibBase = base; ibPx = px }
     fun removeIbkrGone() { if (ibkrGone.isNotEmpty()) commit(removeGone(data, ibkrGone)); ibkrGone = emptyList() }
     fun keepIbkrGone() { ibkrGone = emptyList() }
-    fun disconnectIbkr() { try { IbkrStore.clear(ctx) } catch (_: Exception) {}; ibkrOn = false; ibkrAt = 0L; ibNav = emptyList(); ibFlows = emptyList(); persist(); ibkrMsg = "IBKR відключено. Позиції лишились як є."; closeSheet() }
+    fun disconnectIbkr() { try { IbkrStore.clear(ctx) } catch (_: Exception) {}; ibkrOn = false; ibkrAt = 0L; ibNav = emptyList(); ibFlows = emptyList(); ibPx = emptyMap(); persist(); ibkrMsg = "IBKR відключено. Позиції лишились як є."; closeSheet() }
 
     // ---------- правила категорій ----------
     /** Пропозиція «Завжди ставити …» після ручної зміни категорії операції (null — немає). */
@@ -434,7 +418,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Будує позицію з форми. ETF у валюті: ціни у валюті фонду, курс купівлі — введений або поточний курс НБУ. */
     private fun posFromForm(f: Form, q: Double, monthly: Boolean, old: Pos?): Pos {
         val fx = f.group == "ETF" && f.pCur != "UAH" && RATES.containsKey(f.pCur)
-        val ticker = f.pTicker.trim().uppercase()
+        val ticker = old?.ticker ?: ""  // лише зі старих даних, для зіставлення з IBKR
         if (fx) {
             val rateNow = RATES[f.pCur]!!; val pxB = parseNum(f.pBuy); val pxN = parseNum(f.pNow).takeIf { it > 0 } ?: pxB
             val bfx = parseNum(f.pFx).takeIf { it > 0 } ?: rateNow
@@ -447,59 +431,21 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             src = old?.src ?: "", ibSym = old?.ibSym ?: "")
     }
 
-    // ---------- котирування ETF ----------
-    var quoteBusy by mutableStateOf(false); private set
-    var quoteMsg by mutableStateOf(""); private set
-    /** Оновлює ціни всіх позицій із тікером. Без мережі лишає попередні ціни й показує повідомлення. */
-    fun refreshQuotes() {
-        if (quoteBusy) return
-        val targets = data.pos.withIndex().filter { it.value.ticker.isNotBlank() }; if (targets.isEmpty()) { quoteMsg = "Немає позицій із тікером"; return }
-        quoteBusy = true; quoteMsg = ""
-        viewModelScope.launch {
-            // котирування всіх позицій паралельно, а не по черзі
-            val quotes = withContext(Dispatchers.IO) { targets.map { (i, p) -> async { i to (try { fetchQuote(p.ticker) } catch (_: Exception) { null }) } }.awaitAll() }
-            var pos = data.pos; val errs = mutableListOf<String>(); var ok = 0
-            quotes.forEach { (i, q) ->
-                val p = pos[i]
-                if (q == null) errs += "${p.ticker}: немає котирування"
-                else { val (np, e) = applyQuote(p, q, RATES, System.currentTimeMillis()); if (np != null) { pos = pos.mapIndexed { j, x -> if (j == i) np else x }; ok++ } else errs += e }
-            }
-            if (ok > 0) { data = data.copy(pos = pos); persist() }
-            quoteMsg = (if (ok > 0) "Оновлено цін: $ok" else "Ціни не оновлено") + if (errs.isNotEmpty()) ". " + errs.joinToString("; ") else ""
-            quoteBusy = false
-        }
-    }
-    /** «Підтягнути ціну» у формі позиції: ставить поточну ціну й валюту котирування. */
-    fun quoteIntoForm() {
-        val t = form.pTicker.trim(); if (t.isEmpty()) { quoteMsg = "Вкажіть тікер"; return }
-        if (quoteBusy) return
-        quoteBusy = true; quoteMsg = ""
-        viewModelScope.launch {
-            val q = withContext(Dispatchers.IO) { try { fetchQuote(t) } catch (_: Exception) { null } }
-            quoteBusy = false
-            if (q == null) { quoteMsg = "Не вдалося отримати ціну для ${t.uppercase()}. Перевірте тікер (напр. VWCE.DE, SPY) та інтернет."; return@launch }
-            if (q.currency !in RATES.keys) { quoteMsg = "Валюта ${q.currency} не підтримується (лише UAH, USD, EUR, PLN). Введіть ціну вручну."; return@launch }
-            val px = (Math.round(q.price * 10000) / 10000.0).toString()
-            form = if (sheet == Sheet.PosE) form.copy(pCur = q.currency, pNow = px) else form.copy(pCur = q.currency, pBuy = form.pBuy.ifBlank { px }, pNow = px)
-            quoteMsg = "Ціна ${q.price} ${q.currency}"
-        }
-    }
-
     /** Для депозиту кількість не вводиться: 1, якщо поле порожнє. */
     private fun posQty(f: Form): Double = parseNum(f.pQty).let { if (it <= 0 && f.group == "Депозити" && f.pQty.isBlank()) 1.0 else it }
     private fun txFromForm(f: Form, key: String): Tx? {
         val (t, err) = buildTx(TxInput(f.tType, parseNum(f.tAmt), if (f.tType == "transfer") "Перекази" else f.tCat, f.tDesc.trim(), f.tDate.trim(), f.tAcc, f.tToAcc, parseNum(f.tToAmt), key), data.accs, RATES, rate)
         formErr = err; return t
     }
-    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pTicker = "", pFx = ""); quoteMsg = ""; sheet = Sheet.Pos }
+    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pFx = ""); sheet = Sheet.Pos }
     fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, cashF = a.cash, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); formOrig = form; sheet = Sheet.AccE }
     fun editPos(i: Int) {
         val p = data.pos[i]; fun c(v: Double) = ((v / rate) * 100).let { Math.round(it) / 100.0 }.toString()
         fun r2(v: Double) = (Math.round(v * 10000) / 10000.0).toString()
         val fx = isFxPos(p)
         form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(),
-            pBuy = if (fx) r2(p.pxBuy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else c(p.now), pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx) p.cur else "UAH", pTicker = p.ticker,
-            pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; quoteMsg = ""; sheet = Sheet.PosE
+            pBuy = if (fx) r2(p.pxBuy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else c(p.now), pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx) p.cur else "UAH",
+            pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; sheet = Sheet.PosE
     }
     /** Довідка з будь-якого екрана: відкривається на розділі, що відповідає поточному екрану. */
     fun openHelp(section: Int = helpSectionFor(screen)) { help = section; helpTop = section; sheet = Sheet.Help }
@@ -823,7 +769,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Виплати ОВДП на найближчі 60 днів (для екрана «Інвестиції»). */
     fun upcomingOvdp(): List<OvdpEvent> = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(60)) }
 
-    // Наприкінці класу: на цей момент усі поля (зокрема quoteBusy/quoteMsg) уже ініціалізовані.
+    // Наприкінці класу: на цей момент усі поля вже ініціалізовані.
     init {
         try { Jobs.schedule(ctx) } catch (_: Exception) {}
         viewModelScope.launch {
@@ -831,8 +777,5 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             if (m != null) autoMsg = m; autoAt = Jobs.autoAt(ctx)
             withContext(Dispatchers.IO) { try { Jobs.runReminders(ctx) } catch (_: Exception) {} }
         }
-        // ціни ETF за тікером — не частіше ніж раз на 6 годин
-        val lastQuote = data.pos.filter { it.ticker.isNotBlank() }.maxOfOrNull { it.pxAt }
-        if (lastQuote != null && System.currentTimeMillis() - lastQuote > 6 * 3600_000L) refreshQuotes()
     }
 }

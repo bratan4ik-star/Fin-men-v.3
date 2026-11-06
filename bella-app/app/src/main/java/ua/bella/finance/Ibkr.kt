@@ -24,7 +24,9 @@ data class IbFlowIn(val id: String, val date: String, val amount: Double)
  * (розділ «Net Asset Value (NAV) in Base», якщо його ввімкнено у Flex-запиті); flows — поповнення й виведення.
  */
 data class FlexData(val account: String, val asOf: String, val positions: List<IbPos>, val cash: Map<String, Double>, val dividends: List<IbDiv>,
-    val base: String = "", val fromDate: String = "", val nav: List<HistPoint> = emptyList(), val flows: List<IbFlowIn> = emptyList())
+    val base: String = "", val fromDate: String = "", val nav: List<HistPoint> = emptyList(), val flows: List<IbFlowIn> = emptyList(),
+    /** Щоденні ціни закриття за символом з розділу «Prior Period Positions» (якщо ввімкнено у Flex-запиті). */
+    val prices: Map<String, List<HistPoint>> = emptyMap())
 
 /** Відповідь SendRequest / GetStatement зі статусом: ref і url — коли звіт замовлено; code/message — помилка чи «ще готується». */
 data class FlexStatus(val ok: Boolean, val ref: String, val url: String, val code: String, val message: String) {
@@ -83,12 +85,17 @@ fun parseFlexStatement(xml: String): FlexData {
     data class Ct(val id: String, val date: String, val symbol: String, val cur: String, val amount: Double, val type: String, val fx: Double)
     val cts = mutableListOf<Ct>(); var account = ""; var asOf = ""; var base = ""; var from = ""
     val nav = java.util.TreeMap<String, Double>()
+    val px = HashMap<String, java.util.TreeMap<String, Double>>()
     sax(xml, object : DefaultHandler() {
         override fun resolveEntity(publicId: String?, systemId: String?) = InputSource(StringReader(""))
         override fun startElement(u: String?, l: String?, q: String, a: Attributes) {
             when (q) {
                 "FlexStatement" -> { account = str(a, "accountId"); asOf = flexDate(str(a, "toDate")); from = flexDate(str(a, "fromDate")) }
                 "AccountInformation" -> str(a, "currency").uppercase().takeIf { it.length == 3 }?.let { base = it }
+                "PriorPeriodPosition" -> {
+                    val sym = str(a, "symbol"); val day = flexDate(str(a, "date")); val p = d(a, "price")
+                    if (sym.isNotEmpty() && day.isNotEmpty() && p > 0) px.getOrPut(sym) { java.util.TreeMap() }[day] = p
+                }
                 "EquitySummaryByReportDateInBase" -> {
                     val day = flexDate(str(a, "reportDate")); val t = a.getValue("total")?.replace(",", "")?.toDoubleOrNull()
                     if (day.isNotEmpty() && t != null) nav[day] = t
@@ -123,23 +130,8 @@ fun parseFlexStatement(xml: String): FlexData {
         .filter { it.date.isNotEmpty() && it.amount != 0.0 }
         .map { IbFlowIn(it.id.ifEmpty { "${it.date}|${it.amount}|${it.cur}" }, it.date, it.amount * (if (it.fx > 0) it.fx else 1.0)) }
         .sortedBy { it.date }
-    return FlexData(account, asOf, pos.filter { it.qty != 0.0 }, cash, out, base, from, nav.map { HistPoint(it.key, it.value) }, flows)
-}
-
-/** Тікер Yahoo для оновлення цін з біржі: суфікс за біржею IBKR (IBIS → .DE, LSEETF → .L тощо). */
-fun yahooTicker(symbol: String, exchange: String): String {
-    val e = exchange.uppercase()
-    val suf = when {
-        e.startsWith("IBIS") || e == "FWB" || e == "XETRA" -> ".DE"
-        e.startsWith("LSE") -> ".L"
-        e == "AEB" -> ".AS"
-        e == "SBF" -> ".PA"
-        e == "EBS" -> ".SW"
-        e.startsWith("BVME") -> ".MI"
-        e == "BM" -> ".MC"
-        else -> ""
-    }
-    return symbol.uppercase().replace(' ', '-') + suf
+    return FlexData(account, asOf, pos.filter { it.qty != 0.0 }, cash, out, base, from, nav.map { HistPoint(it.key, it.value) }, flows,
+        px.mapValues { (_, m) -> m.map { HistPoint(it.key, it.value) } })
 }
 
 /** Підсумок синхронізації; gone — назви ETF з IBKR, яких більше немає в рахунку (питаємо, чи прибрати). */
@@ -153,6 +145,7 @@ data class IbkrSync(val updated: Int, val added: Int, val cash: Int, val dividen
     }.joinToString(" · ")
 }
 
+/** Позиція застосунку відповідає символу IBKR: за символом, назвою або (для старих даних) збереженим тікером. */
 private fun sameSym(p: Pos, sym: String): Boolean =
     p.group == "ETF" && (p.ibSym.equals(sym, true) || p.ticker.substringBefore('.').equals(sym, true) || p.name.equals(sym, true))
 
@@ -170,11 +163,11 @@ fun applyFlex(d: AppData, f: FlexData, rates: Map<String, Double>, now: Long): P
         if (i >= 0) {
             val o = pos[i]; val fx = if (o.cur == ip.cur && o.buyFx > 0 && fxPlausible(o.buyFx, rate)) o.buyFx else rate
             pos = pos.mapIndexed { j, x -> if (j != i) x else o.copy(qty = ip.qty, cur = ip.cur, pxBuy = ip.cost, pxNow = ip.mark, buyFx = fx, buy = ip.cost * fx, now = ip.mark * rate,
-                pxAt = now, src = "ibkr", ibSym = ip.symbol, ticker = o.ticker.ifBlank { yahooTicker(ip.symbol, ip.exchange) }) }
+                pxAt = now, src = "ibkr", ibSym = ip.symbol) }
             updated++
         } else {
             pos = pos + Pos("ETF", ip.symbol, ip.qty, ip.cost * rate, ip.mark * rate, cur = ip.cur, pxBuy = ip.cost, pxNow = ip.mark, buyFx = rate,
-                ticker = yahooTicker(ip.symbol, ip.exchange), pxAt = now, src = "ibkr", ibSym = ip.symbol)
+                pxAt = now, src = "ibkr", ibSym = ip.symbol)
             added++
         }
     }

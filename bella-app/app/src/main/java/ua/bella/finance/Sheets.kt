@@ -178,7 +178,7 @@ private fun IbkrForm(vm: BellaViewModel) {
     Field("Номер Flex-запиту (Query ID)", f.ibQ, hint = "напр. 987654", numeric = true) { vm.form = f.copy(ibQ = it) }
     T("Як отримати (один раз, на комп'ютері в Client Portal IBKR):\n" +
         "1. Performance & Reports → Flex Queries → «+» у розділі Activity Flex Query.\n" +
-        "2. Розділи: Open Positions (Options: Summary), Cash Report, Cash Transactions (Dividends, Withholding Tax, Payment In Lieu Of Dividends, Deposits & Withdrawals), Net Asset Value (NAV) in Base, Account Information. Поля — усі. Останні три потрібні для графіка вартості рахунку.\n" +
+        "2. Розділи: Open Positions (Options: Summary), Cash Report, Cash Transactions (Dividends, Withholding Tax, Payment In Lieu Of Dividends, Deposits & Withdrawals), Net Asset Value (NAV) in Base, Account Information, Prior Period Positions. Поля — усі. Останні чотири потрібні для графіків вартості рахунку й цін ETF.\n" +
         "3. Format: XML, Period: Last 365 Calendar Days. Збережіть і запишіть Query ID.\n" +
         "4. Там само: Flex Web Service Configuration → увімкнути → Generate New Token (термін — до 1 року).", 11.sp, C.n400)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
@@ -261,7 +261,7 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
     val f = vm.form
     val dep = f.group == "Депозити"
     Seg(GROUPS.map { it.first to it.first }, f.group) { vm.form = f.copy(group = it) }
-    Field(if (dep) "Назва депозиту" else "Назва / тікер", f.pName, hint = if (edit) vm.was { it.pName } else if (dep) "напр. Депозит Моно, 12 міс." else "напр. VWCE") { vm.form = f.copy(pName = it) }
+    Field(if (dep) "Назва депозиту" else "Назва", f.pName, hint = if (edit) vm.was { it.pName } else if (dep) "напр. Депозит Моно, 12 міс." else "напр. VWCE") { vm.form = f.copy(pName = it) }
     if (dep) {
         Field("Сума депозиту (${vm.sym})", f.pBuy, hint = vm.was { it.pBuy }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(pBuy = it) }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -271,11 +271,6 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
     } else if (f.group == "ETF") {
         Seg(CURRENCIES.map { it to it }, f.pCur) { vm.form = f.copy(pCur = it) }
         val cs = if (f.pCur == "UAH") vm.sym else curSign(f.pCur)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-            Field("Тікер (Yahoo)", f.pTicker, Modifier.weight(1f), hint = vm.was { it.pTicker }.ifEmpty { "VWCE.DE, SPY" }) { vm.form = f.copy(pTicker = it) }
-            Btn(if (vm.quoteBusy) "…" else "Ціна з біржі", false, icon = Icons.Outlined.Sync) { vm.quoteIntoForm() }
-        }
-        if (vm.quoteMsg.isNotEmpty()) T(vm.quoteMsg, 11.sp, if (vm.quoteMsg.startsWith("Ціна ")) C.n500 else C.neg)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }
             Field("Ціна купівлі ($cs)", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) }
@@ -447,7 +442,7 @@ private val HELP = listOf(
     Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях (зі стовпчиками доходів і витрат: дотик до місяця показує суми) та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату. «Огляд» поточного місяця: картка «Вільно до кінця місяця» (доходи − витрати − заплановані повторювані − залишок лімітів) і стрілки біля категорій — зміна витрат порівняно з тими самими днями минулого місяця. «Операції → Вибрати» — масова зміна категорії чи видалення. Сповіщення про 80% і 100% ліміту та про терміни боргів вмикаються в «Налаштуваннях». «Ліміти → Правила категорій»: текст в описі (кілька через кому) → категорія; діють під час імпорту виписки, до старих операцій — кнопкою «Застосувати до старих». Коли вручну міняєте категорію операції, застосунок запропонує створити таке правило. «Звіт → Рік / 12 міс.»: доходи, витрати й норма заощаджень порівняно з минулим періодом, витрати за категоріями, зростання капіталу й інвестиційний дохід (купони, відсотки, дивіденди), експорт у Excel."),
     Icons.Outlined.Search to ("Пошук і фільтри" to "У вкладці «Операції» є пошук за описом чи категорією, кнопки сортування за датою та сумою, фільтри за діапазоном дат і сум, а також вибір типу: усі, витрати, доходи, перекази."),
     Icons.Outlined.FileUpload to ("Імпорт виписки" to "Налаштування, Імпорт виписки. Підтримує Excel (.xlsx) з банку та CSV. Перекази між власними картками не рахуються доходом чи витратою. Якщо у файлі є повтори, з'явиться кнопка «Прибрати повтори». Файл читається лише на вашому пристрої."),
-    Icons.AutoMirrored.Outlined.TrendingUp to ("Інвестиції" to "Кільцева діаграма вгорі показує структуру портфеля. Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. «Найближчі виплати ОВДП» — купони й погашення на 60 днів. Внизу — калькулятор складного відсотка. Interactive Brokers: «Налаштування → Interactive Brokers» — токен і номер Flex-запиту; далі при кожному відкритті застосунку, не частіше раз на годину (і кнопкою «Синхронізувати з IBKR» у групі ETF) оновлюються кількість і ціни ETF, гроші на рахунку («IBKR USD» тощо) і дивіденди."),
+    Icons.AutoMirrored.Outlined.TrendingUp to ("Інвестиції" to "Кільцева діаграма вгорі показує структуру портфеля. Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду, вкажіть кількість і ціни; ETF з Interactive Brokers оновлюються самі під час синхронізації. «Найближчі виплати ОВДП» — купони й погашення на 60 днів. Внизу — калькулятор складного відсотка. Interactive Brokers: «Налаштування → Interactive Brokers» — токен і номер Flex-запиту; далі при кожному відкритті застосунку, не частіше раз на годину (і кнопкою «Синхронізувати з IBKR» у групі ETF) оновлюються кількість і ціни ETF, гроші на рахунку («IBKR USD» тощо) і дивіденди."),
     Icons.Outlined.NotificationsActive to ("Нагадування про ОВДП" to "Налаштування, Нагадування про ОВДП. Сповіщення приходить за 3 дні до виплати купона чи погашення і в день виплати, близько 9:00. Дати беруться з позиції: для позицій з калькулятора — від дати погашення з кроком виплат, для інших — від «наступної виплати» кожні 6 місяців. Суми орієнтовні."),
     Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються."),
     Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),

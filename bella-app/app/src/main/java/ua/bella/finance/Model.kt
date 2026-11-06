@@ -45,7 +45,7 @@ val DEFAULT_RULES = listOf(
 @Serializable data class Pos(val group: String, val name: String, val qty: Double, val buy: Double, val now: Double, val mat: String = "", val rate: Double = 0.0, val next: String = "", val calc: CalcExtra? = null,
     /** Депозит: щомісячна виплата відсотків у дохід на рахунок payAcc («» = без рахунку). */
     val monthly: Boolean = false, val payAcc: String = "",
-    /** ETF: валюта ціни, ціни купівлі й поточна у ній, курс купівлі, тікер Yahoo і час котирування (див. Etf.kt). */
+    /** ETF: валюта ціни, ціни купівлі й поточна у ній, курс купівлі, ticker — лише зі старих даних (для зіставлення з IBKR), час ціни. */
     val cur: String = "UAH", val pxBuy: Double = 0.0, val pxNow: Double = 0.0, val buyFx: Double = 0.0, val ticker: String = "", val pxAt: Long = 0L,
     /** Звідки позиція: «» — введена вручну, «ibkr» — синхронізується з Interactive Brokers (символ IBKR — ibSym). */
     val src: String = "", val ibSym: String = "",
@@ -95,6 +95,8 @@ data class Persisted(
     val ibNav: List<HistPoint> = emptyList(),
     val ibFlows: List<IbFlow> = emptyList(),
     val ibBase: String = "USD",
+    /** Історія цін ETF з IBKR за символом (у валюті фонду). */
+    val ibPx: Map<String, List<HistPoint>> = emptyMap(),
 )
 
 object DemoData {

@@ -1,23 +1,13 @@
 package ua.bella.finance
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 
 /*
  * Графіки рахунку IBKR. Історія вартості рахунку (у базовій валюті, зазвичай USD) береться з розділу
  * «Net Asset Value (NAV) in Base» Flex-звіту, а якщо його немає — з власного знімка при кожній синхронізації.
- * Поповнення й виведення — з Cash Transactions (Deposits/Withdrawals). Ціни ETF за 5 років — з Yahoo Finance.
+ * Поповнення й виведення — з Cash Transactions (Deposits/Withdrawals). Історія цін ETF — з «Prior Period Positions»
+ * Flex-звіту й ціни на дату кожного звіту; накопичується до 5 років.
  */
 
 /** Поповнення (+) чи виведення (−) у базовій валюті рахунку. id — transactionID IBKR, щоб не дублювати. */
@@ -34,9 +24,6 @@ fun periodStart(last: String, period: String): String {
         "1Y" -> d.minusYears(1); "3Y" -> d.minusYears(3); else -> d.minusYears(5)
     }.toString()
 }
-
-/** Чи для періоду брати тижневі ціни (довгі періоди) замість денних. */
-fun weeklyPeriod(period: String) = period == "3Y" || period == "5Y"
 
 /**
  * Об'єднує історію рахунку з новим Flex-звітом. Дні з NAV-розділу звіту замінюють наявні; за відсутності
@@ -123,26 +110,26 @@ data class IbPnl(val name: String, val cur: String, val value: Double, val cost:
 fun ibkrPnl(d: AppData): List<IbPnl> = d.pos.filter { it.src == "ibkr" && isFxPos(it) }
     .map { IbPnl(it.name, it.cur, it.qty * it.pxNow, it.qty * it.pxBuy) }.sortedBy { it.pnl }
 
-/** Розбирає історію Yahoo Finance chart API: дата закриття → ціна (дні без ціни пропускаються). */
-fun parseYahooHistory(body: String): List<HistPoint> = try {
-    val r = Json.parseToJsonElement(body).jsonObject["chart"]!!.jsonObject["result"]!!.jsonArray[0].jsonObject
-    val ts = r["timestamp"]!!.jsonArray.map { it.jsonPrimitive.longOrNull }
-    val close = r["indicators"]!!.jsonObject["quote"]!!.jsonArray[0].jsonObject["close"]!!.jsonArray.map { it.jsonPrimitive.doubleOrNull }
-    val m = java.util.TreeMap<String, Double>()
-    ts.forEachIndexed { i, t -> val c = close.getOrNull(i); if (t != null && c != null && c > 0) m[Instant.ofEpochSecond(t).atOffset(ZoneOffset.UTC).toLocalDate().toString()] = c }
-    m.map { HistPoint(it.key, it.value) }
-} catch (_: Exception) { emptyList() }
+/**
+ * Історія цін ETF з IBKR: щоденні ціни з «Prior Period Positions» і ціна на дату звіту (markPrice з Open Positions)
+ * додаються до наявних за символом; дні зі звіту замінюють старі. Зберігається до ~5 років.
+ */
+fun mergeIbPrices(old: Map<String, List<HistPoint>>, f: FlexData): Map<String, List<HistPoint>> {
+    val out = HashMap<String, java.util.TreeMap<String, Double>>()
+    old.forEach { (k, l) -> out[k] = java.util.TreeMap<String, Double>().apply { l.forEach { put(it.d, it.v) } } }
+    f.prices.forEach { (k, l) -> val m = out.getOrPut(k) { java.util.TreeMap() }; l.forEach { if (isIsoDate(it.d) && it.v > 0) m[it.d] = it.v } }
+    if (isIsoDate(f.asOf)) f.positions.forEach { p -> if (p.mark > 0 && p.symbol.isNotEmpty()) out.getOrPut(p.symbol) { java.util.TreeMap() }.putIfAbsent(f.asOf, p.mark) }
+    return out.mapValues { (_, m) ->
+        val cut = if (m.isEmpty()) "" else LocalDate.parse(m.lastKey()).minusYears(5).minusDays(7).toString()
+        m.filterKeys { it >= cut }.map { HistPoint(it.key, it.value) }
+    }.filterValues { it.isNotEmpty() }
+}
 
-/** Історія цін з Yahoo: weekly — тижнева за 5 років, інакше денна за рік. Лише поза головним потоком. */
-fun fetchHistory(ticker: String, weekly: Boolean): List<HistPoint> {
-    val t = ticker.trim().uppercase(); if (t.isEmpty()) return emptyList()
-    val q = if (weekly) "range=5y&interval=1wk" else "range=1y&interval=1d"
-    val c = URL("https://query1.finance.yahoo.com/v8/finance/chart/" + URLEncoder.encode(t, "UTF-8") + "?" + q).openConnection() as HttpURLConnection
-    return try {
-        c.connectTimeout = 8000; c.readTimeout = 12000
-        c.setRequestProperty("Accept", "application/json"); c.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) BellaFinance")
-        if (c.responseCode != HttpURLConnection.HTTP_OK) emptyList() else parseYahooHistory(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-    } finally { c.disconnect() }
+/** Проріджує довгий ряд до ~max точок (для графіка за роки), лишаючи першу й останню. */
+fun thin(h: List<HistPoint>, max: Int = 300): List<HistPoint> {
+    if (h.size <= max) return h
+    val step = Math.ceil(h.size / max.toDouble()).toInt()
+    return h.filterIndexed { i, _ -> i % step == 0 || i == h.lastIndex }
 }
 
 /** Зміна ціни від початку періоду (частка): від останньої ціни ≤ початку періоду або від першої. */

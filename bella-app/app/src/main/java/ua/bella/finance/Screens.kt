@@ -419,8 +419,6 @@ fun InvScreen(vm: BellaViewModel) {
                         Ico(if (isOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
                     }
                     if (isOpen && g == "ETF") Column(Modifier.padding(start = 18.dp, top = 4.dp)) {
-                        T(if (vm.quoteBusy) "Оновлення цін…" else "↻ Оновити ціни з біржі", 13.sp, C.accent400, modifier = Modifier.clickable { vm.refreshQuotes() }.padding(vertical = 4.dp))
-                        if (vm.quoteMsg.isNotEmpty() && vm.sheet == Sheet.None) T(vm.quoteMsg, 11.sp, C.n500)
                         T(if (vm.ibkrBusy) "Синхронізація з IBKR…" else if (vm.ibkrOn) "↻ Синхронізувати з IBKR" else "Підключити Interactive Brokers", 13.sp, C.accent400, modifier = Modifier.clickable { if (vm.ibkrOn) vm.syncIbkr() else vm.openIbkr() }.padding(vertical = 4.dp))
                         if (vm.ibkrOn || vm.data.pos.any { it.src == "ibkr" }) T("Графіки рахунку IBKR", 13.sp, C.accent400, modifier = Modifier.clickable { vm.openIbkrCharts() }.padding(vertical = 4.dp))
                         if (vm.ibkrMsg.isNotEmpty()) T(vm.ibkrMsg, 11.sp, if (vm.ibkrMsg.startsWith("Немає") || vm.ibkrMsg.startsWith("IBKR") || vm.ibkrMsg.startsWith("Токен") || vm.ibkrMsg.startsWith("Помилка") || vm.ibkrMsg.startsWith("Не ")) C.neg else C.n500)
@@ -440,9 +438,9 @@ fun InvScreen(vm: BellaViewModel) {
                                     val sp = plSplit(p, RATES); fun sg(v: Double) = (if (v >= 0) "+" else "−") + vm.m(Math.abs(v)) + " " + vm.sym
                                     val plc = posValueCur(p) - posCostCur(p)
                                     T("≈ ${vm.m(value)} ${vm.sym} · прибуток " + (if (plc >= 0) "+" else "−") + fx(Math.abs(plc)), 11.sp, if (plc >= 0) C.pos else C.neg, maxLines = 1)
-                                    if (fxPlausible(p.buyFx, RATES[p.cur] ?: 0.0)) T("ціна ${fx(p.pxNow)}" + (if (p.ticker.isNotEmpty()) " · ${p.ticker}" else "") + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
+                                    if (fxPlausible(p.buyFx, RATES[p.cur] ?: 0.0)) T("ціна ${fx(p.pxNow)}" + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
                                     else T("Курс купівлі ${fmt2(p.buyFx)} ₴ за 1 ${p.cur} схожий на помилку (НБУ ${fmt2(RATES[p.cur] ?: 0.0)}), тому вартість купівлі в гривнях неправильна. Торкніться позиції й виправте «Курс купівлі» або очистіть його.", 11.sp, C.neg, maxLines = 4)
-                                } else if (p.ticker.isNotEmpty()) T(p.ticker, 11.sp, C.n500)
+                                }
                                 T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
                             }
                         }

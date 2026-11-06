@@ -97,11 +97,6 @@ class IbkrTest {
         assertEquals("2026-11-05", flexDate("11/05/2026")); assertEquals("", flexDate("щось"))
     }
 
-    @Test fun yahooTickers() {
-        assertEquals("VWCE.DE", yahooTicker("VWCE", "IBIS2")); assertEquals("VWRA.L", yahooTicker("VWRA", "LSEETF"))
-        assertEquals("SPY", yahooTicker("SPY", "ARCA")); assertEquals("BRK-B", yahooTicker("BRK B", "NYSE"))
-    }
-
     @Test fun gbpPositionIsAcceptedWhenGbpRateIsKnown() {
         val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = emptyList(), goals = emptyList(), demo = false)
         val (nd, s) = applyFlex(d, parseFlexStatement(statement), rates + ("GBP" to 54.0), 0L)
@@ -117,12 +112,12 @@ class IbkrTest {
         val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = listOf(mine, manual), goals = emptyList(), demo = false)
         val (nd, s) = applyFlex(d, parseFlexStatement(statement), rates, 1000L)
         assertEquals(1, s.updated); assertEquals(1, s.added)
-        val vwce = nd.pos.first { it.ticker == "VWCE.DE" }
+        val vwce = nd.pos.first { it.name == "VWCE (Xetra)" }
         assertEquals("VWCE (Xetra)", vwce.name); assertEquals(20.0, vwce.qty, 1e-9); assertEquals(125.5, vwce.pxNow, 1e-9); assertEquals(104.2, vwce.pxBuy, 1e-9)
         assertEquals(46.0, vwce.buyFx, 1e-9) // курс купівлі з ручної позиції зберігається
         assertEquals("ibkr", vwce.src)
         val vwra = nd.pos.first { it.ibSym == "VWRA" }
-        assertEquals("VWRA.L", vwra.ticker); assertEquals("USD", vwra.cur); assertEquals(5 * 150.25 * 41, posValueUah(vwra, rates), 1e-6)
+        assertEquals("", vwra.ticker); assertEquals("USD", vwra.cur); assertEquals(5 * 150.25 * 41, posValueUah(vwra, rates), 1e-6)
         assertTrue(nd.pos.contains(manual)) // ручний ETF не чіпаємо
         assertEquals(listOf("VUKE (GBP)", "SPY 261218C600 (OPT)"), s.skipped)
         assertTrue(s.gone.isEmpty())

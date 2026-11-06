@@ -155,22 +155,22 @@ fun IbkrChartsView(vm: BellaViewModel) {
     }
     Div()
 
-    // ---- ціни ETF ----
-    val suf = if (weeklyPeriod(vm.ibPeriod)) "|W" else "|D"
-    val etfs = vm.data.pos.filter { it.src == "ibkr" && it.ticker.isNotBlank() }.distinctBy { it.ticker }
+    // ---- ціни ETF (з IBKR) ----
+    val etfs = vm.data.pos.filter { it.src == "ibkr" }.distinctBy { it.ibSym.ifEmpty { it.name } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Label("ЦІНИ ВАШИХ ETF")
-        val series = etfs.mapIndexedNotNull { i, p -> vm.ibPx[p.ticker + suf]?.let { h -> LSeries(p.name, IB_COLORS[i % IB_COLORS.size], priceWindow(h, vm.ibPeriod).map { ep(it.d) to it.v }) } }
+        val series = etfs.mapIndexedNotNull { i, p -> vm.ibPx[p.ibSym.ifEmpty { p.name }]?.takeIf { it.size >= 2 }?.let { h ->
+            LSeries(p.name, IB_COLORS[i % IB_COLORS.size], thin(priceWindow(h, vm.ibPeriod)).map { ep(it.d) to it.v }) } }
         when {
-            etfs.isEmpty() -> T("Немає позицій IBKR з тікером.", 12.sp, C.n500)
+            etfs.isEmpty() -> T("Немає позицій IBKR.", 12.sp, C.n500)
             series.isNotEmpty() -> {
+                val first = series.minOf { it.pts.first().first }
                 MultiLine(series, 130.dp, ::pct, zero = true)
-                T("Зміна ціни фондів від початку періоду, у їхній валюті. Доступно до 5 років, незалежно від віку рахунку; 3 і 5 років — тижневі ціни. Дані Yahoo Finance.", 11.sp, C.n500)
+                T("Зміна ціни фондів від початку періоду, у їхній валюті, за ціною закриття з IBKR." +
+                    (if (LocalDate.ofEpochDay(first).toString() > periodStart(LocalDate.now().toString(), vm.ibPeriod)) " Історія — з ${ddmmyyyy(LocalDate.ofEpochDay(first).toString())}, коротша за період." else ""), 11.sp, C.n500)
             }
-            vm.ibPxBusy -> T("Завантаження цін…", 12.sp, C.n500)
-            else -> T("↻ Завантажити ціни", 13.sp, C.accent400, modifier = Modifier.clickable { vm.loadIbPrices() }.padding(vertical = 4.dp))
+            else -> T("Історія цін з'явиться після синхронізації. Щоб одразу отримати ціни за рік, додайте у Flex-запит розділ «Prior Period Positions».", 12.sp, C.n500)
         }
-        if (vm.ibPxMsg.isNotEmpty()) T(vm.ibPxMsg, 11.sp, C.neg)
     }
     Div()
 

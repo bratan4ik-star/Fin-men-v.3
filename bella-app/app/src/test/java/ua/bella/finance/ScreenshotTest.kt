@@ -66,11 +66,13 @@ class IbkrChartsShotTest {
         val nav = (0..78).map { HistPoint(start.plusDays(it.toLong()).toString(), if (it < 25) 110.0 - it * 0.1 else if (it < 40) 300.0 - (it - 25) * 1.5 else 620.0 + (it % 7) - 3) }
         rule.runOnUiThread {
             vm.commit(vm.data.copy(
-                accs = vm.data.accs + Account("IBKR USD", "USD", 31.89, id = "ibkr-USD"),
-                pos = vm.data.pos + listOf(
+                accs = vm.data.accs.filterNot { it.id.startsWith("ibkr-") } + Account("IBKR USD", "USD", 31.89, id = "ibkr-USD"),
+                pos = vm.data.pos.filterNot { it.src == "ibkr" } + listOf(
                     Pos("ETF", "VOO", 0.7332, 0.0, 0.0, cur = "USD", pxBuy = 702.95, pxNow = 680.56, buyFx = 41.2, src = "ibkr", ibSym = "VOO"),
                     Pos("ETF", "VEA", 1.114, 0.0, 0.0, cur = "USD", pxBuy = 72.25, pxNow = 68.08, buyFx = 41.2, src = "ibkr", ibSym = "VEA"))))
-            vm.seedIbkrHistory(nav, listOf(IbFlow("1", "2026-09-14", 193.0), IbFlow("2", "2026-09-28", 347.0)))
+            vm.seedIbkrHistory(nav, listOf(IbFlow("1", "2026-09-14", 193.0), IbFlow("2", "2026-09-28", 347.0)), px = mapOf(
+                "VOO" to (0..78).map { HistPoint(start.plusDays(it.toLong()).toString(), 700.0 - it * 0.3 + (it % 5)) },
+                "VEA" to (0..78).map { HistPoint(start.plusDays(it.toLong()).toString(), 72.0 - it * 0.05 + (it % 3) * 0.2) }))
             vm.ibPeriod = "3M"
         }
         rule.setContent {
@@ -87,7 +89,7 @@ class IbkrChartsShotTest {
         val vm = androidx.lifecycle.ViewModelProvider(rule.activity)[BellaViewModel::class.java]
         val start = LocalDate.parse("2026-09-01")
         rule.runOnUiThread {
-            vm.commit(vm.data.copy(pos = vm.data.pos + Pos("ETF", "VOO", 0.7332, 0.0, 0.0, cur = "USD", pxBuy = 702.95, pxNow = 680.56, buyFx = 41.2, src = "ibkr", ibSym = "VOO")))
+            vm.commit(vm.data.copy(pos = vm.data.pos.filterNot { it.src == "ibkr" } + Pos("ETF", "VOO", 0.7332, 0.0, 0.0, cur = "USD", pxBuy = 702.95, pxNow = 680.56, buyFx = 41.2, src = "ibkr", ibSym = "VOO")))
             vm.seedIbkrHistory((0..66).map { HistPoint(start.plusDays(it.toLong()).toString(), 500.0 + it % 9) }, emptyList())
         }
         rule.setContent { BellaTheme(vm.light) { InvScreen(vm) } }
