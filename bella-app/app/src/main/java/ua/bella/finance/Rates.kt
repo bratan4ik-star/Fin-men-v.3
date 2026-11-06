@@ -11,7 +11,9 @@ import java.net.URL
 /** Курси НБУ до гривні (UAH = 1) і дата курсу у форматі ДД.ММ.РРРР. */
 data class NbuRates(val rates: Map<String, Double>, val date: String)
 
+/** Обов'язкові валюти й ті, що НБУ публікує теж і які застосунок бере, якщо вони є у відповіді. */
 private val NBU_CODES = listOf("USD", "EUR", "PLN")
+private val NBU_EXTRA = listOf("GBP", "CHF")
 
 /** Розбирає відповідь https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json. null, якщо немає всіх трьох валют. */
 fun parseNbuRates(body: String): NbuRates? = try {
@@ -20,7 +22,7 @@ fun parseNbuRates(body: String): NbuRates? = try {
     for (el in Json.parseToJsonElement(body).jsonArray) {
         val o = el.jsonObject
         val cc = o["cc"]?.jsonPrimitive?.content ?: continue
-        if (cc !in NBU_CODES) continue
+        if (cc !in NBU_CODES && cc !in NBU_EXTRA) continue
         val rate = o["rate"]?.jsonPrimitive?.doubleOrNull ?: continue
         if (rate <= 0) continue
         out[cc] = rate

@@ -4,9 +4,9 @@ import kotlinx.serialization.Serializable
 import java.util.Locale
 
 /** Курси до гривні. Початкові значення з прототипу; після «Оновити курси» підміняються курсами НБУ (змінюється лише з головного потоку). */
-val RATES: MutableMap<String, Double> = mutableMapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0)
-val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł")
-val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN")
+val RATES: MutableMap<String, Double> = mutableMapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0, "GBP" to 54.0, "CHF" to 49.0)
+val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł", "GBP" to "£", "CHF" to "Fr")
+val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN", "GBP", "CHF")
 /** Сьогоднішня дата і поточний місяць телефону (раніше були зафіксовані на 2026-11-02 з прототипу). */
 val TODAY: String get() = java.time.LocalDate.now().toString()
 val CUR_MONTH: String get() = TODAY.take(7)
@@ -140,5 +140,5 @@ fun monthLabel(k: String) = MONTH_NAMES[k.substring(5, 7).toInt() - 1] + " " + k
 fun nativeLabel(a: Account, hide: Boolean): String {
     if (hide) return "••••"
     val v = fmtInt(a.bal)
-    return if (a.cur == "USD" || a.cur == "EUR") SYM[a.cur] + v else v + " " + SYM[a.cur]!!.trim()
+    return if (a.cur == "USD" || a.cur == "EUR" || a.cur == "GBP") SYM[a.cur] + v else v + " " + (SYM[a.cur] ?: a.cur).trim()
 }

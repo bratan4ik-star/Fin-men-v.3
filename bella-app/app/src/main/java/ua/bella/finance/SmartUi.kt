@@ -80,17 +80,19 @@ fun RatesSection(vm: BellaViewModel, startOpen: Boolean = false) {
     Column(Modifier.fillMaxWidth().clip(shape).border(1.dp, C.divider, shape)) {
         Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             T("Курси НБУ", 13.sp, weight = FontWeight.Medium, maxLines = 1)
-            T(listOf("$" to "USD", "€" to "EUR", "zł" to "PLN").joinToString("  ") { (sy, c) -> sy + " " + fmt2(RATES[c] ?: 0.0) }, 12.sp, C.n400, modifier = Modifier.weight(1f), maxLines = 1)
+            T(listOf("$" to "USD", "€" to "EUR", "zł" to "PLN", "£" to "GBP").joinToString("  ") { (sy, c) -> sy + " " + fmt2(RATES[c] ?: 0.0) }, 12.sp, C.n400, modifier = Modifier.weight(1f), maxLines = 1)
             Ico(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n500, 18.dp)
         }
         if (open) Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                listOf("USD", "EUR", "PLN").forEach { c ->
+            listOf(listOf("USD", "EUR", "PLN"), listOf("GBP", "CHF")).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { c ->
                     Column(Modifier.weight(1f).clip(shape).background(C.surface).padding(10.dp)) {
                         T("$c → UAH", 11.sp, C.n500, maxLines = 1)
                         T(fmt2(RATES[c] ?: 0.0), 16.sp, weight = FontWeight.Medium, maxLines = 1)
                     }
                 }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 T(note, 11.sp, if (failed) C.neg else C.n500, modifier = Modifier.weight(1f))

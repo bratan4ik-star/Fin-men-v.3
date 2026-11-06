@@ -102,6 +102,15 @@ class IbkrTest {
         assertEquals("SPY", yahooTicker("SPY", "ARCA")); assertEquals("BRK-B", yahooTicker("BRK B", "NYSE"))
     }
 
+    @Test fun gbpPositionIsAcceptedWhenGbpRateIsKnown() {
+        val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = emptyList(), goals = emptyList(), demo = false)
+        val (nd, s) = applyFlex(d, parseFlexStatement(statement), rates + ("GBP" to 54.0), 0L)
+        val vuke = nd.pos.first { it.ibSym == "VUKE" }
+        assertEquals("GBP", vuke.cur); assertEquals(3 * 40 * 54.0, posValueUah(vuke, rates + ("GBP" to 54.0)), 1e-6)
+        assertEquals(listOf("SPY 261218C600 (OPT)"), s.skipped)
+        assertTrue("GBP" in CURRENCIES && "CHF" in CURRENCIES && RATES.containsKey("GBP") && RATES.containsKey("CHF"))
+    }
+
     @Test fun mergeUpdatesByTickerAddsNewAndSkipsUnsupported() {
         val mine = Pos("ETF", "VWCE (Xetra)", 15.0, 4800.0, 5900.0, cur = "EUR", pxBuy = 100.0, pxNow = 120.0, buyFx = 46.0, ticker = "VWCE.DE")
         val manual = Pos("ETF", "SPY у Freedom", 2.0, 1.0, 1.0, ticker = "SPY")
