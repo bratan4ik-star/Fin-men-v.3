@@ -203,13 +203,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val nd = ensureAccIds(raw)
         if (nd == data) return
         stack.addLast(data); labels.addLast(describeChange(data, nd)); if (stack.size > 20) { stack.removeFirst(); labels.removeFirst() }
-        data = nd; undoN = stack.size; persist()
+        data = nd; undoN = stack.size; clearSel(); persist()
         val t = System.currentTimeMillis(); toastAt = t
         viewModelScope.launch { delay(6000); if (toastAt == t) toastAt = 0 }
     }
     fun undo() {
         if (stack.isEmpty()) return
-        data = stack.removeLast(); labels.removeLastOrNull(); undoN = stack.size; toastAt = 0; persist()
+        data = stack.removeLast(); labels.removeLastOrNull(); undoN = stack.size; toastAt = 0; clearSel(); persist()
     }
 
     /** Останні дії (найновіша перша), до 10: текст і скільки дій треба відмінити, щоб скасувати саме її разом з новішими. */
@@ -218,7 +218,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun undoLast(k: Int) {
         val (restored, rest) = undoSteps(stack.toList(), k) ?: return
         stack.clear(); stack.addAll(rest); repeat(k) { labels.removeLastOrNull() }
-        data = restored; undoN = stack.size; toastAt = 0; persist()
+        data = restored; undoN = stack.size; toastAt = 0; clearSel(); persist()
     }
 
     @JvmName("selectCurrency") fun setCur(c: String) { cur = c; curOpen = false; persist() }
@@ -276,6 +276,23 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val i = form.txIdx; if (data.txs.getOrNull(i) == null) { closeSheet(); return }
         commit(ua.bella.finance.deleteTx(data, i)); closeSheet()
     }
+    // ---------- масові дії з операціями («Вибрати» на вкладці «Операції») ----------
+    /** Режим вибору і вибрані операції (індекси в data.txs; скидаються після будь-якої зміни даних). */
+    var selMode by mutableStateOf(false); private set
+    var sel by mutableStateOf(setOf<Int>()); private set
+    var bulkDelAsk by mutableStateOf(false); private set
+    fun clearSel() { sel = emptySet(); bulkDelAsk = false }
+    fun toggleSelMode() { selMode = !selMode; clearSel() }
+    fun toggleSel(i: Int) { sel = if (i in sel) sel - i else sel + i; bulkDelAsk = false }
+    /** Вибрати всі знайдені або, якщо вони вже всі вибрані, зняти вибір. */
+    fun selectAll(idx: Collection<Int>) { sel = if (idx.isNotEmpty() && sel.containsAll(idx)) sel - idx.toSet() else sel + idx; bulkDelAsk = false }
+    fun bulkCat(cat: String) { if (sel.isNotEmpty()) commit(bulkSetCat(data, sel, cat)) }
+    fun bulkDel() {
+        if (sel.isEmpty()) return
+        if (!bulkDelAsk) { bulkDelAsk = true; return }
+        commit(bulkDelete(data, sel))
+    }
+
     /** Підпис рахунку для рядка операції: «Monobank» або «Monobank → Готівка USD». */
     fun accLabel(t: Tx): String {
         val a = data.accs.firstOrNull { it.id == t.acc }?.name ?: ""

@@ -3,6 +3,8 @@ package ua.bella.finance
 /** Короткий опис зміни даних для списку «Останні дії» (порівнює стан до й після). */
 fun describeChange(a: AppData, b: AppData): String {
     fun cnt(n: Int, m: Int, add: String, del: String, edit: String): String? = when { m > n -> add; m < n -> del; else -> null }
+    if (a.txs.size - b.txs.size > 1) return "Видалено операцій: ${a.txs.size - b.txs.size}"
+    if (a.txs.size == b.txs.size) a.txs.indices.count { a.txs[it] != b.txs[it] }.let { if (it > 1) return "Змінено операцій: $it" }
     cnt(a.txs.size, b.txs.size, "Додано операцію", "Видалено операцію", "")?.let { r ->
         if (b.txs.size > a.txs.size) b.txs.firstOrNull { it !in a.txs }?.let { return "$r: ${it.desc}" }
         if (b.txs.size < a.txs.size) a.txs.firstOrNull { it !in b.txs }?.let { return "$r: ${it.desc}" }

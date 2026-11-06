@@ -97,3 +97,17 @@ fun mergeImportedAccs(old: List<Account>, imported: List<Account>): List<Account
     val oldIds = old.map { it.id }.toSet()
     return kept + withIds.filter { it.id.isEmpty() || it.id !in oldIds }
 }
+
+/** Масова зміна категорії операцій за індексами в d.txs. Перекази не змінюються (у них своя категорія). Баланси рахунків не зачіпаються. */
+fun bulkSetCat(d: AppData, idx: Set<Int>, cat: String): AppData {
+    if (idx.isEmpty() || cat.isBlank()) return d
+    return d.copy(txs = d.txs.mapIndexed { i, t -> if (i in idx && t.type != "transfer" && t.cat != cat) t.copy(cat = cat) else t })
+}
+
+/** Масове видалення операцій за індексами в d.txs; вплив кожної на баланси рахунків скасовується. */
+fun bulkDelete(d: AppData, idx: Set<Int>): AppData {
+    if (idx.isEmpty()) return d
+    var accs = d.accs
+    d.txs.forEachIndexed { i, t -> if (i in idx) accs = applyTxEffect(accs, t, -1.0) }
+    return d.copy(txs = d.txs.filterIndexed { i, _ -> i !in idx }, accs = accs)
+}

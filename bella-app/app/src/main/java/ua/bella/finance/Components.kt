@@ -135,11 +135,12 @@ fun CurPicker(vm: BellaViewModel) {
 }
 
 @Composable
-fun TxRowView(t: Tx, vm: BellaViewModel) {
+fun TxRowView(t: Tx, vm: BellaViewModel, selected: Boolean? = null, onClick: (() -> Unit)? = null) {
     val tr = t.type == "transfer"; val inc = t.type == "income"
     val acc = vm.accLabel(t)
-    Row(Modifier.fillMaxWidth().clickable { vm.editTx(t) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Ico(if (tr) Icons.Outlined.SwapHoriz else catIcon(t.cat), C.accent, 20.dp)
+    Row(Modifier.fillMaxWidth().clickable { if (onClick != null) onClick() else vm.editTx(t) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (selected != null) Ico(if (selected) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, if (selected) C.accent else C.n500, 20.dp)
+        else Ico(if (tr) Icons.Outlined.SwapHoriz else catIcon(t.cat), C.accent, 20.dp)
         Column(Modifier.weight(1f)) { T(t.desc, 14.sp, weight = FontWeight.Medium, maxLines = 1); T("${t.cat} · ${ddmm(t.date)}" + if (acc.isNotEmpty()) " · $acc" else "", 11.sp, C.n500, maxLines = 1) }
         T((if (tr) "⇄ " else if (inc) "+" else "−") + vm.m(t.amt) + " " + vm.sym, 14.sp, if (tr) C.n500 else if (inc) C.pos else C.text, FontWeight.Medium, maxLines = 1)
     }
