@@ -187,6 +187,8 @@ fun applyFlex(d: AppData, f: FlexData, rates: Map<String, Double>, now: Long): P
         accs = if (i >= 0) accs.mapIndexed { j, a -> if (j == i) a.copy(bal = v) else a } else if (v != 0.0) accs + Account("IBKR $c", c, v, id = id) else accs
         if (i >= 0 || v != 0.0) cashN++
     }
+    // валюти, якої більше немає у звіті про гроші (усе виведено чи обміняно), — баланс 0, а не останній відомий
+    if (f.cash.isNotEmpty()) accs = accs.map { a -> if (a.id.startsWith("ibkr-") && a.id.removePrefix("ibkr-") !in f.cash.keys && a.bal != 0.0) a.copy(bal = 0.0) else a }
 
     var txs = d.txs; var divN = 0; var divU = 0
     // Ключ дивіденду: «ibkr|div|ID+ID…|сума у валюті». IBKR буває сторнує й проводить дивіденд заново або пізніше дописує

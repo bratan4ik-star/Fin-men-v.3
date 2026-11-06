@@ -161,6 +161,17 @@ class IbkrTest {
         assertEquals(360.0, d1.txs.single().amt, 1e-9); assertTrue(d1.txs.single().key.startsWith("ibkr|div|111+112|"))
     }
 
+    @Test fun currencyGoneFromCashReportIsZeroed() {
+        val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = emptyList(), goals = emptyList(), demo = false)
+        val (d1, _) = applyFlex(d, parseFlexStatement(statement), rates, 0L)
+        val noEur = statement.replace("<CashReportCurrency accountId=\"U1234567\" currency=\"EUR\" endingCash=\"10\"/>", "")
+        val (d2, _) = applyFlex(d1, parseFlexStatement(noEur), rates, 0L)
+        assertEquals(0.0, d2.accs.first { it.id == "ibkr-EUR" }.bal, 1e-9); assertEquals(1234.56, d2.accs.first { it.id == "ibkr-USD" }.bal, 1e-9)
+        // звіт без розділу про гроші нічого не обнуляє
+        val noCash = statement.replace(Regex("<CashReport>.*?</CashReport>", RegexOption.DOT_MATCHES_ALL), "")
+        assertEquals(d1.accs, applyFlex(d1, parseFlexStatement(noCash), rates, 0L).first.accs)
+    }
+
     @Test fun soldPositionsAreReportedAndRemovable() {
         val old = Pos("ETF", "EUNL", 3.0, 1.0, 1.0, cur = "EUR", pxBuy = 1.0, pxNow = 1.0, src = "ibkr", ibSym = "EUNL")
         val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = listOf(old), goals = emptyList(), demo = false)
