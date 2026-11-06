@@ -57,7 +57,7 @@ private fun httpGet(url: String): String {
     } finally { c.disconnect() }
 }
 
-/** Завантажує Flex-звіт: замовлення, потім до ~1 хв очікування готовності. Повертає дані або текст помилки. Лише поза головним потоком. */
+/** Завантажує Flex-звіт: замовлення, потім до ~4 хв очікування готовності. Повертає дані або текст помилки. Лише поза головним потоком. */
 fun fetchFlex(token: String, query: String, sleep: (Long) -> Unit = { Thread.sleep(it) }, get: (String) -> String = ::httpGet): Pair<FlexData?, String> {
     fun e(s: String) = URLEncoder.encode(s, "UTF-8")
     val sent = try { get("$FLEX_SEND?t=${e(token)}&q=${e(query)}&v=3") } catch (x: Exception) { return null to "Немає зв'язку з IBKR (${x.message ?: x.javaClass.simpleName})" }

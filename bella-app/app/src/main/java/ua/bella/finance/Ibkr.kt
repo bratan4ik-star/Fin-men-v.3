@@ -12,6 +12,7 @@ import javax.xml.parsers.SAXParserFactory
  * Тут — лише розбір XML і об'єднання з даними застосунку; мережа — у IbkrNet.kt.
  */
 
+private const val DIV_KEY = "ibkr|div|"
 const val FLEX_SEND = "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest"
 
 data class IbPos(val symbol: String, val desc: String, val exchange: String, val cur: String, val qty: Double, val mark: Double, val cost: Double, val category: String)
@@ -101,7 +102,8 @@ fun parseFlexStatement(xml: String): FlexData {
     val taxes = cts.filter { it.type.contains("Withholding", true) }
     val out = divs.groupBy { Triple(it.symbol, it.date, it.cur) }.map { (k, l) ->
         val tax = taxes.filter { it.symbol == k.first && it.date == k.second && it.cur == k.third }.sumOf { it.amount }
-        IbDiv(l.map { it.id }.sorted().joinToString("+").ifEmpty { "${k.first}|${k.second}" }, k.second, k.first, k.third, l.sumOf { it.amount }, tax)
+        val tx = taxes.filter { it.symbol == k.first && it.date == k.second && it.cur == k.third }.map { it.id }
+        IbDiv((l.map { it.id } + tx).filter { it.isNotEmpty() }.distinct().sorted().joinToString("+").ifEmpty { "${k.first}_${k.second}" }, k.second, k.first, k.third, l.sumOf { it.amount }, tax)
     }.filter { it.amount > 0 }.sortedBy { it.date }
     return FlexData(account, asOf, pos.filter { it.qty != 0.0 }, cash, out)
 }
@@ -123,11 +125,12 @@ fun yahooTicker(symbol: String, exchange: String): String {
 }
 
 /** Підсумок синхронізації; gone — назви ETF з IBKR, яких більше немає в рахунку (питаємо, чи прибрати). */
-data class IbkrSync(val updated: Int, val added: Int, val cash: Int, val dividends: Int, val gone: List<String>, val skipped: List<String>) {
+data class IbkrSync(val updated: Int, val added: Int, val cash: Int, val dividends: Int, val gone: List<String>, val skipped: List<String>, val divFixed: Int = 0) {
     val text: String get() = buildList {
         add("Оновлено позицій: $updated" + if (added > 0) ", нових: $added" else "")
         if (cash > 0) add("рахунків з грошима: $cash")
         if (dividends > 0) add("нових дивідендів: $dividends")
+        if (divFixed > 0) add("уточнено дивідендів: $divFixed")
         if (skipped.isNotEmpty()) add("пропущено: " + skipped.joinToString(", "))
     }.joinToString(" · ")
 }
@@ -167,16 +170,37 @@ fun applyFlex(d: AppData, f: FlexData, rates: Map<String, Double>, now: Long): P
         if (i >= 0 || v != 0.0) cashN++
     }
 
-    var txs = d.txs; var divN = 0
-    val keys = txs.map { it.key }.toHashSet()
+    var txs = d.txs; var divN = 0; var divU = 0
+    // Ключ дивіденду: «ibkr|div|ID+ID…|сума у валюті». IBKR буває сторнує й проводить дивіденд заново або пізніше дописує
+    // податок: тоді набір ID росте. Група вже відома, якщо хоч один її ID є в наявному ключі, — той запис уточнюється,
+    // а не дублюється. Гривнева сума перераховується за курсом першого запису (старі ключі без суми — за поточним).
+    val byId = HashMap<String, Int>()
+    txs.forEachIndexed { i, t -> if (t.key.startsWith(DIV_KEY)) t.key.removePrefix(DIV_KEY).substringBefore('|').split('+').forEach { byId.putIfAbsent(it, i) } }
+    val fresh = mutableListOf<Tx>()
     f.dividends.forEach { dv ->
         val rate = rates[dv.cur] ?: run { skipped += "дивіденд ${dv.symbol} (${dv.cur})"; return@forEach }
-        val key = "ibkr|div|${dv.id}"; if (key in keys || !isIsoDate(dv.date)) return@forEach
+        if (!isIsoDate(dv.date)) return@forEach
         val net = dv.amount + dv.tax // tax від'ємний
+        val key = DIV_KEY + dv.id + "|" + String.format(java.util.Locale.ROOT, "%.4f", net)
         val desc = "Дивіденди ${dv.symbol}" + if (dv.tax < 0) " (податок ${fmt2(-dv.tax)} ${curSign(dv.cur)})" else ""
-        txs = listOf(Tx(desc, "Надходження", "income", net * rate, dv.date, key)) + txs; keys += key; divN++
+        val ids = dv.id.split('+')
+        val known = ids.firstNotNullOfOrNull { byId[it] }
+        if (known == null) { fresh += Tx(desc, "Надходження", "income", net * rate, dv.date, key); ids.forEach { byId[it] = -1 }; divN++ }
+        else if (known >= 0 && txs[known].key != key) {
+            val o = txs[known]
+            val oldNet = o.key.removePrefix(DIV_KEY).substringAfter('|', "").toDoubleOrNull()
+            val amt = when {
+                oldNet != null && oldNet != 0.0 -> o.amt / oldNet * net   // курс першого запису
+                o.desc == desc -> o.amt                                    // старий ключ, податок той самий — сума та сама
+                else -> net * rate
+            }
+            if (Math.abs(amt - o.amt) > 0.005 || o.desc != desc) divU++
+            txs = txs.mapIndexed { j, t -> if (j != known) t else t.copy(key = key, desc = desc, amt = amt) }
+            ids.forEach { byId[it] = known }
+        }
     }
-    return d.copy(pos = pos, accs = accs, txs = txs) to IbkrSync(updated, added, cashN, divN, gone, skipped)
+    txs = fresh.asReversed() + txs
+    return d.copy(pos = pos, accs = accs, txs = txs) to IbkrSync(updated, added, cashN, divN, gone, skipped, divU)
 }
 
 /** Прибирає позиції IBKR, яких більше немає в рахунку. */

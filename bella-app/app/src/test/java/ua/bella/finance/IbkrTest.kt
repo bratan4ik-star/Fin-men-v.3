@@ -132,6 +132,35 @@ class IbkrTest {
         assertEquals(2000.0, d2.accs.first { it.id == "ibkr-USD" }.bal, 1e-9); assertEquals(2, d2.accs.size)
     }
 
+    @Test fun reversedRepostedAndLateTaxDividendsAreNotDuplicated() {
+        val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = emptyList(), goals = emptyList(), demo = false)
+        val noTax = statement.replace(Regex("<CashTransaction [^>]*Withholding[^>]*/>"), "")
+        val (d1, _) = applyFlex(d, parseFlexStatement(noTax), rates, 0L)
+        assertEquals(10.5 * 41, d1.txs.single().amt, 1e-6)
+        // наступного дня податок дописано, курс уже інший — запис уточнюється за курсом першого запису, а не додається
+        val (d2, s2) = applyFlex(d1, parseFlexStatement(statement), rates + ("USD" to 45.0), 0L)
+        assertEquals(1, d2.txs.size); assertEquals(0, s2.dividends); assertEquals(1, s2.divFixed)
+        assertEquals((10.5 - 1.58) * 41, d2.txs.single().amt, 1e-6); assertTrue(d2.txs.single().desc.contains("податок"))
+        // IBKR сторнував і провів дивіденд заново
+        val repost = statement.replace("<CashTransaction currency=\"USD\" symbol=\"\"",
+            "<CashTransaction currency=\"USD\" symbol=\"VWRA\" dateTime=\"20260625;202000\" amount=\"-10.5\" type=\"Dividends\" transactionID=\"120\" levelOfDetail=\"DETAIL\"/>" +
+            "<CashTransaction currency=\"USD\" symbol=\"VWRA\" dateTime=\"20260625;202000\" amount=\"10.5\" type=\"Dividends\" transactionID=\"121\" levelOfDetail=\"DETAIL\"/>" +
+            "<CashTransaction currency=\"USD\" symbol=\"\"")
+        val (d3, s3) = applyFlex(d2, parseFlexStatement(repost), rates, 0L)
+        assertEquals(1, d3.txs.size); assertEquals(0, s3.dividends); assertEquals(0, s3.divFixed)
+        assertEquals((10.5 - 1.58) * 41, d3.txs.single().amt, 1e-6)
+        val (d4, s4) = applyFlex(d3, parseFlexStatement(repost), rates, 0L)
+        assertEquals(d3.txs, d4.txs); assertEquals(0, s4.dividends)
+    }
+
+    @Test fun oldDividendKeysAreMigratedWithoutRevaluation() {
+        val old = Tx("Дивіденди VWRA (податок 1,58 \$)", "Надходження", "income", 360.0, "2026-06-25", "ibkr|div|111")
+        val d = AppData(txs = listOf(old), accs = emptyList(), debts = emptyList(), pos = emptyList(), goals = emptyList(), demo = false)
+        val (d1, s1) = applyFlex(d, parseFlexStatement(statement), rates, 0L)
+        assertEquals(1, d1.txs.size); assertEquals(0, s1.dividends); assertEquals(0, s1.divFixed)
+        assertEquals(360.0, d1.txs.single().amt, 1e-9); assertTrue(d1.txs.single().key.startsWith("ibkr|div|111+112|"))
+    }
+
     @Test fun soldPositionsAreReportedAndRemovable() {
         val old = Pos("ETF", "EUNL", 3.0, 1.0, 1.0, cur = "EUR", pxBuy = 1.0, pxNow = 1.0, src = "ibkr", ibSym = "EUNL")
         val d = AppData(txs = emptyList(), accs = emptyList(), debts = emptyList(), pos = listOf(old), goals = emptyList(), demo = false)
