@@ -63,7 +63,8 @@ fun fetchFlex(token: String, query: String, sleep: (Long) -> Unit = { Thread.sle
     val sent = try { get("$FLEX_SEND?t=${e(token)}&q=${e(query)}&v=3") } catch (x: Exception) { return null to "Немає зв'язку з IBKR (${x.message ?: x.javaClass.simpleName})" }
     val st = parseFlexStatus(sent) ?: return null to "Незрозуміла відповідь IBKR"
     if (!st.ok) return null to flexError(st)
-    val base = st.url.ifEmpty { FLEX_SEND.replace("SendRequest", "GetStatement") }
+    // Адресу звіту з відповіді IBKR (gdcdyn.…) на деяких телефонах не резольвить DNS; той самий шлях на ndcdyn.… працює.
+    val base = FLEX_SEND.replace("SendRequest", "GetStatement")
     var wait = 3000L
     repeat(14) {
         sleep(wait)
