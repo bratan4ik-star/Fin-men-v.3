@@ -49,7 +49,10 @@ android {
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: стискає й прибирає невикористаний код — APK у кілька разів менший і трохи швидший старт
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }
     }
