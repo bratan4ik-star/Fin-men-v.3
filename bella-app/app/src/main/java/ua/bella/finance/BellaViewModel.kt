@@ -350,9 +350,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L,
                 src = old?.src ?: "", ibSym = old?.ibSym ?: "")
         }
-        val b = parseNum(f.pBuy) * rate; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * rate
+        // валютна ОВДП (з калькулятора): ціни лишаються у валюті облігації, без перерахунку за курсом перегляду
+        val bondCur = if (f.group != "ETF" && old != null && isBondCurPos(old)) old.cur else "UAH"
+        val k = if (bondCur != "UAH") 1.0 else rate
+        val b = parseNum(f.pBuy) * k; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * k
         return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker,
-            src = old?.src ?: "", ibSym = old?.ibSym ?: "")
+            cur = bondCur, src = old?.src ?: "", ibSym = old?.ibSym ?: "")
     }
 
     /** Для депозиту кількість не вводиться: 1, якщо поле порожнє. */
@@ -366,9 +369,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun editPos(i: Int) {
         val p = data.pos[i]; fun c(v: Double) = ((v / rate) * 100).let { Math.round(it) / 100.0 }.toString()
         fun r2(v: Double) = (Math.round(v * 10000) / 10000.0).toString()
-        val fx = isFxPos(p)
+        val fx = isFxPos(p); val bond = isBondCurPos(p)  // валютна ОВДП: ціни у валюті облігації
         form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(),
-            pBuy = if (fx) r2(p.pxBuy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else c(p.now), pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx) p.cur else "UAH",
+            pBuy = if (fx) r2(p.pxBuy) else if (bond) r2(p.buy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else if (bond) r2(p.now) else c(p.now),
+            pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx || bond) p.cur else "UAH",
             pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; sheet = Sheet.PosE
     }
     /** Довідка з будь-якого екрана: відкривається на розділі, що відповідає поточному екрану. */

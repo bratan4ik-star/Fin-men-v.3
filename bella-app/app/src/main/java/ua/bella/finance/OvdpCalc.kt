@@ -187,81 +187,14 @@ fun buildOvdpPortfolioCashFlow(
     rates: Map<String, Double> = RATES,
     today: LocalDate = LocalDate.parse(TODAY)
 ): List<MonthCashFlow> {
-    val ovdpPositions = positions.filter { it.group == "ОВДП" && it.qty > 0 }
-    if (ovdpPositions.isEmpty()) return emptyList()
-
+    // Ті самі дати, що й у нагадуваннях (ovdpEvents): для позицій без даних калькулятора — від «Наступної виплати»,
+    // інакше — назад від дати погашення. Раніше календар завжди рахував від погашення і міг розходитися з нагадуваннями.
     val allEvents = mutableListOf<CashFlowItem>()
-
-    ovdpPositions.forEach { p ->
-        val x = p.calc
-        val isin = x?.isin ?: p.name
-        val nom = x?.nom ?: 1000.0
-        val freq = x?.freq ?: 6
-        val cur = x?.cur ?: p.cur
-        val fx = rates[cur] ?: 1.0
-        val buy = pd(x?.buy ?: "") ?: today
-        val mat = pd(p.mat) ?: buy
-
-        val cInput = CalcInput(
-            isin = isin,
-            nom = nom.toString(),
-            buy = buy.toString(),
-            mat = mat.toString(),
-            price = p.buy.toString(),
-            qty = p.qty.toInt().toString(),
-            coupon = p.rate.toString(),
-            freq = freq,
-            cur = cur
-        )
-        val res = calcOvdp(cInput)
-        res.sched.forEach { s ->
-            if (!s.paid) {
-                if (s.kind.contains("погашення", ignoreCase = true)) {
-                    val principalPart = res.qty * nom
-                    val couponPart = (s.amount - principalPart).coerceAtLeast(0.0)
-                    if (principalPart > 0) {
-                        allEvents.add(
-                            CashFlowItem(
-                                date = s.date,
-                                isinOrName = p.name,
-                                kind = "Погашення номіналу",
-                                amount = principalPart,
-                                cur = cur,
-                                amountUah = principalPart * fx,
-                                isRedemption = true
-                            )
-                        )
-                    }
-                    if (couponPart > 0) {
-                        allEvents.add(
-                            CashFlowItem(
-                                date = s.date,
-                                isinOrName = p.name,
-                                kind = "Купон",
-                                amount = couponPart,
-                                cur = cur,
-                                amountUah = couponPart * fx,
-                                isRedemption = false
-                            )
-                        )
-                    }
-                } else {
-                    allEvents.add(
-                        CashFlowItem(
-                            date = s.date,
-                            isinOrName = p.name,
-                            kind = s.kind,
-                            amount = s.amount,
-                            cur = cur,
-                            amountUah = s.amount * fx,
-                            isRedemption = false
-                        )
-                    )
-                }
-            }
-        }
+    ovdpEvents(positions, today, today.plusYears(30)).forEach { e ->
+        val fx = rates[e.cur] ?: 1.0
+        if (e.principal > 0) allEvents += CashFlowItem(e.date, e.name, "Погашення номіналу", e.principal, e.cur, e.principal * fx, true)
+        if (e.coupon > 0) allEvents += CashFlowItem(e.date, e.name, "Купон", e.coupon, e.cur, e.coupon * fx, false)
     }
-
     if (allEvents.isEmpty()) return emptyList()
 
     val grouped = allEvents.groupBy { YearMonth.from(it.date) }.toSortedMap()

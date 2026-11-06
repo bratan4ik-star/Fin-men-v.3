@@ -288,8 +288,8 @@ private fun PosForm(vm: BellaViewModel, edit: Boolean) {
         }
         if (f.pCur != "UAH") T("Ціни у ${f.pCur}; вартість у гривнях іде за курсом НБУ, тож прибуток показується окремо: від ціни фонду і від курсу. Курс купівлі порожній — береться поточний.", 11.sp, C.n500)
     } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки (${vm.sym})", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }
-        if (edit) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Поточна ціна (${vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }; Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки (${if (f.pCur != "UAH") curSign(f.pCur) else vm.sym})", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }
+        if (edit) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Поточна ціна (${if (f.pCur != "UAH") curSign(f.pCur) else vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }; Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) } }
         else Field("Ставка, % річних", f.pRate, numeric = true) { vm.form = f.copy(pRate = it) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

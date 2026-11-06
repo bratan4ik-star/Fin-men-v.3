@@ -36,6 +36,9 @@ class ScreenshotTest {
         shot("01-home")
         listOf(Screen.Acc to "02-accounts", Screen.Inv to "04-investments", Screen.Goals to "05-goals", Screen.Pass to "06-passive", Screen.Calc to "07-ovdp")
             .forEach { (s, n) -> rule.runOnUiThread { vm.go(s) }; shot(n) }
+        listOf(1 to "calendar", 2 to "distribution", 3 to "reinvest").forEach { (t, n) ->
+            rule.runOnUiThread { vm.go(Screen.Calc); vm.calcTab = t }; shot("07-ovdp-$n")
+        }
         listOf(0 to "overview", 1 to "operations", 2 to "report", 3 to "limits").forEach { (t, n) ->
             rule.runOnUiThread { vm.go(Screen.Bud); vm.tab = t }; shot("03-budget-$n")
         }

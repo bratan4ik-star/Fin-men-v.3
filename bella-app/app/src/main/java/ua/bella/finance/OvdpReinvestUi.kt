@@ -122,13 +122,9 @@ fun OvdpReinvestmentChart(
     val n500Color = C.n500
 
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(
-            Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             T("Траєкторія капіталу за роками", 12.sp, n500Color, FontWeight.Medium)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Dot(C.accent)
                     T("З реінвестуванням", 10.sp, C.n500)
@@ -274,7 +270,8 @@ fun OvdpReinvestmentChart(
 /** Розділ симулятора реінвестування купонів ОВДП. */
 @Composable
 fun OvdpReinvestmentSection(vm: BellaViewModel) {
-    val ovdpPositions = vm.data.pos.filter { it.group == "ОВДП" && it.qty > 0 }
+    // лише гривневі ОВДП: симуляція йде за гривневою ставкою, валютні папери мають іншу ставку й курсовий ризик
+    val ovdpPositions = vm.data.pos.filter { it.group == "ОВДП" && it.qty > 0 && it.cur == "UAH" }
     val portfolioOvdpUah = ovdpPositions.sumOf { posValueUah(it, RATES) }
     val defaultInitial = if (portfolioOvdpUah > 0) portfolioOvdpUah else 100000.0
 
@@ -304,15 +301,11 @@ fun OvdpReinvestmentSection(vm: BellaViewModel) {
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 T("Параметри симуляції ОВДП", 13.sp, C.text, FontWeight.SemiBold)
                 if (portfolioOvdpUah > 0) {
                     T(
-                        "↳ мій портфель (${fmtInt(portfolioOvdpUah)} ₴)",
+                        "↳ мої гривневі ОВДП (${fmtInt(portfolioOvdpUah)} ₴)",
                         11.sp,
                         C.accent,
                         modifier = Modifier.clickable {

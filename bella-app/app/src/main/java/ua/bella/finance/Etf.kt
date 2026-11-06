@@ -7,6 +7,9 @@ package ua.bella.finance
  * тож прибуток ділиться на дві частини: від зміни ціни фонду і від зміни курсу.
  */
 
+/** Валютна позиція не-ETF (напр. ОВДП у USD з калькулятора): buy/now — у валюті cur, без pxBuy/pxNow. */
+fun isBondCurPos(p: Pos): Boolean = !isFxPos(p) && p.cur != "UAH" && p.group != "ETF"
+
 /** Позиція рахується у валюті фонду (а не в гривнях). */
 fun isFxPos(p: Pos): Boolean = p.cur != "UAH" && p.pxNow > 0
 

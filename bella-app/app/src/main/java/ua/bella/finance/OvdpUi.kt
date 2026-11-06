@@ -303,7 +303,8 @@ fun OvdpPortfolioCalendarSection(
     val totalCoupons = cashFlows.sumOf { it.couponUah }
     val totalPrincipal = cashFlows.sumOf { it.principalUah }
     val totalSum = totalCoupons + totalPrincipal
-    val monthsCount = cashFlows.size.coerceAtLeast(1)
+    // середнє за весь проміжок від поточного місяця до останньої виплати (а не лише за місяці, де є виплати)
+    val monthsCount = cashFlows.lastOrNull()?.let { java.time.temporal.ChronoUnit.MONTHS.between(java.time.YearMonth.from(today), it.ym).toInt() + 1 }?.coerceAtLeast(1) ?: 1
     val avgMonthly = totalCoupons / monthsCount
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -432,7 +433,7 @@ fun OvdpReminderCard(vm: BellaViewModel) {
                     20.dp
                 )
                 Column {
-                    T("Нагадування про виплати (WorkManager)", 13.sp, C.text, FontWeight.SemiBold)
+                    T("Нагадування про виплати", 13.sp, C.text, FontWeight.SemiBold)
                     T(
                         if (isRemindOn) "Щоденна перевірка о 09:00 · за 3 дні й у день виплати" else "Нагадування вимкнено",
                         11.sp,
@@ -510,7 +511,7 @@ fun OvdpReminderCard(vm: BellaViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             T(
-                "WorkManager гарантує доставку сповіщення у фоні о 9:00 навіть після перезавантаження.",
+                "Перевірка щодня близько 9:00, зокрема після перезавантаження телефону. Android може трохи зсунути час, щоб берегти батарею.",
                 10.sp,
                 C.n500,
                 lineHeight = 13.sp,
@@ -574,7 +575,7 @@ fun computeOvdpCurrencyDistribution(
         val sumUah = list.sumOf { posValueUah(it, rates) }
         val pct = (sumUah / total) * 100.0
         val originalSum = list.sumOf { it.qty * (if (it.now > 0) it.now else it.buy) }
-        val sub = if (cur != "UAH") "≈ ${fmt2(originalSum)} ${curSign(cur)}" else "${list.size} випусків"
+        val sub = if (cur != "UAH") "≈ ${fmt2(originalSum)} ${curSign(cur)}" else "${list.size} " + plural(list.size, "випуск", "випуски", "випусків")
         OvdpSlice(
             id = cur,
             title = namesMap[cur] ?: cur,
@@ -836,9 +837,10 @@ fun OvdpDistributionSection(
     val activeSlice = currentSlices.find { it.id == selectedSliceId }
 
     // Розрахунок аналітичних метрик портфеля
-    val weightedYield = if (totalUah > 0) {
-        ovdpPositions.sumOf { posValueUah(it, RATES) * it.rate } / totalUah
-    } else 0.0
+    // середня ставка лише гривневих ОВДП: змішувати гривневі й валютні ставки в одне число некоректно
+    val uahOvdp = ovdpPositions.filter { it.cur == "UAH" }
+    val uahTotal = uahOvdp.sumOf { posValueUah(it, RATES) }
+    val weightedYield = if (uahTotal > 0) uahOvdp.sumOf { posValueUah(it, RATES) * it.rate } / uahTotal else 0.0
 
     val weightedDays = if (totalUah > 0) {
         ovdpPositions.sumOf { p ->
@@ -1028,7 +1030,7 @@ fun OvdpDistributionSection(
                     Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(C.bg).padding(8.dp)
                 ) {
                     Column {
-                        T("Сер. дохідність", 10.sp, C.n500)
+                        T("Сер. ставка ₴", 10.sp, C.n500)
                         T("%.2f%%".format(weightedYield), 15.sp, C.pos, FontWeight.Bold)
                     }
                 }
@@ -1036,7 +1038,7 @@ fun OvdpDistributionSection(
                     Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(C.bg).padding(8.dp)
                 ) {
                     Column {
-                        T("Сер. дюрація", 10.sp, C.n500)
+                        T("Сер. строк", 10.sp, C.n500)
                         val months = weightedDays / 30.4
                         T(
                             if (months >= 12) "%.1f р.".format(months / 12) else "%.0f міс.".format(months),
@@ -1050,9 +1052,9 @@ fun OvdpDistributionSection(
                     Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(C.bg).padding(8.dp)
                 ) {
                     Column {
-                        T("Валютний захист", 10.sp, C.n500)
+                        T("У валюті", 10.sp, C.n500)
                         T(
-                            if (fxShare > 0) "%.0f%% FX".format(fxShare) else "100% ₴",
+                            if (fxShare > 0) "%.0f%%".format(fxShare) else "0%",
                             15.sp,
                             if (fxShare > 0) BlueC else C.accent,
                             FontWeight.Bold

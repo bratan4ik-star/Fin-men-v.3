@@ -168,4 +168,22 @@ class OvdpCalcTest {
         assertTrue(a.isNotEmpty() && a.all { pd(it.mat)!!.isAfter(t) })
         assertTrue(a.size < POPULAR_OVDP_PRESETS.size)
     }
+
+    @Test fun calendarUsesSameDatesAsReminders() {
+        // позиція без даних калькулятора: дати — від «Наступної виплати» (10.12), а не назад від погашення (12.11)
+        val p = Pos("ОВДП", "ОВДП UA4000227045", 100.0, 960.0, 985.0, "2027-05-12", 15.5, "2026-12-10")
+        val today = java.time.LocalDate.parse("2026-11-06")
+        val flows = buildOvdpPortfolioCashFlow(listOf(p), mapOf("UAH" to 1.0), today)
+        val events = ovdpEvents(listOf(p), today, today.plusYears(30))
+        assertEquals(events.map { it.date }.distinct(), flows.flatMap { f -> f.items.map { it.date } }.distinct().sorted())
+        assertEquals(java.time.YearMonth.parse("2026-12"), flows.first().ym)
+        assertEquals(7750.0, flows.first().couponUah, 1e-9)
+        assertEquals(100000.0, flows.last().principalUah, 1e-9)
+    }
+
+    @Test fun ukrainianPlural() {
+        assertEquals("випуск", plural(1, "випуск", "випуски", "випусків")); assertEquals("випуски", plural(2, "випуск", "випуски", "випусків"))
+        assertEquals("випусків", plural(5, "випуск", "випуски", "випусків")); assertEquals("випусків", plural(12, "випуск", "випуски", "випусків"))
+        assertEquals("випуск", plural(21, "випуск", "випуски", "випусків"))
+    }
 }

@@ -147,3 +147,9 @@ fun nativeLabel(a: Account, hide: Boolean): String {
     val v = fmtInt(a.bal)
     return if (a.cur == "USD" || a.cur == "EUR" || a.cur == "GBP") SYM[a.cur] + v else v + " " + (SYM[a.cur] ?: a.cur).trim()
 }
+
+/** Українська форма множини: 1 випуск, 2 випуски, 5 випусків. */
+fun plural(n: Int, one: String, few: String, many: String): String {
+    val a = Math.abs(n) % 100; val b = a % 10
+    return if (a in 11..14) many else when (b) { 1 -> one; in 2..4 -> few; else -> many }
+}

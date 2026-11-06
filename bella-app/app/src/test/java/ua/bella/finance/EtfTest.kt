@@ -40,4 +40,13 @@ class EtfTest {
         val uah = Pos("ETF", "Old", 1.0, 100.0, 120.0)
         assertEquals(0.0, posValueCur(uah), 1e-9); assertEquals(0.0, plCurPct(uah), 1e-9)
     }
+
+    @Test fun usdBondFromCalculatorIsValuedOnceInHryvnia() {
+        val r = mapOf("UAH" to 1.0, "USD" to 41.0, "EUR" to 48.0)
+        val bond = Pos("ОВДП", "ОВДП USD", 2.0, 1000.0, 1010.0, "2027-04-20", 4.5, cur = "USD")
+        assertTrue(isBondCurPos(bond)); assertFalse(isFxPos(bond))
+        assertEquals(2 * 1010.0 * 41, posValueUah(bond, r), 1e-9)
+        val uah = Pos("ОВДП", "ОВДП UAH", 2.0, 1000.0, 1010.0)
+        assertFalse(isBondCurPos(uah)); assertEquals(2020.0, posValueUah(uah, r), 1e-9)
+    }
 }
