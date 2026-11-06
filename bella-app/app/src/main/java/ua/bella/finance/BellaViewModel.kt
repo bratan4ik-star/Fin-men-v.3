@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
 enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Ibkr, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -42,6 +42,8 @@ data class Form(
     val tRepeat: Boolean = false, val rIdx: Int = -1, val rDay: String = "", val rActive: Boolean = true,
     // правило категорії: текст (фрагменти через кому), категорія, індекс (-1 — нове)
     val ruMatch: String = "", val ruCat: String = "Харчування", val ruIdx: Int = -1,
+    // IBKR: токен і номер Flex-запиту (у формі лише під час введення; зберігаються зашифровано в IbkrStore)
+    val ibTok: String = "", val ibQ: String = "",
 )
 
 data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
@@ -297,6 +299,33 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Зберігає цільовий розподіл (%, від'ємні відкидаються; 0 — групу прибрано з цілей). */
     fun setTargets(t: Map<String, Double>) { commit(data.copy(targets = t.filterValues { it > 0 }.mapValues { Math.min(100.0, it.value) })) }
 
+    // ---------- Interactive Brokers (Flex Web Service, див. Ibkr.kt) ----------
+    var ibkrOn by mutableStateOf(try { IbkrStore.configured(getApplication()) } catch (_: Exception) { false }); private set
+    var ibkrAt by mutableStateOf(try { IbkrStore.lastAt(getApplication()) } catch (_: Exception) { 0L }); private set
+    var ibkrBusy by mutableStateOf(false); private set
+    var ibkrMsg by mutableStateOf(""); private set
+    /** ETF з IBKR, яких більше немає в рахунку: чекають рішення «прибрати / залишити». */
+    var ibkrGone by mutableStateOf(listOf<String>()); private set
+    fun openIbkr() { form = form.copy(ibTok = "", ibQ = try { IbkrStore.query(ctx) } catch (_: Exception) { "" }); formErr = ""; sheet = Sheet.Ibkr }
+    fun syncIbkr() {
+        if (ibkrBusy || !ibkrOn) return
+        ibkrBusy = true; ibkrMsg = ""
+        viewModelScope.launch {
+            val (f, err) = withContext(Dispatchers.IO) { try { fetchFlex(IbkrStore.token(ctx), IbkrStore.query(ctx)) } catch (e: Exception) { null to "Помилка IBKR: ${e.javaClass.simpleName}" } }
+            if (f == null) ibkrMsg = err
+            else {
+                val (nd, sum) = applyFlex(data, f, RATES, System.currentTimeMillis())
+                commit(nd); ibkrGone = sum.gone
+                val t = System.currentTimeMillis(); IbkrStore.setLastAt(ctx, t); ibkrAt = t
+                ibkrMsg = (if (f.asOf.isNotEmpty()) "Дані IBKR на ${ddmmyyyy(f.asOf)}. " else "") + sum.text
+            }
+            ibkrBusy = false
+        }
+    }
+    fun removeIbkrGone() { if (ibkrGone.isNotEmpty()) commit(removeGone(data, ibkrGone)); ibkrGone = emptyList() }
+    fun keepIbkrGone() { ibkrGone = emptyList() }
+    fun disconnectIbkr() { try { IbkrStore.clear(ctx) } catch (_: Exception) {}; ibkrOn = false; ibkrAt = 0L; ibkrMsg = "IBKR відключено. Позиції лишились як є."; closeSheet() }
+
     // ---------- правила категорій ----------
     /** Пропозиція «Завжди ставити …» після ручної зміни категорії операції (null — немає). */
     var ruleAsk by mutableStateOf<CatRule?>(null); private set
@@ -498,6 +527,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             Sheet.Cats -> {
                 val (lim, e) = buildLimits(catsEdit, limEdit, rate); formErr = e
                 if (lim != null) { commit(s.copy(cats = catsEdit, limits = lim)); closeSheet() }
+            }
+            Sheet.Ibkr -> {
+                val t = f.ibTok.trim(); val q = f.ibQ.trim()
+                if (q.isEmpty() || (t.isEmpty() && !ibkrOn)) { formErr = "Вкажіть токен і номер Flex-запиту (Query ID)"; return }
+                try { IbkrStore.save(ctx, t.ifEmpty { IbkrStore.token(ctx) }, q) } catch (_: Exception) { formErr = "Не вдалося зберегти токен на пристрої"; return }
+                form = form.copy(ibTok = "", ibQ = ""); ibkrOn = true; closeSheet(); syncIbkr()
             }
             Sheet.Rule -> {
                 val m = f.ruMatch.split(',').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
@@ -732,6 +767,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             if (m != null) autoMsg = m; autoAt = Jobs.autoAt(ctx)
             withContext(Dispatchers.IO) { try { Jobs.runReminders(ctx) } catch (_: Exception) {} }
         }
+        // IBKR — раз на добу при відкритті (Flex-звіти IBKR оновлюються раз на робочий день)
+        if (ibkrOn && System.currentTimeMillis() - ibkrAt > 20 * 3600_000L) syncIbkr()
         // ціни ETF за тікером — не частіше ніж раз на 6 годин
         val lastQuote = data.pos.filter { it.ticker.isNotBlank() }.maxOfOrNull { it.pxAt }
         if (lastQuote != null && System.currentTimeMillis() - lastQuote > 6 * 3600_000L) refreshQuotes()
