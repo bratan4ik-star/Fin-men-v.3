@@ -22,6 +22,7 @@ fun describeChange(a: AppData, b: AppData): String {
     if (a.recurring.size != b.recurring.size) return if (b.recurring.size > a.recurring.size) "Додано повторювану операцію: ${b.recurring.first { it !in a.recurring }.desc}" else "Видалено повторювану операцію: ${a.recurring.first { it !in b.recurring }.desc}"
     if (a.recurring != b.recurring) return "Зміна повторюваної операції: ${b.recurring.firstOrNull { it !in a.recurring }?.desc ?: ""}".trim()
     if (a.limits != b.limits || a.cats != b.cats) return "Зміна лімітів і категорій"
+    if (a.targets != b.targets) return "Зміна цільового розподілу"
     return "Зміна даних"
 }
 

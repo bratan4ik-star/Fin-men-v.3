@@ -446,6 +446,7 @@ fun InvScreen(vm: BellaViewModel) {
                     }
                 }
             }
+            if (t.invT > 0) RebalanceSection(vm, t.invGroups.associate { it.first to it.third.first })
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Позиція", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openPos() }; Btn("ОВДП", false, Modifier.weight(1f), Icons.Outlined.Calculate) { vm.go(Screen.Calc) } }
             CompoundSection(vm, t.invT)
         }

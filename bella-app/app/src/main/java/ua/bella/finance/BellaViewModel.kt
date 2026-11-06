@@ -276,6 +276,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val i = form.txIdx; if (data.txs.getOrNull(i) == null) { closeSheet(); return }
         commit(ua.bella.finance.deleteTx(data, i)); closeSheet()
     }
+    /** Зберігає цільовий розподіл (%, від'ємні відкидаються; 0 — групу прибрано з цілей). */
+    fun setTargets(t: Map<String, Double>) { commit(data.copy(targets = t.filterValues { it > 0 }.mapValues { Math.min(100.0, it.value) })) }
+
     // ---------- масові дії з операціями («Вибрати» на вкладці «Операції») ----------
     /** Режим вибору і вибрані операції (індекси в data.txs; скидаються після будь-якої зміни даних). */
     var selMode by mutableStateOf(false); private set

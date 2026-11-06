@@ -15,6 +15,7 @@ val MONTH_NAMES = listOf("Січень", "Лютий", "Березень", "Кв
 
 /** Групи інвестицій і їхні кольори. */
 val GROUPS = listOf("ОВДП" to 0xFF9184D9, "Депозити" to 0xFF60A5FA, "ETF" to 0xFFFBBF24, "Крипто" to 0xFFC084FC)
+val DEFAULT_TARGETS = linkedMapOf("ОВДП" to 40.0, "Депозити" to 20.0, "ETF" to 30.0, "Крипто" to 10.0)
 val LIMITS = linkedMapOf("Харчування" to 12000.0, "Житло" to 20000.0, "Транспорт" to 3000.0, "Розваги" to 2000.0, "Здоров'я" to 1500.0, "Інше" to 0.0)
 val CATEGORIES = listOf("Перекази", "Надходження", "Зняття готівки", "Послуги", "Поповнення мобільного", "Побутова техніка", "Харчування", "Житло", "Транспорт", "Розваги", "Здоров'я", "Зарплата", "Інше")
 
@@ -56,6 +57,8 @@ data class AppData(
     val cats: List<String> = CATEGORIES,
     /** Повторювані щомісячні операції (оренда, підписки). */
     val recurring: List<Recurring> = emptyList(),
+    /** Цільовий розподіл інвестицій за групами, % (для ребалансування в «Інвестиціях»). */
+    val targets: Map<String, Double> = DEFAULT_TARGETS,
 )
 
 @Serializable
