@@ -25,11 +25,11 @@ val buildNumber: Int = System.getenv("BELLA_BUILD_NUMBER")?.toIntOrNull()
 
 android {
     namespace = "ua.bella.finance"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         applicationId = "ua.bella.finance"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = buildNumber
         versionName = appVersionName
         buildConfigField("String", "BUILD_DATE", "\"${LocalDate.now()}\"")
@@ -67,20 +67,20 @@ android {
     } }
 }
 dependencies {
-    val bom = platform("androidx.compose:compose-bom:2024.09.00")
+    val bom = platform("androidx.compose:compose-bom:2025.06.01")
     implementation(bom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.fragment:fragment-ktx:1.8.3")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.fragment:fragment-ktx:1.8.8")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.biometric:biometric:1.1.0")
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("androidx.work:work-runtime-ktx:2.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     testImplementation("junit:junit:4.13.2")
     // знімки екранів без емулятора: Robolectric малює Compose справжнім рушієм Android (Native Graphics)
-    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("org.robolectric:robolectric:4.15.1")
     testImplementation(bom)
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

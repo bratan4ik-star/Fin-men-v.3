@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 class ScreenshotTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
     private val out = File("build/screenshots").apply { mkdirs() }
@@ -55,7 +55,7 @@ fun saveShot(rule: androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, out
 /** Вікно «Графіки IBKR» на прикладі рахунку (малюється напряму, без нижньої шторки: Robolectric не знімає спливні вікна). */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w411dp-h1600dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w411dp-h1600dp-xxhdpi")
 class IbkrChartsShotTest {
     @get:Rule val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
     private fun shot(name: String) = saveShot(rule, File("build/screenshots").apply { mkdirs() }, name)
