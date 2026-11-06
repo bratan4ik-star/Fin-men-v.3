@@ -402,6 +402,7 @@ fun InvScreen(vm: BellaViewModel) {
                     T("Залишити", 13.sp, C.n500, modifier = Modifier.clickable { vm.keepIbkrGone() })
                 }
             }
+            if (vm.ibkrOn || vm.data.pos.any { it.src == "ibkr" }) IbkrCard(vm)
             Column {
                 BigMoney("ПОРТФЕЛЬ", vm.m(total), vm.sym)
                 if (cashT > 0) T("Інвестиції ${vm.m(t.invT)} · готівка ${vm.m(cashT)} ${vm.sym}", 12.sp, C.n500, modifier = Modifier.padding(top = 2.dp))

@@ -223,3 +223,26 @@ fun IbkrChartsView(vm: BellaViewModel) {
         }
     }
 }
+
+/** Картка рахунку IBKR угорі «Інвестицій»: вартість, результат і дохідність за місяць; торкання відкриває графіки. */
+@Composable
+fun IbkrCard(vm: BellaViewModel) {
+    val base = vm.ibBase
+    val now = ibkrSnapshot(vm.data, RATES, base) ?: vm.ibNav.lastOrNull()?.v
+    val w = ibWindow(vm.ibNav, vm.ibFlows, "1M")
+    val pos = C.pos; val neg = C.neg
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).clickable { vm.openIbkrCharts() }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Label("РАХУНОК IBKR")
+            T(if (now == null) "—" else if (vm.hide) "•••• ${curSign(base)}" else fxMoney(now, base), 18.sp, weight = FontWeight.Medium, maxLines = 1)
+            if (w.pts.size >= 2) {
+                val g = w.gain
+                T((if (vm.hide) "••••" else (if (g >= 0) "+" else "−") + fxMoney(Math.abs(g), base)) + " · TWR " +
+                    (if (w.twr >= 0) "+" else "−") + "%.1f%%".format(Math.abs(w.twr * 100)) + (if (w.capped) " за всю історію" else " за місяць"),
+                    12.sp, if (g >= 0) pos else neg, maxLines = 1)
+            } else T(if (vm.ibkrBusy) "Синхронізація…" else "Графіки з'являться після синхронізації", 12.sp, C.n500, maxLines = 1)
+        }
+        T("Графіки ›", 13.sp, C.accent400, FontWeight.Medium)
+    }
+}

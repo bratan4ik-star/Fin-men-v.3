@@ -58,6 +58,7 @@ fun saveShot(rule: androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, out
 @Config(sdk = [34], qualifiers = "w411dp-h1600dp-xxhdpi")
 class IbkrChartsShotTest {
     @get:Rule val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
+    private fun shot(name: String) = saveShot(rule, File("build/screenshots").apply { mkdirs() }, name)
 
     @Test fun ibkrCharts() {
         val vm = androidx.lifecycle.ViewModelProvider(rule.activity)[BellaViewModel::class.java]
@@ -79,6 +80,17 @@ class IbkrChartsShotTest {
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp)) { IbkrChartsView(vm) }
             }
         }
-        saveShot(rule, File("build/screenshots").apply { mkdirs() }, "08-ibkr-charts")
+        shot("08-ibkr-charts")
+    }
+
+    @Test fun investmentsWithIbkrCard() {
+        val vm = androidx.lifecycle.ViewModelProvider(rule.activity)[BellaViewModel::class.java]
+        val start = LocalDate.parse("2026-09-01")
+        rule.runOnUiThread {
+            vm.commit(vm.data.copy(pos = vm.data.pos + Pos("ETF", "VOO", 0.7332, 0.0, 0.0, cur = "USD", pxBuy = 702.95, pxNow = 680.56, buyFx = 41.2, src = "ibkr", ibSym = "VOO")))
+            vm.seedIbkrHistory((0..66).map { HistPoint(start.plusDays(it.toLong()).toString(), 500.0 + it % 9) }, emptyList())
+        }
+        rule.setContent { BellaTheme(vm.light) { InvScreen(vm) } }
+        shot("09-investments-ibkr-card")
     }
 }
