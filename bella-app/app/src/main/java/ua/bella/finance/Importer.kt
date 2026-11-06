@@ -84,11 +84,23 @@ object Importer {
         return LocalDate.of(1899, 12, 30).plusDays(n.toLong()).toString()
     }
 
-    /** Число з пробілами/нерозривними пробілами, комою як десятковим роздільником, юнікодним мінусом. */
+    private val UAH_MARK = Regex("грн\\.?|₴|uah", RegexOption.IGNORE_CASE)
+
+    /**
+     * Число з виписки: пробіли й нерозривні пробіли, юнікодний мінус, позначка гривні («грн», «₴», «UAH»).
+     * Якщо є і крапка, і кома, десятковий роздільник — той, що останній: 1,234.50 і 1.234,50 — це 1234,5.
+     * Кілька однакових роздільників — розряди (1.234.567 або 1,234,567); одна кома — десяткова.
+     */
     fun num(raw: String): Double? {
-        var s = raw.replace(Regex("[\\s\\u00A0\\u202F]"), "").replace('−', '-').replace('–', '-')
+        var s = UAH_MARK.replace(raw, "").replace(Regex("[\\s\\u00A0\\u202F]"), "").replace('−', '-').replace('–', '-')
         if (s.isEmpty()) return null
-        s = if (s.contains(',') && s.contains('.')) s.replace(",", "") else s.replace(',', '.')
+        val c = s.count { it == ',' }; val d = s.count { it == '.' }
+        s = when {
+            c > 0 && d > 0 -> if (s.lastIndexOf(',') > s.lastIndexOf('.')) s.replace(".", "").replace(',', '.') else s.replace(",", "")
+            c > 1 -> s.replace(",", "")
+            d > 1 -> s.replace(".", "")
+            else -> s.replace(',', '.')
+        }
         return s.toDoubleOrNull()
     }
 
@@ -101,7 +113,7 @@ object Importer {
             if (p.size < 3) { bad++; return@forEach }
             val d = toIso(p[0])
             val a = num(p.last())
-            if (d == null || a == null) { bad++; return@forEach }
+            if (d == null || a == null || a == 0.0) { bad++; return@forEach }
             val desc = p.drop(1).dropLast(1).joinToString(" ").trim()
             val c = CAT.firstOrNull { it.first.containsMatchIn(desc) }; val inc = a > 0
             out.add(Tx(desc, c?.second ?: if (inc) "Зарплата" else "Інше", if (inc) "income" else "expense", Math.abs(a) * curRate, d, "$d|$desc|$a"))
@@ -249,7 +261,7 @@ object Importer {
                 val d = num(g(c.debit)); val cr = num(g(c.credit))
                 if (d == null && cr == null) null else Math.abs(cr ?: 0.0) - Math.abs(d ?: 0.0)
             }
-            if (iso == null || a == null) { bad++; return@forEach }
+            if (iso == null || a == null || a == 0.0) { bad++; return@forEach }
             val card = g(c.card); val cur = g(c.cur).uppercase().ifEmpty { "UAH" }; val cat = g(c.cat)
             val desc = g(c.desc).ifEmpty { cat }.ifEmpty { "Операція" }
             val type = classifyType(cat, desc, a)
