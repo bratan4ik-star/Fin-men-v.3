@@ -395,14 +395,14 @@ fun InvScreen(vm: BellaViewModel) {
     Column(Modifier.fillMaxSize()) {
         TopBar("Інвестиції", vm)
         Page {
-            if (vm.ibkrGone.isNotEmpty()) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                T("У рахунку IBKR більше немає: ${vm.ibkrGone.joinToString(", ")}. Прибрати з портфеля?", 13.sp)
+            if (vm.ibkr.gone.isNotEmpty()) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                T("У рахунку IBKR більше немає: ${vm.ibkr.gone.joinToString(", ")}. Прибрати з портфеля?", 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    T("Прибрати", 13.sp, C.neg, FontWeight.Medium, Modifier.clickable { vm.removeIbkrGone() })
-                    T("Залишити", 13.sp, C.n500, modifier = Modifier.clickable { vm.keepIbkrGone() })
+                    T("Прибрати", 13.sp, C.neg, FontWeight.Medium, Modifier.clickable { vm.ibkr.removeGone() })
+                    T("Залишити", 13.sp, C.n500, modifier = Modifier.clickable { vm.ibkr.keepGone() })
                 }
             }
-            if (vm.ibkrOn || vm.data.pos.any { it.src == "ibkr" }) IbkrCard(vm)
+            if (vm.ibkr.on || vm.data.pos.any { it.src == "ibkr" }) IbkrCard(vm)
             Column {
                 BigMoney("ПОРТФЕЛЬ", vm.m(total), vm.sym)
                 if (cashT > 0) T("Інвестиції ${vm.m(t.invT)} · готівка ${vm.m(cashT)} ${vm.sym}", 12.sp, C.n500, modifier = Modifier.padding(top = 2.dp))
@@ -419,9 +419,9 @@ fun InvScreen(vm: BellaViewModel) {
                         Ico(if (isOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
                     }
                     if (isOpen && g == "ETF") Column(Modifier.padding(start = 18.dp, top = 4.dp)) {
-                        T(if (vm.ibkrBusy) "Синхронізація з IBKR…" else if (vm.ibkrOn) "↻ Синхронізувати з IBKR" else "Підключити Interactive Brokers", 13.sp, C.accent400, modifier = Modifier.clickable { if (vm.ibkrOn) vm.syncIbkr() else vm.openIbkr() }.padding(vertical = 4.dp))
-                        if (vm.ibkrOn || vm.data.pos.any { it.src == "ibkr" }) T("Графіки рахунку IBKR", 13.sp, C.accent400, modifier = Modifier.clickable { vm.openIbkrCharts() }.padding(vertical = 4.dp))
-                        if (vm.ibkrMsg.isNotEmpty()) T(vm.ibkrMsg, 11.sp, if (vm.ibkrMsg.startsWith("Немає") || vm.ibkrMsg.startsWith("IBKR") || vm.ibkrMsg.startsWith("Токен") || vm.ibkrMsg.startsWith("Помилка") || vm.ibkrMsg.startsWith("Не ")) C.neg else C.n500)
+                        T(if (vm.ibkr.busy) "Синхронізація з IBKR…" else if (vm.ibkr.on) "↻ Синхронізувати з IBKR" else "Підключити Interactive Brokers", 13.sp, C.accent400, modifier = Modifier.clickable { if (vm.ibkr.on) vm.ibkr.sync() else vm.openIbkr() }.padding(vertical = 4.dp))
+                        if (vm.ibkr.on || vm.data.pos.any { it.src == "ibkr" }) T("Графіки рахунку IBKR", 13.sp, C.accent400, modifier = Modifier.clickable { vm.openIbkrCharts() }.padding(vertical = 4.dp))
+                        if (vm.ibkr.msg.isNotEmpty()) T(vm.ibkr.msg, 11.sp, if (vm.ibkr.msg.startsWith("Немає") || vm.ibkr.msg.startsWith("IBKR") || vm.ibkr.msg.startsWith("Токен") || vm.ibkr.msg.startsWith("Помилка") || vm.ibkr.msg.startsWith("Не ")) C.neg else C.n500)
                     }
                     if (isOpen) vm.data.pos.forEachIndexed { ix, p ->
                         if (p.group == g) {

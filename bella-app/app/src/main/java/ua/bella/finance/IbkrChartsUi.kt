@@ -109,7 +109,7 @@ private fun Fig(label: String, value: String, color: Color, sub: String, m: Modi
 /** Вікно «Графіки IBKR»: вартість рахунку й внески, дохідність, ціни ETF, розподіл і прибуток за позиціями. */
 @Composable
 fun IbkrChartsView(vm: BellaViewModel) {
-    val base = vm.ibBase
+    val base = vm.ibkr.base
     fun money(v: Double) = if (vm.hide) "•••• ${curSign(base)}" else fxMoney(v, base)
     fun moneyShort(v: Double) = if (vm.hide) "••••" else short(v) + " " + curSign(base)
     fun signed(v: Double) = if (vm.hide) "••••" else (if (v >= 0.005) "+" else if (v <= -0.005) "−" else "") + fxMoney(Math.abs(v), base)
@@ -120,19 +120,19 @@ fun IbkrChartsView(vm: BellaViewModel) {
     // перемикач періоду — спільний для вартості й цін ETF
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         IB_PERIODS.forEach { (p, l) ->
-            val on = p == vm.ibPeriod
-            Box(Modifier.weight(1f).clip(CircleShape).background(if (on) C.accent else Color.Transparent).clickable { vm.setIbkrPeriod(p) }.padding(vertical = 5.dp), contentAlignment = Alignment.Center) {
+            val on = p == vm.ibkr.period
+            Box(Modifier.weight(1f).clip(CircleShape).background(if (on) C.accent else Color.Transparent).clickable { vm.ibkr.period = p }.padding(vertical = 5.dp), contentAlignment = Alignment.Center) {
                 T(l, 12.sp, if (on) C.bg else C.n500, FontWeight.Medium)
             }
         }
     }
 
     // ---- вартість рахунку ----
-    val w = ibWindow(vm.ibNav, vm.ibFlows, vm.ibPeriod)
+    val w = ibWindow(vm.ibkr.nav, vm.ibkr.flows, vm.ibkr.period)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Label("ВАРТІСТЬ РАХУНКУ, ${base}")
         if (w.pts.size < 2) {
-            T(if (vm.ibNav.isEmpty()) "Історія з'явиться після синхронізації з IBKR." else "Поки є лише одна точка (${ddmmyyyy(vm.ibNav.last().d)}). Кожна синхронізація додає вартість за день.", 12.sp, C.n500)
+            T(if (vm.ibkr.nav.isEmpty()) "Історія з'явиться після синхронізації з IBKR." else "Поки є лише одна точка (${ddmmyyyy(vm.ibkr.nav.last().d)}). Кожна синхронізація додає вартість за день.", 12.sp, C.n500)
             T("Щоб одразу бачити історію за рік, додайте у свій Activity Flex Query розділ «Net Asset Value (NAV) in Base», а в Cash Transactions — «Deposits & Withdrawals».", 11.sp, C.n400)
         } else {
             if (w.capped) T("Історія рахунку — з ${ddmmyyyy(w.pts.first().d)}, коротша за обраний період, тож показано всю.", 11.sp, C.n500)
@@ -159,15 +159,15 @@ fun IbkrChartsView(vm: BellaViewModel) {
     val etfs = vm.data.pos.filter { it.src == "ibkr" }.distinctBy { it.ibSym.ifEmpty { it.name } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Label("ЦІНИ ВАШИХ ETF")
-        val series = etfs.mapIndexedNotNull { i, p -> vm.ibPx[p.ibSym.ifEmpty { p.name }]?.takeIf { it.size >= 2 }?.let { h ->
-            LSeries(p.name, IB_COLORS[i % IB_COLORS.size], thin(priceWindow(h, vm.ibPeriod)).map { ep(it.d) to it.v }) } }
+        val series = etfs.mapIndexedNotNull { i, p -> vm.ibkr.px[p.ibSym.ifEmpty { p.name }]?.takeIf { it.size >= 2 }?.let { h ->
+            LSeries(p.name, IB_COLORS[i % IB_COLORS.size], thin(priceWindow(h, vm.ibkr.period)).map { ep(it.d) to it.v }) } }
         when {
             etfs.isEmpty() -> T("Немає позицій IBKR.", 12.sp, C.n500)
             series.isNotEmpty() -> {
                 val first = series.minOf { it.pts.first().first }
                 MultiLine(series, 130.dp, ::pct, zero = true)
                 T("Зміна ціни фондів від початку періоду, у їхній валюті, за ціною закриття з IBKR." +
-                    (if (LocalDate.ofEpochDay(first).toString() > periodStart(LocalDate.now().toString(), vm.ibPeriod)) " Історія — з ${ddmmyyyy(LocalDate.ofEpochDay(first).toString())}, коротша за період." else ""), 11.sp, C.n500)
+                    (if (LocalDate.ofEpochDay(first).toString() > periodStart(LocalDate.now().toString(), vm.ibkr.period)) " Історія — з ${ddmmyyyy(LocalDate.ofEpochDay(first).toString())}, коротша за період." else ""), 11.sp, C.n500)
             }
             else -> T("Історія цін з'явиться після синхронізації. Щоб одразу отримати ціни за рік, додайте у Flex-запит розділ «Prior Period Positions».", 12.sp, C.n500)
         }
@@ -227,9 +227,9 @@ fun IbkrChartsView(vm: BellaViewModel) {
 /** Картка рахунку IBKR угорі «Інвестицій»: вартість, результат і дохідність за місяць; торкання відкриває графіки. */
 @Composable
 fun IbkrCard(vm: BellaViewModel) {
-    val base = vm.ibBase
-    val now = ibkrSnapshot(vm.data, RATES, base) ?: vm.ibNav.lastOrNull()?.v
-    val w = ibWindow(vm.ibNav, vm.ibFlows, "1M")
+    val base = vm.ibkr.base
+    val now = ibkrSnapshot(vm.data, RATES, base) ?: vm.ibkr.nav.lastOrNull()?.v
+    val w = ibWindow(vm.ibkr.nav, vm.ibkr.flows, "1M")
     val pos = C.pos; val neg = C.neg
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).clickable { vm.openIbkrCharts() }.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -241,7 +241,7 @@ fun IbkrCard(vm: BellaViewModel) {
                 T((if (vm.hide) "••••" else (if (g >= 0) "+" else "−") + fxMoney(Math.abs(g), base)) + " · TWR " +
                     (if (w.twr >= 0) "+" else "−") + "%.1f%%".format(Math.abs(w.twr * 100)) + (if (w.capped) " за всю історію" else " за місяць"),
                     12.sp, if (g >= 0) pos else neg, maxLines = 1)
-            } else T(if (vm.ibkrBusy) "Синхронізація…" else "Графіки з'являться після синхронізації", 12.sp, C.n500, maxLines = 1)
+            } else T(if (vm.ibkr.busy) "Синхронізація…" else "Графіки з'являться після синхронізації", 12.sp, C.n500, maxLines = 1)
         }
         T("Графіки ›", 13.sp, C.accent400, FontWeight.Medium)
     }

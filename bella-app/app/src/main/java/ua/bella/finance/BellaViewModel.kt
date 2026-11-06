@@ -18,37 +18,6 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
-enum class Screen { Home, Acc, Bud, Inv, Goals, Pass, Calc }
-enum class Sheet { None, IbkrCharts, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Ibkr, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
-enum class KMode { None, Unlock, Old, New, Confirm }
-
-/** Усі поля форм у шитах (відповідають полям state у прототипі). */
-data class Form(
-    val from: Int = 0, val to: Int = 1, val amount: String = "",
-    val name: String = "", val bal: String = "", val cur: String = "UAH", val sav: Boolean = false,
-    val who: String = "", val kindOwedToMe: Boolean = true, val amt: String = "", val due: String = "",
-    val tType: String = "expense", val tAmt: String = "", val tCat: String = "Харчування", val tDesc: String = "",
-    val group: String = "ОВДП", val pName: String = "", val pQty: String = "", val pBuy: String = "", val pNow: String = "",
-    val pRate: String = "", val pMat: String = "", val pNext: String = "",
-    val editIdx: Int = 0,
-    // операція: дата, рахунок, для переказу — рахунок і сума зарахування; txIdx — індекс операції, що редагується
-    val tDate: String = "", val tAcc: String = "", val tToAcc: String = "", val tToAmt: String = "", val txIdx: Int = -1,
-    val pMonthly: Boolean = false, val pPayAcc: String = "", val cashF: Boolean = false,
-    // ETF: валюта ціни, курс купівлі (₴ за 1 одиницю валюти)
-    val pCur: String = "UAH", val pFx: String = "",
-    // ціль: поля форми, індекс цілі; внесок/зняття — напрям, рахунок, сума
-    val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1, val gMonthly: String = "",
-    val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
-    // повторювана операція: галочка в новій операції; редагування шаблону (індекс, число місяця, активність)
-    val dIdx: Int = -1, val dPay: String = "",
-    val tRepeat: Boolean = false, val rIdx: Int = -1, val rDay: String = "", val rActive: Boolean = true,
-    // правило категорії: текст (фрагменти через кому), категорія, індекс (-1 — нове)
-    val ruMatch: String = "", val ruCat: String = "Харчування", val ruIdx: Int = -1,
-    // IBKR: токен і номер Flex-запиту (у формі лише під час введення; зберігаються зашифровано в IbkrStore)
-    val ibTok: String = "", val ibQ: String = "",
-)
-
-data class Filters(val q: String = "", val tf: String = "all", val sort: String = "dateD", val dateFrom: String = "", val dateTo: String = "", val min: String = "", val max: String = "", val show: Boolean = false, val acc: String = "*")
 
 class BellaViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("bella", Context.MODE_PRIVATE)
@@ -120,14 +89,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Щоденні знімки чистого капіталу (оновлюються під час кожного збереження). */
     var hist by mutableStateOf(loaded.hist); private set
 
-    /** Історія рахунку IBKR для графіків (поза журналом «Скасувати», як і hist). */
-    var ibNav by mutableStateOf(loaded.ibNav); private set
-    var ibFlows by mutableStateOf(loaded.ibFlows); private set
-    var ibBase by mutableStateOf(loaded.ibBase); private set
-    /** Історія цін ETF з IBKR за символом (з Flex-звітів), до 5 років. */
-    var ibPx by mutableStateOf(loaded.ibPx); private set
+    /** Interactive Brokers: синхронізація й історія для графіків (IbkrController.kt). */
+    val ibkr = IbkrController(app, viewModelScope, loaded, { data }, { commit(it) }, { persist() })
 
-    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibNav, ibFlows, ibBase, ibPx)
+    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibkr.nav, ibkr.flows, ibkr.base, ibkr.px)
 
     // ---------- резервна копія ----------
     var backupMsg by mutableStateOf(""); private set
@@ -186,7 +151,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val p = b.state
         p.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
         ratesDate = p.ratesDate; ratesAt = p.ratesAt; ratesTick++
-        cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibNav = p.ibNav; ibFlows = p.ibFlows; ibBase = p.ibBase; ibPx = p.ibPx
+        cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibkr.restore(p)
         month = p.month.coerceAtLeast(0)
         commit(p.data)
         pendingRestore = null
@@ -321,54 +286,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Зберігає цільовий розподіл (%, від'ємні відкидаються; 0 — групу прибрано з цілей). */
     fun setTargets(t: Map<String, Double>) { commit(data.copy(targets = t.filterValues { it > 0 }.mapValues { Math.min(100.0, it.value) })) }
 
-    // ---------- Interactive Brokers (Flex Web Service, див. Ibkr.kt) ----------
-    var ibkrOn by mutableStateOf(try { IbkrStore.configured(getApplication()) } catch (_: Exception) { false }); private set
-    var ibkrAt by mutableStateOf(try { IbkrStore.lastAt(getApplication()) } catch (_: Exception) { 0L }); private set
-    var ibkrBusy by mutableStateOf(false); private set
-    var ibkrMsg by mutableStateOf(""); private set
-    /** ETF з IBKR, яких більше немає в рахунку: чекають рішення «прибрати / залишити». */
-    var ibkrGone by mutableStateOf(listOf<String>()); private set
+    // ---------- Interactive Brokers (логіка й стан — IbkrController.kt) ----------
     fun openIbkr() { form = form.copy(ibTok = "", ibQ = try { IbkrStore.query(ctx) } catch (_: Exception) { "" }); formErr = ""; sheet = Sheet.Ibkr }
-    fun syncIbkr() {
-        if (ibkrBusy || !ibkrOn) return
-        ibkrBusy = true; ibkrMsg = ""
-        viewModelScope.launch {
-            try {
-                val (f, err) = withContext(Dispatchers.IO) { try { fetchFlex(IbkrStore.token(ctx), IbkrStore.query(ctx)) } catch (e: Throwable) { null to "Помилка IBKR: ${e.javaClass.simpleName}: ${e.message?.take(120) ?: ""}" } }
-                if (f == null) ibkrMsg = err
-                else {
-                    val (nd, sum) = applyFlex(data, f, RATES, System.currentTimeMillis())
-                    val base = f.base.ifEmpty { ibBase }.takeIf { RATES.containsKey(it) } ?: "USD"
-                    if (base != ibBase) { ibNav = emptyList(); ibFlows = emptyList() }
-                    ibBase = base
-                    mergeIbHist(ibNav, ibFlows, f, ibkrSnapshot(nd, RATES, base), TODAY).let { (n, fl) -> ibNav = n; ibFlows = fl }
-                    ibPx = mergeIbPrices(ibPx, f)
-                    commit(nd); ibkrGone = sum.gone
-                    val t = System.currentTimeMillis(); IbkrStore.setLastAt(ctx, t); ibkrAt = t
-                    ibkrMsg = (if (f.asOf.isNotEmpty()) "Дані IBKR на ${ddmmyyyy(f.asOf)}. " else "") + sum.text
-                }
-            } catch (e: Throwable) {
-                ibkrMsg = "Помилка застосунку під час синхронізації: ${e.javaClass.simpleName}: ${e.message?.take(160) ?: ""}"
-            } finally { ibkrBusy = false }
-        }
-    }
-    private var ibkrTryAt = 0L
-    /** Синхронізація IBKR при кожному відкритті чи поверненні до застосунку, але не частіше ніж раз на годину (і після невдалої спроби теж). */
-    fun autoSyncIbkr() {
-        val now = System.currentTimeMillis()
-        if (!ibkrOn || !ibkrDue(ibkrAt, ibkrTryAt, now)) return
-        ibkrTryAt = now; syncIbkr()
-    }
-    // ---------- графіки IBKR ----------
-    var ibPeriod by mutableStateOf("1Y")
     fun openIbkrCharts() { sheet = Sheet.IbkrCharts }
-    fun setIbkrPeriod(p: String) { ibPeriod = p }
-    /** Лише для знімків екранів у тестах: підставляє історію рахунку IBKR без синхронізації. */
-    @androidx.annotation.VisibleForTesting
-    internal fun seedIbkrHistory(nav: List<HistPoint>, flows: List<IbFlow>, base: String = "USD", px: Map<String, List<HistPoint>> = emptyMap()) { ibNav = nav; ibFlows = flows; ibBase = base; ibPx = px }
-    fun removeIbkrGone() { if (ibkrGone.isNotEmpty()) commit(removeGone(data, ibkrGone)); ibkrGone = emptyList() }
-    fun keepIbkrGone() { ibkrGone = emptyList() }
-    fun disconnectIbkr() { try { IbkrStore.clear(ctx) } catch (_: Exception) {}; ibkrOn = false; ibkrAt = 0L; ibNav = emptyList(); ibFlows = emptyList(); ibPx = emptyMap(); persist(); ibkrMsg = "IBKR відключено. Позиції лишились як є."; closeSheet() }
+    fun disconnectIbkr() { ibkr.disconnect(); closeSheet() }
 
     // ---------- правила категорій ----------
     /** Пропозиція «Завжди ставити …» після ручної зміни категорії операції (null — немає). */
@@ -539,10 +460,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             }
             Sheet.Ibkr -> {
                 val t = f.ibTok.trim(); val q = f.ibQ.trim()
-                if (q.isEmpty() || (t.isEmpty() && !ibkrOn)) { formErr = "Вкажіть токен і номер Flex-запиту (Query ID)"; return }
+                if (q.isEmpty() || (t.isEmpty() && !ibkr.on)) { formErr = "Вкажіть токен і номер Flex-запиту (Query ID)"; return }
                 flexQueryError(q).let { if (it.isNotEmpty()) { formErr = it; return } }
                 try { IbkrStore.save(ctx, t.ifEmpty { IbkrStore.token(ctx) }, q) } catch (e: Throwable) { formErr = "Не вдалося зберегти токен на пристрої: ${e.javaClass.simpleName}"; return }
-                form = form.copy(ibTok = "", ibQ = ""); formErr = ""; ibkrOn = true; syncIbkr()  // вікно лишається відкритим, поки триває синхронізація і видно результат
+                form = form.copy(ibTok = "", ibQ = ""); formErr = ""; ibkr.connected(); ibkr.sync()  // вікно лишається відкритим, поки триває синхронізація і видно результат
             }
             Sheet.Rule -> {
                 val m = f.ruMatch.split(',').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
@@ -702,7 +623,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelPin() { kmode = KMode.None; entry = ""; kerr = ""; tmp = "" }
     fun unlockByBio() { kmode = KMode.None; entry = ""; kerr = "" }
     fun onStopped() { hiddenAt = System.currentTimeMillis() }
-    fun onStarted() { runRecurring(); refreshNotifyState(); autoSyncIbkr(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
+    fun onStarted() { runRecurring(); refreshNotifyState(); ibkr.autoSync(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
     fun backspace() { entry = entry.dropLast(1) }
     fun press(d: String) {
         if (kmode == KMode.None) return

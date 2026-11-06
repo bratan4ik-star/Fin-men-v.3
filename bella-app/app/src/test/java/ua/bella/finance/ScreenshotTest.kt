@@ -70,10 +70,10 @@ class IbkrChartsShotTest {
                 pos = vm.data.pos.filterNot { it.src == "ibkr" } + listOf(
                     Pos("ETF", "VOO", 0.7332, 0.0, 0.0, cur = "USD", pxBuy = 702.95, pxNow = 680.56, buyFx = 41.2, src = "ibkr", ibSym = "VOO"),
                     Pos("ETF", "VEA", 1.114, 0.0, 0.0, cur = "USD", pxBuy = 72.25, pxNow = 68.08, buyFx = 41.2, src = "ibkr", ibSym = "VEA"))))
-            vm.seedIbkrHistory(nav, listOf(IbFlow("1", "2026-09-14", 193.0), IbFlow("2", "2026-09-28", 347.0)), px = mapOf(
+            vm.ibkr.seed(nav, listOf(IbFlow("1", "2026-09-14", 193.0), IbFlow("2", "2026-09-28", 347.0)), px = mapOf(
                 "VOO" to (0..78).map { HistPoint(start.plusDays(it.toLong()).toString(), 700.0 - it * 0.3 + (it % 5)) },
                 "VEA" to (0..78).map { HistPoint(start.plusDays(it.toLong()).toString(), 72.0 - it * 0.05 + (it % 3) * 0.2) }))
-            vm.ibPeriod = "3M"
+            vm.ibkr.period = "3M"
         }
         rule.setContent {
             BellaTheme(vm.light) {
@@ -90,7 +90,7 @@ class IbkrChartsShotTest {
         val start = LocalDate.parse("2026-09-01")
         rule.runOnUiThread {
             vm.commit(vm.data.copy(pos = vm.data.pos.filterNot { it.src == "ibkr" } + Pos("ETF", "VOO", 0.7332, 0.0, 0.0, cur = "USD", pxBuy = 702.95, pxNow = 680.56, buyFx = 41.2, src = "ibkr", ibSym = "VOO")))
-            vm.seedIbkrHistory((0..66).map { HistPoint(start.plusDays(it.toLong()).toString(), 500.0 + it % 9) }, emptyList())
+            vm.ibkr.seed((0..66).map { HistPoint(start.plusDays(it.toLong()).toString(), 500.0 + it % 9) }, emptyList())
         }
         rule.setContent { BellaTheme(vm.light) { InvScreen(vm) } }
         shot("09-investments-ibkr-card")
