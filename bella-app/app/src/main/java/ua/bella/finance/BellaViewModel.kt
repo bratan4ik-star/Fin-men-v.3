@@ -311,15 +311,18 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (ibkrBusy || !ibkrOn) return
         ibkrBusy = true; ibkrMsg = ""
         viewModelScope.launch {
-            val (f, err) = withContext(Dispatchers.IO) { try { fetchFlex(IbkrStore.token(ctx), IbkrStore.query(ctx)) } catch (e: Exception) { null to "Помилка IBKR: ${e.javaClass.simpleName}" } }
-            if (f == null) ibkrMsg = err
-            else {
-                val (nd, sum) = applyFlex(data, f, RATES, System.currentTimeMillis())
-                commit(nd); ibkrGone = sum.gone
-                val t = System.currentTimeMillis(); IbkrStore.setLastAt(ctx, t); ibkrAt = t
-                ibkrMsg = (if (f.asOf.isNotEmpty()) "Дані IBKR на ${ddmmyyyy(f.asOf)}. " else "") + sum.text
-            }
-            ibkrBusy = false
+            try {
+                val (f, err) = withContext(Dispatchers.IO) { try { fetchFlex(IbkrStore.token(ctx), IbkrStore.query(ctx)) } catch (e: Throwable) { null to "Помилка IBKR: ${e.javaClass.simpleName}: ${e.message?.take(120) ?: ""}" } }
+                if (f == null) ibkrMsg = err
+                else {
+                    val (nd, sum) = applyFlex(data, f, RATES, System.currentTimeMillis())
+                    commit(nd); ibkrGone = sum.gone
+                    val t = System.currentTimeMillis(); IbkrStore.setLastAt(ctx, t); ibkrAt = t
+                    ibkrMsg = (if (f.asOf.isNotEmpty()) "Дані IBKR на ${ddmmyyyy(f.asOf)}. " else "") + sum.text
+                }
+            } catch (e: Throwable) {
+                ibkrMsg = "Помилка застосунку під час синхронізації: ${e.javaClass.simpleName}: ${e.message?.take(160) ?: ""}"
+            } finally { ibkrBusy = false }
         }
     }
     private var ibkrTryAt = 0L
@@ -541,7 +544,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 val t = f.ibTok.trim(); val q = f.ibQ.trim()
                 if (q.isEmpty() || (t.isEmpty() && !ibkrOn)) { formErr = "Вкажіть токен і номер Flex-запиту (Query ID)"; return }
                 flexQueryError(q).let { if (it.isNotEmpty()) { formErr = it; return } }
-                try { IbkrStore.save(ctx, t.ifEmpty { IbkrStore.token(ctx) }, q) } catch (_: Exception) { formErr = "Не вдалося зберегти токен на пристрої"; return }
+                try { IbkrStore.save(ctx, t.ifEmpty { IbkrStore.token(ctx) }, q) } catch (e: Throwable) { formErr = "Не вдалося зберегти токен на пристрої: ${e.javaClass.simpleName}"; return }
                 form = form.copy(ibTok = "", ibQ = ""); ibkrOn = true; closeSheet(); syncIbkr()
             }
             Sheet.Rule -> {
