@@ -533,6 +533,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             Sheet.Ibkr -> {
                 val t = f.ibTok.trim(); val q = f.ibQ.trim()
                 if (q.isEmpty() || (t.isEmpty() && !ibkrOn)) { formErr = "Вкажіть токен і номер Flex-запиту (Query ID)"; return }
+                flexQueryError(q).let { if (it.isNotEmpty()) { formErr = it; return } }
                 try { IbkrStore.save(ctx, t.ifEmpty { IbkrStore.token(ctx) }, q) } catch (_: Exception) { formErr = "Не вдалося зберегти токен на пристрої"; return }
                 form = form.copy(ibTok = "", ibQ = ""); ibkrOn = true; closeSheet(); syncIbkr()
             }

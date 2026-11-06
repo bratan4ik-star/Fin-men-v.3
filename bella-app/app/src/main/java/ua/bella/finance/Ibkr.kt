@@ -181,3 +181,10 @@ fun applyFlex(d: AppData, f: FlexData, rates: Map<String, Double>, now: Long): P
 
 /** Прибирає позиції IBKR, яких більше немає в рахунку. */
 fun removeGone(d: AppData, names: List<String>): AppData = d.copy(pos = d.pos.filterNot { it.src == "ibkr" && it.name in names })
+
+/** Перевірка Query ID: це число (номер Activity Flex Query), а не номер рахунку U1234567 чи назва запиту. */
+fun flexQueryError(q: String): String = when {
+    Regex("^[UuFf]\\d+$").matches(q.trim()) -> "Це номер рахунку IBKR, а потрібен номер Flex-запиту: Performance & Reports → Flex Queries, число біля назви вашого Activity Flex Query (кнопка «i» або колонка Query ID)."
+    !Regex("^\\d{3,}$").matches(q.trim()) -> "Query ID — це лише цифри, напр. 987654 (номер запиту в списку Flex Queries, не назва)."
+    else -> ""
+}

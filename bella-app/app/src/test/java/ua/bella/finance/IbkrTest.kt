@@ -78,6 +78,12 @@ class IbkrTest {
         assertEquals(45.44, synced.buyFx, 1e-9)
     }
 
+    @Test fun queryIdValidation() {
+        assertTrue(flexQueryError("U1234567").contains("номер рахунку"))
+        assertTrue(flexQueryError("Bella").contains("лише цифри"))
+        assertEquals("", flexQueryError(" 987654 "))
+    }
+
     @Test fun dates() {
         assertEquals("2026-11-05", flexDate("20261105")); assertEquals("2026-11-05", flexDate("2026-11-05")); assertEquals("2026-11-05", flexDate("20261105;101500"))
         assertEquals("2026-11-05", flexDate("11/05/2026")); assertEquals("", flexDate("щось"))
