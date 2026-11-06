@@ -19,6 +19,17 @@ val DEFAULT_TARGETS = linkedMapOf("ОВДП" to 40.0, "Депозити" to 20.0
 val LIMITS = linkedMapOf("Харчування" to 12000.0, "Житло" to 20000.0, "Транспорт" to 3000.0, "Розваги" to 2000.0, "Здоров'я" to 1500.0, "Інше" to 0.0)
 val CATEGORIES = listOf("Перекази", "Надходження", "Зняття готівки", "Послуги", "Поповнення мобільного", "Побутова техніка", "Харчування", "Житло", "Транспорт", "Розваги", "Здоров'я", "Зарплата", "Інше")
 
+/** Правило категорії: match — фрагменти через кому (без урахування регістру), cat — категорія. */
+@Serializable data class CatRule(val match: String, val cat: String)
+val DEFAULT_RULES = listOf(
+    CatRule("сільпо, атб, novus, ашан, silpo, продукт", "Харчування"),
+    CatRule("uber, bolt, uklon, метро, таксі, wog, okko", "Транспорт"),
+    CatRule("netflix, кіно, spotify, steam", "Розваги"),
+    CatRule("аптек, лікар, apteka", "Здоров'я"),
+    CatRule("оренд", "Житло"),
+    CatRule("зарплат, salary, фріланс", "Зарплата"),
+)
+
 @Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false, val id: String = "")
 /**
  * amt завжди в гривнях. type: income | expense | transfer. key використовується для пошуку повторів при імпорті.
@@ -57,6 +68,8 @@ data class AppData(
     val cats: List<String> = CATEGORIES,
     /** Повторювані щомісячні операції (оренда, підписки). */
     val recurring: List<Recurring> = emptyList(),
+    /** Правила категорій для імпорту: перше правило, фрагмент якого є в описі, задає категорію. */
+    val rules: List<CatRule> = DEFAULT_RULES,
     /** Цільовий розподіл інвестицій за групами, % (для ребалансування в «Інвестиціях»). */
     val targets: Map<String, Double> = DEFAULT_TARGETS,
 )

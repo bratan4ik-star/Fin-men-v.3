@@ -29,10 +29,10 @@ import androidx.compose.ui.unit.sp
 
 private val TITLES = mapOf(
     Sheet.Help to "Довідка", Sheet.PosE to "Редагувати позицію", Sheet.AccE to "Редагувати рахунок", Sheet.Security to "Безпека", Sheet.Settings to "Налаштування",
-    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.DebtE to "Редагувати борг", Sheet.Rec to "Повторювана операція", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
+    Sheet.Import to "Імпорт виписки", Sheet.Pos to "Нова позиція", Sheet.Transfer to "Переказ між рахунками", Sheet.Acc to "Новий рахунок", Sheet.Debt to "Новий запис боргу", Sheet.Tx to "Нова операція", Sheet.TxE to "Редагувати операцію", Sheet.DebtE to "Редагувати борг", Sheet.Rec to "Повторювана операція", Sheet.Rule to "Правило категорії", Sheet.Cats to "Ліміти й категорії", Sheet.Goal to "Нова ціль", Sheet.GoalE to "Редагувати ціль", Sheet.GoalMove to "Внести або зняти",
 )
 private const val EDIT_NOTE = "Щоб побачити, що було, очистіть поле: старе значення з'явиться сірим. Порожнє поле під час збереження лишається як було."
-private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.DebtE to "Зберегти", Sheet.Rec to "Зберегти", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
+private val SUBMIT = mapOf(Sheet.PosE to "Зберегти", Sheet.AccE to "Зберегти", Sheet.Import to "Імпортувати", Sheet.Pos to "Додати", Sheet.Transfer to "Виконати", Sheet.Acc to "Створити", Sheet.Debt to "Зберегти", Sheet.Tx to "Додати", Sheet.TxE to "Зберегти", Sheet.DebtE to "Зберегти", Sheet.Rec to "Зберегти", Sheet.Rule to "Зберегти", Sheet.Cats to "Зберегти", Sheet.Goal to "Створити", Sheet.GoalE to "Зберегти", Sheet.GoalMove to "Виконати")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +45,7 @@ fun SheetHost(vm: BellaViewModel) {
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 when (sh) {
-                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm, false); Sheet.DebtE -> DebtForm(vm, true); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Rec -> RecForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
+                    Sheet.Transfer -> TransferForm(vm); Sheet.Acc -> AccForm(vm); Sheet.Debt -> DebtForm(vm, false); Sheet.DebtE -> DebtForm(vm, true); Sheet.Tx -> TxForm(vm, false); Sheet.TxE -> TxForm(vm, true); Sheet.Cats -> CatsForm(vm); Sheet.Rec -> RecForm(vm); Sheet.Rule -> RuleForm(vm); Sheet.Goal -> GoalForm(vm, false); Sheet.GoalE -> GoalForm(vm, true); Sheet.GoalMove -> GoalMoveForm(vm)
                     Sheet.Pos, Sheet.PosE -> PosForm(vm, sh == Sheet.PosE); Sheet.AccE -> AccEditForm(vm)
                     Sheet.Settings -> SettingsList(vm); Sheet.Security -> SecurityList(vm); Sheet.Help -> HelpList(vm); Sheet.Import -> ImportForm(vm)
                     else -> {}
@@ -168,6 +168,16 @@ private fun RecForm(vm: BellaViewModel) {
     T("Наступна: ${ddmmyyyy(r.next)}. Уже створені операції не змінюються. " + EDIT_NOTE, 11.sp, C.n500)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     T(if (vm.delAsk) "Натисніть ще раз, щоб видалити шаблон" else "Видалити шаблон (створені операції лишаться)", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteRec() }.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun RuleForm(vm: BellaViewModel) {
+    val f = vm.form; val cats = vm.data.cats
+    Field("Текст в описі операції", f.ruMatch, hint = vm.was { it.ruMatch }.ifEmpty { "напр. Сільпо, АТБ" }) { vm.form = f.copy(ruMatch = it) }
+    Dropdown("Категорія", cats, cats.indexOf(f.ruCat)) { vm.form = f.copy(ruCat = cats[it]) }
+    T("Кілька варіантів — через кому. Регістр не важливий: «сільпо» знайде й «СІЛЬПО 123». Правила вище в списку перевіряються першими. Діють під час імпорту виписки; до вже наявних операцій — кнопкою «Застосувати до старих».", 11.sp, C.n500)
+    if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
+    if (f.ruIdx >= 0) T(if (vm.delAsk) "Натисніть ще раз, щоб видалити правило" else "Видалити правило", 13.sp, C.neg, modifier = Modifier.clickable { vm.deleteRule() }.padding(vertical = 4.dp))
 }
 
 @Composable
@@ -415,7 +425,7 @@ private val HELP = listOf(
     Icons.Outlined.CurrencyExchange to ("Валюта" to "Кнопка з символом валюти в шапці перемикає гривню, долар, євро та злотий. Усі суми на всіх екранах перераховуються за курсами, закладеними в застосунку."),
     Icons.Outlined.Savings to ("Капітал та Рахунки" to "Показує склад капіталу: гроші на картках, заощадження, інвестиції, цілі та борги. Натисніть на рахунок, щоб змінити назву чи баланс, позначити його як заощадження або видалити. Кнопка «Переказ» переносить гроші між рахунками з конвертацією валют."),
     Icons.Outlined.Paid to ("Борги та позики" to "У розділі «Борги та позики» додайте запис «Мені винні» або «Я винен» з терміном. Дотик до запису — редагування (особа, сума, термін, напрям), часткове повернення й видалення. Позначка біля запису означає «повернено повністю»: запис зникає зі списку, а чистий капітал перераховується. Помилково прибраний запис повертає «Скасувати» або «Відмінити останні дії»."),
-    Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях (зі стовпчиками доходів і витрат: дотик до місяця показує суми) та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату. «Огляд» поточного місяця: картка «Вільно до кінця місяця» (доходи − витрати − заплановані повторювані − залишок лімітів) і стрілки біля категорій — зміна витрат порівняно з тими самими днями минулого місяця. «Операції → Вибрати» — масова зміна категорії чи видалення. Сповіщення про 80% і 100% ліміту та про терміни боргів вмикаються в «Налаштуваннях»."),
+    Icons.Outlined.AccountBalanceWallet to ("Бюджет" to "Вкладки: огляд за категоріями, операції, звіт по місяцях (зі стовпчиками доходів і витрат: дотик до місяця показує суми) та ліміти. Стрілки поруч з місяцем перемикають період. Плюс у шапці додає дохід або витрату. «Огляд» поточного місяця: картка «Вільно до кінця місяця» (доходи − витрати − заплановані повторювані − залишок лімітів) і стрілки біля категорій — зміна витрат порівняно з тими самими днями минулого місяця. «Операції → Вибрати» — масова зміна категорії чи видалення. Сповіщення про 80% і 100% ліміту та про терміни боргів вмикаються в «Налаштуваннях». «Ліміти → Правила категорій»: текст в описі (кілька через кому) → категорія; діють під час імпорту виписки, до старих операцій — кнопкою «Застосувати до старих». Коли вручну міняєте категорію операції, застосунок запропонує створити таке правило."),
     Icons.Outlined.Search to ("Пошук і фільтри" to "У вкладці «Операції» є пошук за описом чи категорією, кнопки сортування за датою та сумою, фільтри за діапазоном дат і сум, а також вибір типу: усі, витрати, доходи, перекази."),
     Icons.Outlined.FileUpload to ("Імпорт виписки" to "Налаштування, Імпорт виписки. Підтримує Excel (.xlsx) з банку та CSV. Перекази між власними картками не рахуються доходом чи витратою. Якщо у файлі є повтори, з'явиться кнопка «Прибрати повтори». Файл читається лише на вашому пристрої."),
     Icons.AutoMirrored.Outlined.TrendingUp to ("Інвестиції" to "Кільцева діаграма вгорі показує структуру портфеля. Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду й тікер (напр. VWCE.DE), «Ціна з біржі» підтягне ціну. «Найближчі виплати ОВДП» — купони й погашення на 60 днів. Внизу — калькулятор складного відсотка."),

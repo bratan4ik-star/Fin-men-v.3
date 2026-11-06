@@ -23,6 +23,7 @@ fun describeChange(a: AppData, b: AppData): String {
     if (a.recurring != b.recurring) return "Зміна повторюваної операції: ${b.recurring.firstOrNull { it !in a.recurring }?.desc ?: ""}".trim()
     if (a.limits != b.limits || a.cats != b.cats) return "Зміна лімітів і категорій"
     if (a.targets != b.targets) return "Зміна цільового розподілу"
+    if (a.rules != b.rules) return "Зміна правил категорій"
     return "Зміна даних"
 }
 

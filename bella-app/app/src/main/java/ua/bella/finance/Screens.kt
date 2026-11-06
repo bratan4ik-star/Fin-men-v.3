@@ -296,6 +296,20 @@ fun BudgetScreen(vm: BellaViewModel) {
                             }
                         }
                     }
+                    Column {
+                        SectionHead("Правила категорій", "+ Правило") { vm.openRule(-1) }
+                        if (s.rules.isEmpty()) T("Немає. Правило ставить категорію за текстом в описі, напр. «Сільпо» → Харчування.", 12.sp, C.n500)
+                        s.rules.forEachIndexed { i, r ->
+                            Div()
+                            Row(Modifier.fillMaxWidth().clickable { vm.openRule(i) }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Ico(catIcon(r.cat), C.accent, 20.dp)
+                                Column(Modifier.weight(1f)) { T(r.cat, 14.sp, weight = FontWeight.Medium, maxLines = 1); T(r.match, 11.sp, C.n500, maxLines = 2) }
+                            }
+                        }
+                        if (s.rules.isNotEmpty()) T("Застосувати до старих операцій", 13.sp, C.accent400, modifier = Modifier.clickable { vm.applyRulesToOld() }.padding(vertical = 8.dp))
+                        if (vm.rulesMsg.isNotEmpty()) T(vm.rulesMsg, 12.sp, C.n500)
+                        T("Правила діють під час імпорту виписки (CSV і Excel) і важливіші за категорію банку. Перекази не змінюються.", 11.sp, C.n500)
+                    }
                     if (s.limits.isEmpty()) T("Лімітів ще немає. Задайте місячний ліміт для потрібних категорій.", 12.sp, C.n500)
                     s.limits.forEach { (c, l) ->
                     val sp = cats[c] ?: 0.0; val over = l > 0 && sp > l

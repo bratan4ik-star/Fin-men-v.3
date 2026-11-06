@@ -26,14 +26,6 @@ data class ImportResult(val txs: List<Tx>, val accs: List<Account>, val bad: Int
 }
 
 object Importer {
-    private val CAT = listOf(
-        Regex("сільпо|атб|novus|ашан|silpo|продукт", RegexOption.IGNORE_CASE) to "Харчування",
-        Regex("uber|bolt|uklon|метро|таксі|wog|okko", RegexOption.IGNORE_CASE) to "Транспорт",
-        Regex("netflix|кіно|spotify|steam", RegexOption.IGNORE_CASE) to "Розваги",
-        Regex("аптек|лікар|apteka", RegexOption.IGNORE_CASE) to "Здоров'я",
-        Regex("оренд", RegexOption.IGNORE_CASE) to "Житло",
-        Regex("зарплат|salary|фріланс", RegexOption.IGNORE_CASE) to "Зарплата",
-    )
     private val CMAP = mapOf(
         "Супермаркети та продукти" to "Харчування", "Ресторани, кафе, бари" to "Харчування", "Таксі" to "Транспорт", "Авто" to "Транспорт",
         "АЗС" to "Транспорт", "Квитки на поїзд" to "Транспорт", "Аптеки" to "Здоров'я", "Медичні послуги" to "Здоров'я", "Краса" to "Здоров'я",
@@ -105,7 +97,7 @@ object Importer {
     }
 
     /** CSV: дата; опис; сума. Від'ємна сума — витрата. Суми у файлі вважаються в гривнях. */
-    fun parseCsv(text: String, curRate: Double): ImportResult {
+    fun parseCsv(text: String, curRate: Double, rules: List<CatRule> = DEFAULT_RULES): ImportResult {
         val out = mutableListOf<Tx>(); var bad = 0
         text.removePrefix("﻿").lines().forEach { raw ->
             val l = raw.trim(); if (l.isEmpty()) return@forEach
@@ -115,8 +107,8 @@ object Importer {
             val a = num(p.last())
             if (d == null || a == null || a == 0.0) { bad++; return@forEach }
             val desc = p.drop(1).dropLast(1).joinToString(" ").trim()
-            val c = CAT.firstOrNull { it.first.containsMatchIn(desc) }; val inc = a > 0
-            out.add(Tx(desc, c?.second ?: if (inc) "Зарплата" else "Інше", if (inc) "income" else "expense", Math.abs(a) * curRate, d, "$d|$desc|$a"))
+            val c = ruleFor(desc, rules); val inc = a > 0
+            out.add(Tx(desc, c ?: if (inc) "Зарплата" else "Інше", if (inc) "income" else "expense", Math.abs(a) * curRate, d, "$d|$desc|$a"))
         }
         return ImportResult(out, emptyList(), bad)
     }
@@ -249,7 +241,7 @@ object Importer {
         )
     }
 
-    private fun readRows(rows: List<Map<String, String>>): ImportResult? {
+    private fun readRows(rows: List<Map<String, String>>, rules: List<CatRule>): ImportResult? {
         val hi = rows.indexOfFirst { findCols(it) != null }
         if (hi < 0) return null
         val c = findCols(rows[hi])!!
@@ -265,7 +257,9 @@ object Importer {
             val card = g(c.card); val cur = g(c.cur).uppercase().ifEmpty { "UAH" }; val cat = g(c.cat)
             val desc = g(c.desc).ifEmpty { cat }.ifEmpty { "Операція" }
             val type = classifyType(cat, desc, a)
-            val c2 = if (type == "income" && cat.startsWith("Зарахування")) "Надходження" else (CMAP[cat] ?: cat.ifEmpty { "Інше" })
+            val c1 = if (type == "income" && cat.startsWith("Зарахування")) "Надходження" else (CMAP[cat] ?: cat.ifEmpty { "Інше" })
+            // правило користувача важливіше за категорію банку (перекази не чіпаємо)
+            val c2 = if (type == "transfer") c1 else ruleFor(desc, rules) ?: c1
             txs.add(Tx(desc, c2, type, Math.abs(a) * (RATES[cur] ?: 1.0), iso, "$dRaw|$card|$a|$desc"))
             if (card.isNotEmpty() && seen.add(card)) {
                 val bc = g(c.balCur).uppercase().ifEmpty { cur }
@@ -277,7 +271,7 @@ object Importer {
 
     fun parseXlsx(ins: InputStream): ImportResult = parseXlsx(ins.readBytes())
 
-    fun parseXlsx(bytes: ByteArray): ImportResult = try {
+    fun parseXlsx(bytes: ByteArray, rules: List<CatRule> = DEFAULT_RULES): ImportResult = try {
         val files = readZip(bytes)
         val sheets = files.keys.filter { SHEET_NAME.matches(it) }.sortedWith(compareBy({ it.length }, { it }))
         if (sheets.isEmpty()) ImportResult(emptyList(), emptyList(), 0, ERR_NOT_XLSX)
@@ -286,7 +280,7 @@ object Importer {
             var res: ImportResult? = null
             for (s in sheets) {
                 val h = SheetHandler(sst).also { saxParse(files.getValue(s), it) }
-                res = readRows(h.rows)
+                res = readRows(h.rows, rules)
                 if (res != null) break
             }
             res ?: ImportResult(emptyList(), emptyList(), 0, ERR_NO_HEADER)
@@ -298,6 +292,6 @@ object Importer {
     }
 
     /** Точка входу для UI: сама визначає тип (xlsx за сигнатурою, інакше CSV). */
-    fun parseBytes(b: ByteArray, curRate: Double): ImportResult =
-        if (isZip(b)) parseXlsx(b) else parseCsv(decodeText(b), curRate)
+    fun parseBytes(b: ByteArray, curRate: Double, rules: List<CatRule> = DEFAULT_RULES): ImportResult =
+        if (isZip(b)) parseXlsx(b, rules) else parseCsv(decodeText(b), curRate, rules)
 }

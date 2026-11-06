@@ -35,6 +35,17 @@ fun BellaApp(vm: BellaViewModel) {
             Screen.Home -> HomeScreen(vm); Screen.Acc -> AccScreen(vm); Screen.Bud -> BudgetScreen(vm); Screen.Inv -> InvScreen(vm)
             Screen.Goals -> GoalsScreen(vm); Screen.Pass -> PassScreen(vm); Screen.Calc -> CalcScreen(vm)
         }
+        val ask = vm.ruleAsk
+        if (ask != null) Column(
+            Modifier.align(Alignment.BottomCenter).padding(16.dp).padding(bottom = if (vm.toastAt > 0) 56.dp else 0.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            T("Завжди ставити «${ask.cat}» для «${ask.match}» під час імпорту?", 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                T("Так, створити правило", 13.sp, C.accent, FontWeight.Medium, Modifier.clickable { vm.acceptRule() })
+                T("Ні", 13.sp, C.n500, modifier = Modifier.clickable { vm.dismissRule() })
+            }
+        }
         if (vm.toastAt > 0) Row(
             Modifier.align(Alignment.BottomCenter).padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(horizontal = 14.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
