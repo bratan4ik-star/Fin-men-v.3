@@ -185,12 +185,13 @@ data class MonthCashFlow(
 fun buildOvdpPortfolioCashFlow(
     positions: List<Pos>,
     rates: Map<String, Double> = RATES,
-    today: LocalDate = LocalDate.parse(TODAY)
+    today: LocalDate = LocalDate.parse(TODAY),
+    reg: Map<String, NbuBond> = emptyMap(),
 ): List<MonthCashFlow> {
     // Ті самі дати, що й у нагадуваннях (ovdpEvents): для позицій без даних калькулятора — від «Наступної виплати»,
     // інакше — назад від дати погашення. Раніше календар завжди рахував від погашення і міг розходитися з нагадуваннями.
     val allEvents = mutableListOf<CashFlowItem>()
-    ovdpEvents(positions, today, today.plusYears(30)).forEach { e ->
+    ovdpEvents(positions, today, today.plusYears(30), reg).forEach { e ->
         val fx = rates[e.cur] ?: 1.0
         if (e.principal > 0) allEvents += CashFlowItem(e.date, e.name, "Погашення номіналу", e.principal, e.cur, e.principal * fx, true)
         if (e.coupon > 0) allEvents += CashFlowItem(e.date, e.name, "Купон", e.coupon, e.cur, e.coupon * fx, false)

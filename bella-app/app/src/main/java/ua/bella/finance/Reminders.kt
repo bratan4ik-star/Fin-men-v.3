@@ -19,13 +19,16 @@ private fun pdate(s: String): LocalDate? = try { LocalDate.parse(s.trim()) } cat
 
 /**
  * Майбутні виплати ОВДП у проміжку [from, until].
+ * Якщо ISIN позиції є в довіднику НБУ [reg] — дати й суми беруться з офіційного графіка (сума на 1 папір × к-сть).
+ * Інакше — розрахунково, як до 1.27.0:
  * Позиція з калькулятора (є calc) — купони від дати погашення назад з кроком calc.freq місяців (0 — лише погашення).
  * Позиція без calc — купони від «наступної виплати» вперед кожні 6 місяців до погашення.
  * Купон = к-сть × номінал × ставка / 100 × крок / 12; номінал без calc — 1000.
  */
-fun ovdpEvents(pos: List<Pos>, from: LocalDate, until: LocalDate): List<OvdpEvent> {
+fun ovdpEvents(pos: List<Pos>, from: LocalDate, until: LocalDate, reg: Map<String, NbuBond> = emptyMap()): List<OvdpEvent> {
     val out = mutableListOf<OvdpEvent>()
     pos.filter { it.group == "ОВДП" && it.qty > 0 }.forEach { p ->
+        if (reg.isNotEmpty()) officialEvents(p, reg[posIsin(p)], from, until)?.let { out.addAll(it); return@forEach }
         val nom = p.calc?.nom?.takeIf { it > 0 } ?: 1000.0
         val freq = p.calc?.freq ?: 6
         val cur = p.cur.ifEmpty { p.calc?.cur ?: "UAH" }

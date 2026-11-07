@@ -490,12 +490,13 @@ fun InvScreen(vm: BellaViewModel) {
                             T(e.name, 13.sp, maxLines = 1)
                             T(if (e.maturity) "погашення" + (if (e.coupon > 0) " + купон" else "") else "купон", 11.sp, C.n500)
                         }
-                        T("+" + vm.m(e.total) + " " + vm.sym, 13.sp, C.pos, FontWeight.Medium, maxLines = 1)
+                        T("+" + vm.m(e.total * (RATES[e.cur] ?: 1.0)) + " " + vm.sym, 13.sp, C.pos, FontWeight.Medium, maxLines = 1)
                     }
                 }
             }
             if (t.invT > 0) RebalanceSection(vm, t.invGroups.associate { it.first to it.third.first })
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Позиція", true, Modifier.weight(1f), Icons.Outlined.Add) { vm.openPos() }; Btn("ОВДП", false, Modifier.weight(1f), Icons.Outlined.Calculate) { vm.go(Screen.Calc) } }
+            if (vm.data.pos.any { it.group == "ОВДП" }) Btn("Звірити ОВДП з НБУ", false, Modifier.fillMaxWidth(), Icons.Outlined.TaskAlt) { vm.openOvdpCheck() }
             CompoundSection(vm, t.invT)
         }
     }
@@ -598,7 +599,9 @@ fun CalcScreen(vm: BellaViewModel) {
 
             if (tab == 0) {
                 // Швидкі пресети випусків
-                OvdpPresetsRow(s.isin) { preset ->
+                val live = remember(vm.nbu) { registryPresets(vm.nbu, java.time.LocalDate.parse(TODAY)) }
+                OvdpPresetsRow(s.isin, live.ifEmpty { activeOvdpPresets(java.time.LocalDate.parse(TODAY)) },
+                    if (live.isNotEmpty()) "Останні аукціони НБУ" else "Приклади випусків", if (live.isNotEmpty()) "дохідність аукціону, не ринкова ціна" else "звірте з Мінфіном") { preset ->
                     vm.calcIn = s.copy(
                         isin = preset.isin,
                         nom = preset.nom,

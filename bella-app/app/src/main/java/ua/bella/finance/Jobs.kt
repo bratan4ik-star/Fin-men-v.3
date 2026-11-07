@@ -145,7 +145,7 @@ object Jobs {
         val today = LocalDate.parse(TODAY)
         val p = prefs(ctx)
         val notified = pruneNotified(p.getStringSet("notified", emptySet()) ?: emptySet(), today)
-        val due = remindersDue(ovdpEvents(st.data.pos, today, today.plusDays(3)), today, notified)
+        val due = remindersDue(ovdpEvents(st.data.pos, today, today.plusDays(3), st.nbu.byIsin()), today, notified)
         if (due.isEmpty()) { p.edit().putStringSet("notified", notified).apply(); return }
         val nm = ctx.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
@@ -184,7 +184,7 @@ object Jobs {
         if (!canNotify(ctx)) return "Сповіщення вимкнені у налаштуваннях Android. Дозвольте їх, будь ласка."
         val st = state(ctx)
         val today = LocalDate.parse(TODAY)
-        val nextEvents = if (st != null) ovdpEvents(st.data.pos, today, today.plusDays(365)) else emptyList()
+        val nextEvents = if (st != null) ovdpEvents(st.data.pos, today, today.plusDays(365), st.nbu.byIsin()) else emptyList()
         val testEvent = nextEvents.firstOrNull() ?: OvdpEvent(
             date = today.plusDays(3),
             name = "ОВДП UA4000227045 (тест)",

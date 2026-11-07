@@ -99,6 +99,8 @@ data class Persisted(
     val ibBase: String = "USD",
     /** Історія цін ETF з IBKR за символом (у валюті фонду). */
     val ibPx: Map<String, List<HistPoint>> = emptyMap(),
+    /** Довідник ОВДП з відкритих даних НБУ (кеш, OvdpRegistry.kt): зберігається разом зі станом, тобто зашифровано. */
+    val nbu: OvdpRegistry = OvdpRegistry(),
 )
 
 object DemoData {

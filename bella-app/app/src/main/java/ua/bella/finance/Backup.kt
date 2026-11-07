@@ -31,7 +31,8 @@ private val backupJson = Json { ignoreUnknownKeys = true; encodeDefaults = true;
 
 /** Копія; з [password] — зашифрована. */
 fun makeBackup(p: Persisted, createdAt: String, password: String? = null): String {
-    val plain = backupJson.encodeToString(Backup(createdAt = createdAt, state = p.copy(sec = Security())))
+    // PIN не копіюється; довідник ОВДП НБУ — кеш відкритих даних, у копію не входить (завантажується заново)
+    val plain = backupJson.encodeToString(Backup(createdAt = createdAt, state = p.copy(sec = Security(), nbu = OvdpRegistry())))
     if (password.isNullOrEmpty()) return plain
     return backupJson.encodeToString(encryptBackupText(plain, password, createdAt))
 }

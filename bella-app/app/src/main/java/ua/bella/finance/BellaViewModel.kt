@@ -47,6 +47,15 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var ratesBusy by mutableStateOf(false); private set
     var ratesMsg by mutableStateOf(""); private set
 
+    // довідник ОВДП НБУ (OvdpRegistry.kt)
+    var nbu by mutableStateOf(loaded.nbu); private set
+    var nbuBusy by mutableStateOf(false); private set
+    var nbuMsg by mutableStateOf(""); private set
+    private var nbuIdxOf: OvdpRegistry? = null
+    private var nbuIdx: Map<String, NbuBond> = emptyMap()
+    /** Довідник за ISIN (для графіка виплат і звірки); перебудовується лише після оновлення довідника. */
+    val nbuIndex: Map<String, NbuBond> get() = nbu.let { r -> if (r !== nbuIdxOf) { nbuIdx = r.byIsin(); nbuIdxOf = r }; nbuIdx }
+
     var screen by mutableStateOf(Screen.Home)
     var sheet by mutableStateOf(Sheet.None)
     var hide by mutableStateOf(false)
@@ -105,7 +114,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Interactive Brokers: синхронізація й історія для графіків (IbkrController.kt). */
     val ibkr = IbkrController(app, viewModelScope, loaded, { data }, { commit(it) }, { persist() })
 
-    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibkr.nav, ibkr.flows, ibkr.base, ibkr.px)
+    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibkr.nav, ibkr.flows, ibkr.base, ibkr.px, nbu)
 
     // ---------- резервна копія ----------
     var backupMsg by mutableStateOf(""); private set
@@ -231,6 +240,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         ratesDate = p.ratesDate; ratesAt = p.ratesAt; ratesTick++
         cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibkr.restore(p)
         month = p.month.coerceAtLeast(0)
+        if (p.nbu.updatedAt > nbu.updatedAt) nbu = p.nbu
         if (withSec) sec = p.sec
         data = ensureAccIds(p.data)
     }
@@ -242,6 +252,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         ratesDate = p.ratesDate; ratesAt = p.ratesAt; ratesTick++
         cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibkr.restore(p)
         month = p.month.coerceAtLeast(0)
+        // довідник НБУ — кеш, а не дані користувача: лишається новіший з двох
+        if (p.nbu.updatedAt > nbu.updatedAt) nbu = p.nbu
         if (storeBroken != null) prepareStoreAfterFailure()
         storeBroken = null  // відновлення з копії знімає екран відновлення
         commit(p.data)
@@ -280,12 +292,41 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (kmode == KMode.Unlock) kerr = lockMsg()
         loaded.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
         if (System.currentTimeMillis() - loaded.ratesAt > 6 * 3600_000L) refreshRates()
+        // довідник ОВДП НБУ — раз на 7 днів (у тестах Robolectric мережа не чіпається)
+        if (storeBroken == null && android.os.Build.FINGERPRINT != "robolectric" && registryDue(nbu, System.currentTimeMillis())) refreshNbu(auto = true)
         // щомісячні виплати депозитів, що настали (зокрема пропущені, поки застосунок не відкривали)
         processDepositPayouts(data, todayIso(), RATES).let { if (it !== data) { data = it; persist() } }
         processRecurring(data, TODAY, RATES).let { if (it !== data) { data = it; persist() } }
         // знімок капіталу за сьогодні, навіть якщо змін не було
         if (hist.lastOrNull()?.d != TODAY) persist()
     }
+
+    /**
+     * Оновлює довідник ОВДП НБУ (один запит за всім довідником + результати аукціонів). Без мережі лишає кеш.
+     * auto — автоматичне оновлення при запуску (раз на 7 днів): повідомлення про помилку не показується.
+     */
+    fun refreshNbu(auto: Boolean = false) {
+        if (nbuBusy) return
+        nbuBusy = true; if (!auto) nbuMsg = ""
+        val old = nbu; val today = LocalDate.parse(TODAY)
+        viewModelScope.launch {
+            // етап 1: довідник одним запитом — список для вибору з'являється одразу
+            val step = withContext(Dispatchers.IO) {
+                try { refreshDirectory(old, today, System.currentTimeMillis()) { httpGetText(it) } } catch (e: Exception) { DirectoryStep(null, "Не вдалося оновити довідник НБУ: ${e.javaClass.simpleName}") }
+            }
+            val r1 = step.reg
+            // поки йшов запит, довідник могли замінити (відновлення з копії) — тоді новіший не перезаписуємо
+            if (r1 == null || nbu !== old) { nbuBusy = false; if (!auto) nbuMsg = step.msg; return@launch }
+            nbu = r1; nbuMsg = step.msg + " Завантажуються результати аукціонів…"; persist()
+            // етап 2: аукціони за вівторки, що ще не переглядались (вперше — за рік)
+            val (r2, err) = withContext(Dispatchers.IO) { try { scanAuctions(r1, today) { httpGetText(it) } } catch (_: Exception) { r1 to true } }
+            nbuBusy = false
+            nbuMsg = step.msg + if (err) AUCTION_PARTIAL else ""
+            if (nbu === r1 && r2 != r1) { nbu = r2; persist() }
+        }
+    }
+    /** Для тестів і знімків екрана: підставити довідник без мережі. */
+    internal fun seedNbu(r: OvdpRegistry) { nbu = r; nbuMsg = "" }
 
     /** Завантажує курси USD, EUR, PLN з НБУ. Без інтернету лишає попередні курси й показує повідомлення. */
     fun refreshRates() {
@@ -329,7 +370,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleTheme() { light = !light; persist() }
     fun go(s: Screen) { screen = s; curOpen = false }
     fun openSheet(s: Sheet) { sheet = s }
-    fun closeSheet() { sheet = Sheet.None; formOrig = null; formErr = ""; delAsk = false }
+    fun closeSheet() {
+        if (sheet == Sheet.OvdpPick) { sheet = pickBack; return }  // з вибору випуску — назад до форми позиції
+        sheet = Sheet.None; formOrig = null; formErr = ""; delAsk = false
+    }
 
     /** Значення форми на момент відкриття редагування; null для нових записів. */
     var formOrig by mutableStateOf<Form?>(null); private set
@@ -443,11 +487,15 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 cur = f.pCur, pxBuy = pxB, pxNow = pxN, buyFx = bfx, ticker = ticker, pxAt = if (old != null && old.pxNow == pxN) old.pxAt else 0L,
                 src = old?.src ?: "", ibSym = old?.ibSym ?: "")
         }
-        // валютна ОВДП (з калькулятора): ціни лишаються у валюті облігації, без перерахунку за курсом перегляду
-        val bondCur = if (f.group != "ETF" && old != null && isBondCurPos(old)) old.cur else "UAH"
+        // ОВДП, вибрана з довідника НБУ: валюта, ISIN, номінал і періодичність — з довідника
+        val nb = if (f.group == "ОВДП") f.pBond else null
+        // валютна ОВДП (з калькулятора або довідника): ціни лишаються у валюті облігації, без перерахунку за курсом перегляду
+        val bondCur = when { nb != null -> nb.cur; f.group != "ETF" && old != null && isBondCurPos(old) -> old.cur; else -> "UAH" }
         val k = if (bondCur != "UAH") 1.0 else rate
         val b = parseNum(f.pBuy) * k; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * k
-        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), old?.calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker,
+        val calc = if (nb == null) old?.calc else (old?.calc ?: CalcExtra(nb.isin, nb.nom, bondFreqMonths(nb), "", "", todayIso(), nb.cur))
+            .copy(isin = nb.isin, nom = nb.nom, freq = bondFreqMonths(nb), cur = nb.cur)
+        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker,
             cur = bondCur, src = old?.src ?: "", ibSym = old?.ibSym ?: "")
     }
 
@@ -457,7 +505,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val (t, err) = buildTx(TxInput(f.tType, parseNum(f.tAmt), if (f.tType == "transfer") "Перекази" else f.tCat, f.tDesc.trim(), f.tDate.trim(), f.tAcc, f.tToAcc, parseNum(f.tToAmt), key), data.accs, RATES, rate)
         formErr = err; return t
     }
-    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pFx = ""); sheet = Sheet.Pos }
+    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pFx = "", pBond = null); posCheck = false; nbuMsg = ""; sheet = Sheet.Pos }
     fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, cashF = a.cash, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); formOrig = form; sheet = Sheet.AccE }
     fun editPos(i: Int) {
         val p = data.pos[i]; fun c(v: Double) = ((v / rate) * 100).let { Math.round(it) / 100.0 }.toString()
@@ -466,7 +514,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(),
             pBuy = if (fx) r2(p.pxBuy) else if (bond) r2(p.buy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else if (bond) r2(p.now) else c(p.now),
             pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx || bond) p.cur else "UAH",
-            pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc); formOrig = form; formErr = ""; sheet = Sheet.PosE
+            pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc, pBond = null); formOrig = form; formErr = ""; posCheck = false; nbuMsg = ""; sheet = Sheet.PosE
     }
     /** Довідка з будь-якого екрана: відкривається на розділі, що відповідає поточному екрану. */
     fun openHelp(section: Int = helpSectionFor(screen)) { help = section; helpTop = section; sheet = Sheet.Help }
@@ -651,6 +699,74 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (!eraseAsk) { eraseAsk = true; return }
         eraseAsk = false; sheet = Sheet.None; open = emptySet(); month = 0
         commit(AppData(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), demo = false)); form = form.copy(from = 0, to = 0)
+    }
+
+    // ---------- довідник ОВДП НБУ: вибір випуску і звірка ----------
+    var pickQ by mutableStateOf("")
+    var pickCur by mutableStateOf<String?>(null)
+    var pickTerm by mutableStateOf<Int?>(null)
+    private var pickBack = Sheet.Pos
+    /** Звірка в формі редагування позиції: показати розбіжності з НБУ. */
+    var posCheck by mutableStateOf(false)
+    fun togglePosCheck() { posCheck = !posCheck; if (posCheck && registryDue(nbu, System.currentTimeMillis())) refreshNbu() }
+
+    /** Кнопка «Вибрати випуск» у формі ОВДП. Довідник завантажується, якщо його ще немає або він застарів. */
+    fun openOvdpPick() {
+        pickBack = if (sheet == Sheet.PosE) Sheet.PosE else Sheet.Pos
+        pickQ = ""; pickTerm = null; pickCur = null; nbuMsg = ""
+        sheet = Sheet.OvdpPick
+        if (registryDue(nbu, System.currentTimeMillis())) refreshNbu()
+    }
+
+    /** Вибір випуску заповнює ISIN, валюту, номінал, купон, погашення й графік; кількість і ціну вводить користувач. */
+    fun pickBond(b: NbuBond) {
+        val today = LocalDate.parse(TODAY)
+        if (pickBack == Sheet.PosE) {
+            val o = data.pos.getOrNull(form.editIdx)
+            val oc = o?.let { if (isBondCurPos(it)) it.cur else "UAH" } ?: "UAH"
+            if (o != null && oc != b.cur) { nbuMsg = "Валюта випуску ${b.cur} відрізняється від валюти позиції $oc: ціни позиції записані в $oc. Для випуску в іншій валюті додайте нову позицію."; return }
+        }
+        val f = form
+        form = f.copy(group = "ОВДП", pName = if (f.pName.uppercase().contains(b.isin)) f.pName else "ОВДП ${b.isin}", pCur = b.cur,
+            pRate = b.rate.toString(), pMat = b.mat, pNext = nextCoupon(b, today), pBond = b)
+        formErr = ""; sheet = pickBack
+    }
+    /** Скасувати вибір з довідника (дані в полях лишаються, далі — як ручне введення). */
+    fun clearPickedBond() {
+        val o = formOrig
+        form = form.copy(pBond = null, pCur = if (o != null) o.pCur else "UAH")
+    }
+
+    /** Список для вибору: пошук за ISIN і фільтри валюти й строку. */
+    fun pickList(): List<NbuBond> = filterBonds(nbu.bonds, pickQ, pickCur, pickTerm, LocalDate.parse(TODAY))
+
+    /** Рядок звірки: позиція (індекс у data.pos), її ISIN, випуск з довідника (null — не знайдено) і розбіжності. */
+    data class OvdpCheckRow(val idx: Int, val pos: Pos, val isin: String, val bond: NbuBond?, val diffs: List<OvdpDiff>)
+    fun ovdpCheck(): List<OvdpCheckRow> {
+        val today = LocalDate.parse(TODAY); val ix = nbuIndex
+        return data.pos.mapIndexedNotNull { i, p ->
+            if (p.group != "ОВДП") return@mapIndexedNotNull null
+            val isin = posIsin(p); val b = ix[isin]
+            OvdpCheckRow(i, p, isin, b, if (b != null) reconcile(p, b, today) else emptyList())
+        }
+    }
+    /** «Звірити з НБУ» для всіх позицій ОВДП (з екрана «Інвестиції»). */
+    fun openOvdpCheck() {
+        nbuMsg = ""; sheet = Sheet.OvdpCheck
+        if (registryDue(nbu, System.currentTimeMillis())) refreshNbu()
+    }
+    /** Оновлює позиції [idx] даними НБУ (погашення, купон, наступна виплата, номінал); валюта не змінюється. */
+    fun applyNbuTo(idx: List<Int>) {
+        val today = LocalDate.parse(TODAY); val ix = nbuIndex; val set = idx.toSet(); var n = 0
+        val pos = data.pos.mapIndexed { i, p -> val b = if (i in set) ix[posIsin(p)] else null; if (b != null) { n++; applyNbu(p, b, today) } else p }
+        if (n == 0) return
+        commit(data.copy(pos = pos)); nbuMsg = "Оновлено з НБУ: ${n} ${if (n == 1) "позиція" else if (n in 2..4) "позиції" else "позицій"}"
+    }
+    /** Звірка у формі редагування: підставляє дані НБУ в поля форми (зберігається кнопкою «Зберегти»). */
+    fun fillFormFromNbu(b: NbuBond) {
+        val f = form
+        form = f.copy(pRate = b.rate.toString(), pMat = b.mat, pNext = nextCoupon(b, LocalDate.parse(TODAY)).ifEmpty { f.pNext },
+            pBond = if (f.pCur == b.cur) b else null)
     }
 
     // ---------- калькулятор ----------
@@ -840,10 +956,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Перевіряє ліміти й борги у фоні (після кожної зміни даних, щоб сповіщення про ліміт прийшло одразу). */
     private fun checkMoneyAlerts() { viewModelScope.launch(Dispatchers.IO) { try { Jobs.runMoneyAlerts(ctx) } catch (_: Exception) {} } }
     /** Виплати ОВДП на найближчі 60 днів (для екрана «Інвестиції»). */
-    fun upcomingOvdp(): List<OvdpEvent> = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(60)) }
+    fun upcomingOvdp(): List<OvdpEvent> = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(60), nbuIndex) }
 
     /** Наступна очікувана виплата купона або погашення ОВДП (для банера нагадувань). */
-    fun nextOvdpEvent(): OvdpEvent? = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(365)).firstOrNull() }
+    fun nextOvdpEvent(): OvdpEvent? = LocalDate.parse(TODAY).let { ovdpEvents(data.pos, it, it.plusDays(365), nbuIndex).firstOrNull() }
 
     /** Надсилає тестове сповіщення про виплату ОВДП на пристрій для перевірки. */
     fun testOvdpNotification() {

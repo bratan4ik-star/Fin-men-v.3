@@ -41,6 +41,9 @@ import kotlin.math.atan2
 @Composable
 fun OvdpPresetsRow(
     currentIsin: String,
+    items: List<OvdpPreset> = activeOvdpPresets(LocalDate.parse(TODAY)),
+    title: String = "Приклади випусків",
+    note: String = "звірте з Мінфіном",
     onSelect: (OvdpPreset) -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -49,14 +52,14 @@ fun OvdpPresetsRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            T("Приклади випусків", 12.sp, C.n500, FontWeight.Medium)
-            T("звірте з Мінфіном", 11.sp, C.n500)
+            T(title, 12.sp, C.n500, FontWeight.Medium)
+            T(note, 11.sp, C.n500)
         }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            activeOvdpPresets(LocalDate.parse(TODAY)).forEach { preset ->
+            items.forEach { preset ->
                 val isSelected = preset.isin.equals(currentIsin, ignoreCase = true)
                 val bg = if (isSelected) C.accent.copy(alpha = 0.25f) else C.surface
                 val border = if (isSelected) C.accent else C.divider
@@ -270,8 +273,8 @@ fun OvdpPortfolioCalendarSection(
     today: LocalDate = LocalDate.parse(TODAY)
 ) {
     val ovdpPositions = vm.data.pos.filter { it.group == "ОВДП" && it.qty > 0 }
-    val cashFlows = remember(vm.data.pos, vm.ratesTick) {
-        buildOvdpPortfolioCashFlow(vm.data.pos, RATES, today)
+    val cashFlows = remember(vm.data.pos, vm.ratesTick, vm.nbu) {
+        buildOvdpPortfolioCashFlow(vm.data.pos, RATES, today, vm.nbuIndex)
     }
 
     if (ovdpPositions.isEmpty()) {
@@ -308,6 +311,10 @@ fun OvdpPortfolioCalendarSection(
     val avgMonthly = totalCoupons / monthsCount
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // звідки графік: офіційний графік НБУ (з датою оновлення кешу) або розрахунок
+        val official = ovdpPositions.count { vm.nbuIndex.containsKey(posIsin(it)) }
+        T(if (official > 0) "Графік НБУ для $official з ${ovdpPositions.size} поз. · довідник від ${fmtSavedAt(vm.nbu.updatedAt)}" + (if (official < ovdpPositions.size) "; решта — розрахунково" else "")
+          else "Виплати розраховано за датами й ставкою позицій. Щоб брати офіційний графік, виберіть випуск з довідника НБУ у формі позиції.", 11.sp, C.n500)
         // Підсумкові метрики портфеля ОВДП
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(

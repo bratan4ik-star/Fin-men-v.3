@@ -2,7 +2,7 @@ package ua.bella.finance
 
 /* Типи стану інтерфейсу: вікна, екрани, поля форм і фільтри (раніше — на початку BellaViewModel.kt). */
 
-enum class Sheet { None, IbkrCharts, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Ibkr, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, OvdpPick, OvdpCheck, IbkrCharts, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Ibkr, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
@@ -19,6 +19,8 @@ data class Form(
     val pMonthly: Boolean = false, val pPayAcc: String = "", val cashF: Boolean = false,
     // ETF: валюта ціни, курс купівлі (₴ за 1 одиницю валюти)
     val pCur: String = "UAH", val pFx: String = "",
+    // ОВДП: випуск, вибраний з довідника НБУ (null — дані введено вручну)
+    val pBond: NbuBond? = null,
     // ціль: поля форми, індекс цілі; внесок/зняття — напрям, рахунок, сума
     val gName: String = "", val gTarget: String = "", val gSaved: String = "", val gStep: String = "", val gDeadline: String = "", val gIcon: String = "flag", val gIdx: Int = -1, val gMonthly: String = "",
     val gIn: Boolean = true, val gAcc: String = "", val gAmt: String = "",
