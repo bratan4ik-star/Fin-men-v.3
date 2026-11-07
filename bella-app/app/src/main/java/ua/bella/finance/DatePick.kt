@@ -35,16 +35,16 @@ fun pickerMillisToIso(ms: Long): String = Instant.ofEpochMilli(ms).atZone(ZoneOf
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DateField(label: String, value: String, modifier: Modifier = Modifier, hint: String = "РРРР-ММ-ДД", onChange: (String) -> Unit) {
+fun DateField(label: String, value: String, modifier: Modifier = Modifier, hint: String = "РРРР-ММ-ДД", need: Boolean = false, onChange: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Column(modifier) {
-        T(label, 12.sp, C.n500, modifier = Modifier.padding(bottom = 4.dp))
+        T(label, 12.sp, if (need) C.warn else C.n500, if (need) androidx.compose.ui.text.font.FontWeight.Medium else androidx.compose.ui.text.font.FontWeight.Normal, modifier = Modifier.padding(bottom = 4.dp))
         OutlinedTextField(
             value, onChange, Modifier.fillMaxWidth(), singleLine = true, textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = C.text),
             placeholder = { if (hint.isNotEmpty()) T(hint, 14.sp, C.n600) },
             trailingIcon = { IconBtn(Icons.Outlined.CalendarMonth, C.accent300) { open = true } },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(8.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = C.accent, unfocusedBorderColor = C.divider, cursorColor = C.accent, focusedContainerColor = C.surface, unfocusedContainerColor = C.surface),
+            colors = fieldColors(need),
         )
     }
     if (open) {

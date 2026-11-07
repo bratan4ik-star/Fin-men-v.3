@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -83,15 +84,15 @@ fun <K> Seg(options: List<Pair<K, String>>, value: K, modifier: Modifier = Modif
 }
 
 @Composable
-fun Field(label: String, value: String, modifier: Modifier = Modifier, hint: String = "", numeric: Boolean = false, password: Boolean = false, onChange: (String) -> Unit) {
+fun Field(label: String, value: String, modifier: Modifier = Modifier, hint: String = "", numeric: Boolean = false, password: Boolean = false, need: Boolean = false, onChange: (String) -> Unit) {
     Column(modifier) {
-        T(label, 12.sp, C.n500, modifier = Modifier.padding(bottom = 4.dp))
+        T(label, 12.sp, if (need) C.warn else C.n500, if (need) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.padding(bottom = 4.dp))
         OutlinedTextField(
             value, onChange, Modifier.fillMaxWidth(), singleLine = true, textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = C.text),
             placeholder = { if (hint.isNotEmpty()) T(hint, 14.sp, C.n600) },
             keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else if (numeric) KeyboardType.Decimal else KeyboardType.Text, autoCorrectEnabled = !password), shape = RoundedCornerShape(8.dp),
             visualTransformation = if (password) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = C.accent, unfocusedBorderColor = C.divider, cursorColor = C.accent, focusedContainerColor = C.surface, unfocusedContainerColor = C.surface),
+            colors = fieldColors(need),
         )
     }
 }
@@ -154,3 +155,11 @@ fun SectionHead(title: String, right: String? = null, rightColor: Color = C.acce
         if (right != null) T(right, 12.sp, rightColor, modifier = if (onRight != null) Modifier.clickable(onClick = onRight) else Modifier, maxLines = 1)
     }
 }
+
+/** Кольори поля вводу; need — поле ще треба заповнити: бурштинова рамка, підпис і легкий фон. */
+@Composable
+fun fieldColors(need: Boolean) = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = if (need) C.warn else C.accent, unfocusedBorderColor = if (need) C.warn else C.divider, cursorColor = C.accent,
+    focusedContainerColor = if (need) C.warn.copy(alpha = .08f).compositeOver(C.surface) else C.surface,
+    unfocusedContainerColor = if (need) C.warn.copy(alpha = .08f).compositeOver(C.surface) else C.surface,
+)

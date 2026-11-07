@@ -270,20 +270,22 @@ private fun CatsForm(vm: BellaViewModel) {
 internal fun PosForm(vm: BellaViewModel, edit: Boolean) {
     val f = vm.form
     val dep = f.group == "Депозити"
+    // обов'язкові поля, що ще порожні, — бурштинові (зникає, щойно заповнено)
+    val miss = posMissing(f, vm.formOrig)
     Seg(GROUPS.map { it.first to it.first }, f.group) { vm.form = f.copy(group = it) }
-    Field(if (dep) "Назва депозиту" else "Назва", f.pName, hint = if (edit) vm.was { it.pName } else if (dep) "напр. Депозит Моно, 12 міс." else "напр. VWCE") { vm.form = f.copy(pName = it) }
+    Field(if (dep) "Назва депозиту" else "Назва", f.pName, hint = if (edit) vm.was { it.pName } else if (dep) "напр. Депозит Моно, 12 міс." else "напр. VWCE", need = "name" in miss) { vm.form = f.copy(pName = it) }
     if (dep) {
-        Field("Сума депозиту (${vm.sym})", f.pBuy, hint = vm.was { it.pBuy }.ifEmpty { "0" }, numeric = true) { vm.form = f.copy(pBuy = it) }
+        Field("Сума депозиту (${vm.sym})", f.pBuy, hint = vm.was { it.pBuy }.ifEmpty { "0" }, numeric = true, need = "buy" in miss) { vm.form = f.copy(pBuy = it) }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (edit) Field("Поточна сума (${vm.sym})", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }
-            Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) }
+            Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true, need = "rate" in miss) { vm.form = f.copy(pRate = it) }
         }
     } else if (f.group == "ETF") {
         Seg(CURRENCIES.map { it to it }, f.pCur) { vm.form = f.copy(pCur = it) }
         val cs = if (f.pCur == "UAH") vm.sym else curSign(f.pCur)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }
-            Field("Ціна купівлі ($cs)", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) }
+            Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true, need = "qty" in miss) { vm.form = f.copy(pQty = it) }
+            Field("Ціна купівлі ($cs)", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true, need = "buy" in miss) { vm.form = f.copy(pBuy = it) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Field("Поточна ціна ($cs)", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }.ifEmpty { if (edit) "" else "= ціна купівлі" }, numeric = true) { vm.form = f.copy(pNow = it) }
@@ -300,12 +302,12 @@ internal fun PosForm(vm: BellaViewModel, edit: Boolean) {
         // валюта цін: випуск з довідника або наявна валютна ОВДП; інакше — валюта перегляду (як у posFromForm)
         val bc = f.pBond?.cur ?: if (edit && f.pCur != "UAH") f.pCur else "UAH"
         val ps = if (bc != "UAH") curSign(bc) else vm.sym
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки ($ps)", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true) { vm.form = f.copy(pBuy = it) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Кількість", f.pQty, Modifier.weight(1f), hint = vm.was { it.pQty }, numeric = true, need = "qty" in miss) { vm.form = f.copy(pQty = it) }; Field("Ціна покупки ($ps)", f.pBuy, Modifier.weight(1f), hint = vm.was { it.pBuy }, numeric = true, need = "buy" in miss) { vm.form = f.copy(pBuy = it) } }
         if (edit) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Field("Поточна ціна ($ps)", f.pNow, Modifier.weight(1f), hint = vm.was { it.pNow }, numeric = true) { vm.form = f.copy(pNow = it) }; Field("Ставка, % річних", f.pRate, Modifier.weight(1f), hint = vm.was { it.pRate }, numeric = true) { vm.form = f.copy(pRate = it) } }
         else Field("Ставка, % річних", f.pRate, numeric = true) { vm.form = f.copy(pRate = it) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        DateField(if (dep) "Дата виплати відсотків" else "Наступна виплата", f.pNext, Modifier.weight(1f), vm.was { it.pNext }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pNext = it) }
+        DateField(if (dep) "Дата виплати відсотків" else "Наступна виплата", f.pNext, Modifier.weight(1f), vm.was { it.pNext }.ifEmpty { "РРРР-ММ-ДД" }, need = "next" in miss) { vm.form = f.copy(pNext = it) }
         DateField(if (dep) "Дата повернення" else "Погашення", f.pMat, Modifier.weight(1f), vm.was { it.pMat }.ifEmpty { "РРРР-ММ-ДД" }) { vm.form = f.copy(pMat = it) }
     }
     if (dep) {
@@ -322,6 +324,7 @@ internal fun PosForm(vm: BellaViewModel, edit: Boolean) {
         }
     }
     if (dep) T("Дата виплати — коли надійдуть відсотки, дата повернення — коли повернеться сума депозиту. Обидві необов'язкові.", 11.sp, C.n500)
+    if (miss.isNotEmpty()) T("Заповніть виділені поля: " + miss.mapNotNull { if (it == "buy" && dep) "сума депозиту" else MISSING_LABELS[it] }.joinToString(", "), 12.sp, C.warn)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     if (edit) {
         T(EDIT_NOTE, 11.sp, C.n500)
@@ -499,7 +502,7 @@ internal val HELP = listOf(
     Icons.Outlined.TaskAlt to ("Довідник ОВДП НБУ" to "Довідник цінних паперів Депозитарію НБУ (відкриті дані НБУ) завантажується одним запитом раз на 7 днів або кнопкою «Оновити»; у списку лише ще не погашені ОВДП (ISIN UA4000…). Довідник зберігається на телефоні зашифровано разом з іншими даними; без інтернету працює збережений, вгорі видно дату оновлення. У формі позиції ОВДП «Вибрати випуск»: пошук за ISIN, фільтри валюти (UAH, USD, EUR) і строку до погашення; вибір заповнює ISIN, валюту, номінал, купон, дату погашення й графік виплат, а кількість і ціну купівлі вводите самі. Ручне введення лишається. «Дохідність аукціону» — середньозважена дохідність останнього розміщення за результатами аукціонів НБУ; це не ринкова ціна і не ціна банку. «Звірити ОВДП з НБУ» в «Інвестиціях» або «Звірити з НБУ» у формі позиції показує розбіжності (погашення, купон, наступна виплата, номінал, валюта) і пропонує оновити; кількість, ціни й валюта не змінюються, зміну можна скасувати. Для інфляційних випусків і випусків з індексованою вартістю суми купонів у графіку НБУ можуть переглядатися."),
     Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),
     Icons.Outlined.VerifiedUser to ("Безпека" to "Налаштування, Безпека: PIN-код із 4 цифр, відбиток пальця, автоблокування та ручне блокування. PIN зберігається лише як хеш PBKDF2 (120 000 ітерацій, випадкова сіль). Після 5 хибних спроб потрібно зачекати 30 секунд, кожна наступна хибна спроба подвоює паузу (до 15 хвилин); перезапуск застосунку паузу не знімає. Усі дані на телефоні зашифровані ключем із захищеного сховища Android (AES-256). Скриншоти й запис екрана в застосунку заборонені, а в «Недавніх програмах» замість вмісту — порожнє вікно."),
-    Icons.Outlined.NewReleases to ("Що нового" to "1.27.0 — вибір випуску ОВДП з довідника НБУ (пошук за ISIN, фільтри валюти й строку), офіційний графік виплат для нагадувань і календаря, «Звірити з НБУ» для наявних позицій, дохідність останніх аукціонів у калькуляторі. 1.26.0 — безпека: дані на телефоні зашифровані (AES-256, ключ у захищеному сховищі Android), PIN на PBKDF2 зі стійким блокуванням після хибних спроб, заборона скриншотів, виключення з хмарних копій Google, шифрування резервних копій паролем, екран відновлення, якщо дані не розшифровуються. Функції не змінились, наявні дані переносяться автоматично. 1.25 — календар, розподіл і реінвестування ОВДП. 1.24 — валюти GBP і CHF, графіки й картка IBKR без Yahoo, менший APK."),
+    Icons.Outlined.NewReleases to ("Що нового" to "1.27.0 — вибір випуску ОВДП з довідника НБУ (пошук за ISIN, фільтри валюти й строку), офіційний графік виплат для нагадувань і календаря, «Звірити з НБУ» для наявних позицій, дохідність останніх аукціонів у калькуляторі; у формі позиції поля, які ще треба заповнити, підсвічені бурштиновим. 1.26.0 — безпека: дані на телефоні зашифровані (AES-256, ключ у захищеному сховищі Android), PIN на PBKDF2 зі стійким блокуванням після хибних спроб, заборона скриншотів, виключення з хмарних копій Google, шифрування резервних копій паролем, екран відновлення, якщо дані не розшифровуються. Функції не змінились, наявні дані переносяться автоматично. 1.25 — календар, розподіл і реінвестування ОВДП. 1.24 — валюти GBP і CHF, графіки й картка IBKR без Yahoo, менший APK."),
     Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Автокопія щотижня: виберіть папку на телефоні (наприклад, Documents/Bella), і раз на тиждень туди зберігатиметься копія bella-auto-РРРР-ММ-ДД.json; лишаються 8 найновіших. Щоб копії були і в хмарі, синхронізуйте цю папку з Google Drive окремою програмою або час від часу копіюйте файл. Відновлення — «Відновити з копії». «Шифрувати копію паролем» шифрує і ручні копії, і автокопії (AES-256, ключ із пароля): без пароля такий файл не відкрити, тож запишіть його. Старі відкриті копії відновлюються як і раніше. Довідник ОВДП НБУ в копію не входить: після відновлення він завантажується заново. Дані застосунку не потрапляють у хмарну копію Google і не переносяться системою на новий телефон — для перенесення використовуйте резервну копію. Якщо після скидання захищеного сховища дані не розшифровуються, застосунок нічого не стирає, а пропонує відновити їх з автокопії чи файлу. Налаштування, Стерти дані видаляє все без можливості відновлення."),
 )
 

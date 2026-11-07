@@ -15,6 +15,8 @@ data class BellaColors(
     val n400: Color, val n500: Color, val n600: Color, val n700: Color, val n800: Color,
     val accent: Color, val accent300: Color, val accent400: Color, val accent800: Color,
     val pos: Color, val neg: Color, val light: Boolean,
+    /** Бурштиновий: поле, яке ще треба заповнити. */
+    val warn: Color = Color(0xFFFBBF24),
 )
 
 val DarkColors = BellaColors(
@@ -27,7 +29,7 @@ val LightColors = BellaColors(
     bg = Color(0xFFF4F4F7), surface = Color.White, text = Color(0xFF1B1D2B), divider = Color(0xFF1B1D2B).copy(alpha = .12f),
     n400 = Color(0xFF5B6075), n500 = Color(0xFF666B82), n600 = Color(0xFF9A9EB2), n700 = Color(0xFFC4C7D4), n800 = Color(0xFFD9DBE4),
     accent = Color(0xFF9184D9), accent300 = Color(0xFF5B4DB8), accent400 = Color(0xFF6A5CC7), accent800 = Color(0xFFE6E2F8),
-    pos = Color(0xFF15803D), neg = Color(0xFFB91C1C), light = true,
+    pos = Color(0xFF15803D), neg = Color(0xFFB91C1C), light = true, warn = Color(0xFFB45309),
 )
 val LocalBella = staticCompositionLocalOf { DarkColors }
 val BlueC = Color(0xFF60A5FA); val TealC = Color(0xFF2DD4BF); val GoldC = Color(0xFFFBBF24); val PurpleC = Color(0xFFC084FC)

@@ -62,11 +62,16 @@ class OvdpNbuShotTest {
         shot("10-ovdp-pick")
         // вибір доларового випуску: ISIN, валюта, купон, погашення, наступна виплата; кількість і ціну вводить користувач
         val b = vm.nbu.bonds.first { it.isin == "UA4000236541" }
-        rule.runOnUiThread { vm.pickBond(b); vm.form = vm.form.copy(pQty = "3", pBuy = "1012.40") }
+        rule.runOnUiThread { vm.pickBond(b) }
         assertEquals(Sheet.Pos, vm.sheet)
         assertEquals("ОВДП UA4000236541", vm.form.pName); assertEquals("USD", vm.form.pCur); assertEquals("2027-02-04", vm.form.pMat); assertEquals("4.17", vm.form.pRate); assertEquals("2027-02-04", vm.form.pNext)
+        // лишилось дозаповнити кількість і ціну — вони підсвічені
+        assertEquals(setOf("qty", "buy"), posMissing(vm.form, vm.formOrig))
         show(vm) { PosForm(vm, false) }
         shot("11-ovdp-pos-picked")
+        rule.runOnUiThread { vm.form = vm.form.copy(pQty = "3", pBuy = "1012.40") }
+        assertTrue(posMissing(vm.form, vm.formOrig).isEmpty())
+        shot("11b-ovdp-pos-filled")
         val before = vm.data.pos.size
         rule.runOnUiThread { vm.submit() }
         val p = vm.data.pos.last()
