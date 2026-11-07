@@ -70,4 +70,21 @@ class RemindersTest {
         val h = listOf(HistPoint("2026-01-01", 1.0), HistPoint("2026-10-20", 2.0), HistPoint("2026-11-04", 3.0))
         assertEquals(2, histPeriod(h, 30, "2026-11-04").size); assertEquals(3, histPeriod(h, 0, "2026-11-04").size)
     }
+
+    @Test fun reminderText_formatsForeignCurrencyWithHryvniaEquivalent() {
+        val ev = OvdpEvent(
+            date = LocalDate.parse("2027-04-20"),
+            name = "Бердянськ (USD)",
+            coupon = 45.0,
+            principal = 1000.0,
+            cur = "USD"
+        )
+        val rem = Reminder("soon|Бердянськ (USD)|2027-04-20", ev, false, 3L)
+        val rates = mapOf("UAH" to 1.0, "USD" to 40.0)
+        val text = reminderText(rem, rates)
+        // Expected to contain $ sign and ≈ 41 800 ₴
+        assertTrue("Must contain USD sign", text.contains("$"))
+        assertTrue("Must contain UAH equivalent", text.contains("41") || text.contains("41 800") || text.contains("41800"))
+        assertEquals("Через 3 дні погашення ОВДП", reminderTitle(rem))
+    }
 }

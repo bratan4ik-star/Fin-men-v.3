@@ -1,0 +1,698 @@
+[
+ {
+  "cpcode": "UA4000190870",
+  "nominal": 1000,
+  "auk_proc": 11.94,
+  "pgs_date": "2026-06-24",
+  "razm_date": "2015-08-04",
+  "cptype": "DCP",
+  "cpdescr": "Довгострокові",
+  "pay_period": 182,
+  "val_code": "UAH",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120240",
+  "cpcode_cfi": "DBFTFR",
+  "total_bonds": 0,
+  "payments": [
+   {
+    "pay_date": "2016-01-06",
+    "pay_type": "1",
+    "pay_val": 50.84,
+    "array": "true"
+   },
+   {
+    "pay_date": "2016-07-06",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2017-01-04",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2017-07-05",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2018-01-03",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2018-07-04",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2019-01-02",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2019-07-03",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2020-01-01",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2020-07-01",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2020-12-30",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2021-06-30",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2021-12-29",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2022-06-29",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2022-12-28",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2023-06-28",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2023-12-27",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2024-06-26",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2024-12-25",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2025-06-25",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2025-12-24",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-06-24",
+    "pay_type": "1",
+    "pay_val": 59.7,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-06-24",
+    "pay_type": "2",
+    "pay_val": 1000,
+    "array": "true"
+   }
+  ]
+ },
+ {
+  "cpcode": "UA4000239149",
+  "nominal": 1000,
+  "auk_proc": 15.1,
+  "pgs_date": "2028-01-19",
+  "razm_date": "2026-11-03",
+  "cptype": "DCP",
+  "cpdescr": "Середньострокові",
+  "pay_period": 182,
+  "val_code": "UAH",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120244",
+  "cpcode_cfi": "DBFTFR",
+  "total_bonds": 2000000,
+  "payments": [
+   {
+    "pay_date": "2027-01-20",
+    "pay_type": "1",
+    "pay_val": 75.5,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-07-21",
+    "pay_type": "1",
+    "pay_val": 75.5,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-01-19",
+    "pay_type": "1",
+    "pay_val": 75.5,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-01-19",
+    "pay_type": "2",
+    "pay_val": 1000,
+    "array": "true"
+   }
+  ]
+ },
+ {
+  "cpcode": "UA4000239131",
+  "nominal": 1000,
+  "auk_proc": 16.49,
+  "pgs_date": "2029-03-21",
+  "razm_date": "2026-10-06",
+  "cptype": "DCP",
+  "cpdescr": "Середньострокові",
+  "pay_period": 182,
+  "val_code": "UAH",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120244",
+  "cpcode_cfi": "DBFTFR",
+  "total_bonds": 5194427,
+  "payments": [
+   {
+    "pay_date": "2027-03-24",
+    "pay_type": "1",
+    "pay_val": 82.45,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-09-22",
+    "pay_type": "1",
+    "pay_val": 82.45,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-03-22",
+    "pay_type": "1",
+    "pay_val": 82.45,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-09-20",
+    "pay_type": "1",
+    "pay_val": 82.45,
+    "array": "true"
+   },
+   {
+    "pay_date": "2029-03-21",
+    "pay_type": "1",
+    "pay_val": 82.45,
+    "array": "true"
+   },
+   {
+    "pay_date": "2029-03-21",
+    "pay_type": "2",
+    "pay_val": 1000,
+    "array": "true"
+   }
+  ]
+ },
+ {
+  "cpcode": "UA4000236541",
+  "nominal": 1000,
+  "auk_proc": 4.17,
+  "pgs_date": "2027-02-04",
+  "razm_date": "2025-07-29",
+  "cptype": "DCP",
+  "cpdescr": "Середньострокові",
+  "pay_period": 182,
+  "val_code": "USD",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120244",
+  "cpcode_cfi": "DBFTFR",
+  "total_bonds": 351797,
+  "payments": [
+   {
+    "pay_date": "2025-08-07",
+    "pay_type": "1",
+    "pay_val": 20.85,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-02-05",
+    "pay_type": "1",
+    "pay_val": 20.85,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-08-06",
+    "pay_type": "1",
+    "pay_val": 20.85,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-02-04",
+    "pay_type": "1",
+    "pay_val": 20.85,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-02-04",
+    "pay_type": "2",
+    "pay_val": 1000,
+    "array": "true"
+   }
+  ]
+ },
+ {
+  "cpcode": "UA4000237077",
+  "nominal": 1000,
+  "auk_proc": 3.19,
+  "pgs_date": "2027-02-25",
+  "razm_date": "2025-09-09",
+  "cptype": "DCP",
+  "cpdescr": "Середньострокові",
+  "pay_period": 182,
+  "val_code": "EUR",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120244",
+  "cpcode_cfi": "DBFTFR",
+  "total_bonds": 87316,
+  "payments": [
+   {
+    "pay_date": "2026-02-26",
+    "pay_type": "1",
+    "pay_val": 15.95,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-08-27",
+    "pay_type": "1",
+    "pay_val": 15.95,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-02-25",
+    "pay_type": "1",
+    "pay_val": 15.95,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-02-25",
+    "pay_type": "2",
+    "pay_val": 1000,
+    "array": "true"
+   }
+  ]
+ },
+ {
+  "cpcode": "UA4000197685",
+  "nominal": 1000,
+  "auk_proc": 10.3,
+  "pgs_date": "2036-05-10",
+  "razm_date": "2017-10-06",
+  "cptype": "DCP",
+  "cpdescr": "Довгострокові інфляційні",
+  "pay_period": 365,
+  "val_code": "UAH",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120240",
+  "cpcode_cfi": "DBVTFR",
+  "total_bonds": 6048872,
+  "payments": [
+   {
+    "pay_date": "2018-05-10",
+    "pay_type": "1",
+    "pay_val": 102.2,
+    "array": "true"
+   },
+   {
+    "pay_date": "2019-05-10",
+    "pay_type": "1",
+    "pay_val": 108,
+    "array": "true"
+   },
+   {
+    "pay_date": "2020-05-10",
+    "pay_type": "1",
+    "pay_val": 45,
+    "array": "true"
+   },
+   {
+    "pay_date": "2021-05-10",
+    "pay_type": "1",
+    "pay_val": 107,
+    "array": "true"
+   },
+   {
+    "pay_date": "2022-05-10",
+    "pay_type": "1",
+    "pay_val": 159,
+    "array": "true"
+   },
+   {
+    "pay_date": "2023-05-10",
+    "pay_type": "1",
+    "pay_val": 235,
+    "array": "true"
+   },
+   {
+    "pay_date": "2024-05-10",
+    "pay_type": "1",
+    "pay_val": 54,
+    "array": "true"
+   },
+   {
+    "pay_date": "2025-05-10",
+    "pay_type": "1",
+    "pay_val": 168,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-05-10",
+    "pay_type": "1",
+    "pay_val": 101,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-05-10",
+    "pay_type": "1",
+    "pay_val": 103,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-05-10",
+    "pay_type": "1",
+    "pay_val": 96,
+    "array": "true"
+   },
+   {
+    "pay_date": "2029-05-10",
+    "pay_type": "1",
+    "pay_val": 91,
+    "array": "true"
+   },
+   {
+    "pay_date": "2030-05-10",
+    "pay_type": "1",
+    "pay_val": 82,
+    "array": "true"
+   },
+   {
+    "pay_date": "2031-05-10",
+    "pay_type": "1",
+    "pay_val": 76,
+    "array": "true"
+   },
+   {
+    "pay_date": "2032-05-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2033-05-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2034-05-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2035-05-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2036-05-10",
+    "pay_type": "1",
+    "pay_val": 69,
+    "array": "true"
+   },
+   {
+    "pay_date": "2036-05-10",
+    "pay_type": "2",
+    "pay_val": 1000,
+    "array": "true"
+   }
+  ]
+ },
+ {
+  "cpcode": "UA4000197693",
+  "nominal": 1000,
+  "auk_proc": 12.2,
+  "pgs_date": "2036-11-10",
+  "razm_date": "2017-10-06",
+  "cptype": "DCP",
+  "cpdescr": "Довгострокові інфляційні",
+  "pay_period": 365,
+  "val_code": "UAH",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120240",
+  "cpcode_cfi": "DBVTFR",
+  "total_bonds": 6048872,
+  "payments": [
+   {
+    "pay_date": "2018-11-10",
+    "pay_type": "1",
+    "pay_val": 135,
+    "array": "true"
+   },
+   {
+    "pay_date": "2019-11-10",
+    "pay_type": "1",
+    "pay_val": 97,
+    "array": "true"
+   },
+   {
+    "pay_date": "2020-11-10",
+    "pay_type": "1",
+    "pay_val": 45,
+    "array": "true"
+   },
+   {
+    "pay_date": "2021-11-10",
+    "pay_type": "1",
+    "pay_val": 132,
+    "array": "true"
+   },
+   {
+    "pay_date": "2022-11-10",
+    "pay_type": "1",
+    "pay_val": 268,
+    "array": "true"
+   },
+   {
+    "pay_date": "2023-11-10",
+    "pay_type": "1",
+    "pay_val": 93,
+    "array": "true"
+   },
+   {
+    "pay_date": "2024-11-10",
+    "pay_type": "1",
+    "pay_val": 108,
+    "array": "true"
+   },
+   {
+    "pay_date": "2025-11-10",
+    "pay_type": "1",
+    "pay_val": 141,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-11-10",
+    "pay_type": "1",
+    "pay_val": 122,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-11-10",
+    "pay_type": "1",
+    "pay_val": 92,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-11-10",
+    "pay_type": "1",
+    "pay_val": 95,
+    "array": "true"
+   },
+   {
+    "pay_date": "2029-11-10",
+    "pay_type": "1",
+    "pay_val": 86,
+    "array": "true"
+   },
+   {
+    "pay_date": "2030-11-10",
+    "pay_type": "1",
+    "pay_val": 79,
+    "array": "true"
+   },
+   {
+    "pay_date": "2031-11-10",
+    "pay_type": "1",
+    "pay_val": 73,
+    "array": "true"
+   },
+   {
+    "pay_date": "2032-11-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2033-11-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2034-11-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2035-11-10",
+    "pay_type": "1",
+    "pay_val": 72,
+    "array": "true"
+   },
+   {
+    "pay_date": "2036-11-10",
+    "pay_type": "1",
+    "pay_val": 64,
+    "array": "true"
+   },
+   {
+    "pay_date": "2036-11-10",
+    "pay_type": "2",
+    "pay_val": 1000,
+    "array": "true"
+   }
+  ]
+ },
+ {
+  "cpcode": "XS2895055981",
+  "nominal": 1,
+  "auk_proc": 4.5,
+  "pgs_date": "2029-02-01",
+  "razm_date": "2024-08-30",
+  "cptype": "OZDP",
+  "cpdescr": "OЗДП-середньострокова",
+  "pay_period": 182,
+  "val_code": "USD",
+  "emit_okpo": "00013480",
+  "emit_name": "Міністерство фінансів України",
+  "cptype_nkcpfr": "01120262",
+  "cpcode_cfi": "DBFTFR",
+  "total_bonds": null,
+  "payments": [
+   {
+    "pay_date": "2025-02-01",
+    "pay_type": "1",
+    "pay_val": 0.00875,
+    "array": "true"
+   },
+   {
+    "pay_date": "2025-08-01",
+    "pay_type": "1",
+    "pay_val": 0.00875,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-02-01",
+    "pay_type": "1",
+    "pay_val": 0.0225,
+    "array": "true"
+   },
+   {
+    "pay_date": "2026-08-01",
+    "pay_type": "1",
+    "pay_val": 0.0225,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-02-01",
+    "pay_type": "1",
+    "pay_val": 0.0225,
+    "array": "true"
+   },
+   {
+    "pay_date": "2027-08-01",
+    "pay_type": "1",
+    "pay_val": 0.03,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-02-01",
+    "pay_type": "1",
+    "pay_val": 0.03,
+    "array": "true"
+   },
+   {
+    "pay_date": "2028-08-01",
+    "pay_type": "1",
+    "pay_val": 0.03,
+    "array": "true"
+   },
+   {
+    "pay_date": "2029-02-01",
+    "pay_type": "1",
+    "pay_val": 0.03,
+    "array": "true"
+   },
+   {
+    "pay_date": "2029-02-01",
+    "pay_type": "2",
+    "pay_val": 1,
+    "array": "true"
+   }
+  ]
+ }
+]

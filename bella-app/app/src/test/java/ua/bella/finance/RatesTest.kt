@@ -16,7 +16,8 @@ class RatesTest {
     @Test fun parsesThreeCurrenciesAndDate() {
         val r = parseNbuRates(body)
         assertNotNull(r)
-        assertEquals(mapOf("USD" to 50.0, "EUR" to 60.0, "PLN" to 12.0), r!!.rates)
+        // GBP і CHF необов'язкові: беруться, якщо НБУ їх повернув
+        assertEquals(mapOf("USD" to 50.0, "EUR" to 60.0, "PLN" to 12.0, "GBP" to 70.0), r!!.rates)
         assertEquals("02.11.2026", r.date)
     }
 
@@ -32,5 +33,9 @@ class RatesTest {
         assertEquals(6000.0, convertAmount(100.0, "EUR", "UAH", m), 1e-9)
         assertEquals(120.0, convertAmount(100.0, "EUR", "USD", m), 1e-9)
         assertEquals(100.0, convertAmount(100.0, "PLN", "PLN", m), 1e-9)
+    }
+
+    @Test fun unknownCurrencyDoesNotCrash() {
+        assertEquals(1.0, rateOf("XYZ"), 1e-9); assertEquals(RATES["USD"]!!, rateOf("USD"), 1e-9)
     }
 }

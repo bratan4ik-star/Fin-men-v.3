@@ -21,7 +21,20 @@ class MainActivity : FragmentActivity() {
     private val vm: BellaViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // заборона скриншотів, запису екрана й мініатюри в «Недавніх програмах»
+        window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        handleIntent(intent)
         setContent { BellaTheme(vm.light) { BellaApp(vm) } }
+    }
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.getStringExtra("screen") == "calc") {
+            vm.screen = Screen.Calc
+            vm.calcTab = 1
+        }
     }
     override fun onStop() { super.onStop(); vm.onStopped() }
     override fun onStart() { super.onStart(); vm.onStarted() }
@@ -31,6 +44,7 @@ class MainActivity : FragmentActivity() {
 fun BellaApp(vm: BellaViewModel) {
     BackHandler(enabled = vm.screen != Screen.Home && vm.kmode == KMode.None) { vm.go(Screen.Home) }
     Box(Modifier.fillMaxSize().background(C.bg).statusBarsPadding().navigationBarsPadding()) {
+        if (vm.storeBroken != null) { RecoveryScreen(vm); return@Box }
         when (vm.screen) {
             Screen.Home -> HomeScreen(vm); Screen.Acc -> AccScreen(vm); Screen.Bud -> BudgetScreen(vm); Screen.Inv -> InvScreen(vm)
             Screen.Goals -> GoalsScreen(vm); Screen.Pass -> PassScreen(vm); Screen.Calc -> CalcScreen(vm)

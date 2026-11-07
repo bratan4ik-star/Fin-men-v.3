@@ -4,9 +4,11 @@ import kotlinx.serialization.Serializable
 import java.util.Locale
 
 /** Курси до гривні. Початкові значення з прототипу; після «Оновити курси» підміняються курсами НБУ (змінюється лише з головного потоку). */
-val RATES: MutableMap<String, Double> = mutableMapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0)
-val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł")
-val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN")
+val RATES: MutableMap<String, Double> = mutableMapOf("UAH" to 1.0, "USD" to 41.5, "EUR" to 46.0, "PLN" to 10.0, "GBP" to 54.0, "CHF" to 49.0)
+val SYM = mapOf("UAH" to "₴", "USD" to "$", "EUR" to "€", "PLN" to "zł", "GBP" to "£", "CHF" to "Fr")
+/** Курс валюти до гривні; невідома валюта (напр. з пошкодженої копії) — 1, щоб застосунок не падав. */
+fun rateOf(cur: String): Double = RATES[cur]?.takeIf { it > 0 } ?: 1.0
+val CURRENCIES = listOf("UAH", "USD", "EUR", "PLN", "GBP", "CHF")
 /** Сьогоднішня дата і поточний місяць телефону (раніше були зафіксовані на 2026-11-02 з прототипу). */
 val TODAY: String get() = java.time.LocalDate.now().toString()
 val CUR_MONTH: String get() = TODAY.take(7)
@@ -41,11 +43,11 @@ val DEFAULT_RULES = listOf(
     val acc: String = "", val accAmt: Double = 0.0, val toAcc: String = "", val toAmt: Double = 0.0,
 )
 @Serializable data class Debt(val who: String, val owedToMe: Boolean, val amt: Double, val done: Boolean = false, val due: String = "")
-@Serializable data class CalcExtra(val isin: String, val nom: Double, val freq: Int, val sell: String, val sellD: String, val buy: String)
+@Serializable data class CalcExtra(val isin: String, val nom: Double, val freq: Int, val sell: String, val sellD: String, val buy: String, val cur: String = "UAH")
 @Serializable data class Pos(val group: String, val name: String, val qty: Double, val buy: Double, val now: Double, val mat: String = "", val rate: Double = 0.0, val next: String = "", val calc: CalcExtra? = null,
     /** Депозит: щомісячна виплата відсотків у дохід на рахунок payAcc («» = без рахунку). */
     val monthly: Boolean = false, val payAcc: String = "",
-    /** ETF: валюта ціни, ціни купівлі й поточна у ній, курс купівлі, тікер Yahoo і час котирування (див. Etf.kt). */
+    /** ETF: валюта ціни, ціни купівлі й поточна у ній, курс купівлі, ticker — лише зі старих даних (для зіставлення з IBKR), час ціни. */
     val cur: String = "UAH", val pxBuy: Double = 0.0, val pxNow: Double = 0.0, val buyFx: Double = 0.0, val ticker: String = "", val pxAt: Long = 0L,
     /** Звідки позиція: «» — введена вручну, «ibkr» — синхронізується з Interactive Brokers (символ IBKR — ibSym). */
     val src: String = "", val ibSym: String = "",
@@ -95,6 +97,10 @@ data class Persisted(
     val ibNav: List<HistPoint> = emptyList(),
     val ibFlows: List<IbFlow> = emptyList(),
     val ibBase: String = "USD",
+    /** Історія цін ETF з IBKR за символом (у валюті фонду). */
+    val ibPx: Map<String, List<HistPoint>> = emptyMap(),
+    /** Довідник ОВДП з відкритих даних НБУ (кеш, OvdpRegistry.kt): зберігається разом зі станом, тобто зашифровано. */
+    val nbu: OvdpRegistry = OvdpRegistry(),
 )
 
 object DemoData {
@@ -117,6 +123,7 @@ object DemoData {
     val pos = listOf(
         Pos("ОВДП", "ОВДП UA4000227045", 100.0, 960.0, 985.0, "2027-05-12", 15.5, "2026-12-10"),
         Pos("ОВДП", "ОВДП UA4000225981", 50.0, 990.0, 1010.0, "2028-03-15", 16.0, "2027-01-20"),
+        Pos("ОВДП", "ОВДП валютні USD (приклад)", 2.0, 1000.0, 1000.0, "2027-04-20", 4.5, "2027-04-20", cur = "USD", calc = CalcExtra("UA4000229876", 1000.0, 6, "", "", "2026-04-20", "USD")),
         Pos("Депозити", "Депозит Моно, 12 міс.", 1.0, 50000.0, 52100.0, "2027-03-01", 13.0, "2026-12-01"),
         Pos("Депозити", "Депозит Приват, 6 міс.", 1.0, 25000.0, 26400.0, "2027-01-15", 12.5, "2026-12-15"),
         Pos("ETF", "VWCE", 20.0, 2300.0, 2480.0, "", 2.0, "2026-12-20"),
@@ -140,5 +147,11 @@ fun monthLabel(k: String) = MONTH_NAMES[k.substring(5, 7).toInt() - 1] + " " + k
 fun nativeLabel(a: Account, hide: Boolean): String {
     if (hide) return "••••"
     val v = fmtInt(a.bal)
-    return if (a.cur == "USD" || a.cur == "EUR") SYM[a.cur] + v else v + " " + SYM[a.cur]!!.trim()
+    return if (a.cur == "USD" || a.cur == "EUR" || a.cur == "GBP") SYM[a.cur] + v else v + " " + (SYM[a.cur] ?: a.cur).trim()
+}
+
+/** Українська форма множини: 1 випуск, 2 випуски, 5 випусків. */
+fun plural(n: Int, one: String, few: String, many: String): String {
+    val a = Math.abs(n) % 100; val b = a % 10
+    return if (a in 11..14) many else when (b) { 1 -> one; in 2..4 -> few; else -> many }
 }

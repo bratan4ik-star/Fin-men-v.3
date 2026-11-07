@@ -1,6 +1,7 @@
 package ua.bella.finance
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FormHintsTest {
@@ -45,5 +46,22 @@ class FormHintsTest {
         val r = fillBlanks(o.copy(who = "", amt = "", due = ""), o)
         assertEquals("Іван", r.who); assertEquals("12300", r.amt)
         assertEquals("", r.due) // порожній термін означає «без терміну»
+    }
+
+    @Test fun missingPositionFieldsAreHighlighted() {
+        // нова ОВДП після вибору випуску: лишились кількість і ціна
+        val picked = Form(group = "ОВДП", pName = "ОВДП UA4000239149", pRate = "15.1", pMat = "2028-01-19", pNext = "2027-01-20")
+        assertEquals(setOf("qty", "buy"), posMissing(picked, null))
+        assertEquals(setOf("buy"), posMissing(picked.copy(pQty = "10"), null))
+        assertEquals(setOf("qty"), posMissing(picked.copy(pQty = "0", pBuy = "985,5"), null))  // нуль — ще не заповнено
+        assertTrue(posMissing(picked.copy(pQty = "10", pBuy = "985.5"), null).isEmpty())
+        assertEquals(setOf("name", "qty", "buy"), posMissing(Form(group = "ETF"), null))
+        // депозит: кількості немає; для щомісячного — ще ставка й дата виплати
+        assertEquals(setOf("name", "buy"), posMissing(Form(group = "Депозити"), null))
+        assertEquals(setOf("rate", "next"), posMissing(Form(group = "Депозити", pName = "Моно", pBuy = "10000", pMonthly = true), null))
+        // редагування: порожнє поле = старе значення, не підсвічується
+        val orig = picked.copy(pQty = "10", pBuy = "985.5")
+        assertTrue(posMissing(orig.copy(pQty = "", pBuy = ""), orig).isEmpty())
+        assertEquals(setOf("qty"), posMissing(orig.copy(pQty = ""), orig.copy(pQty = "")))
     }
 }

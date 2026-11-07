@@ -19,17 +19,17 @@ fun signing(prop: String, env: String): String? = keystoreProps.getProperty(prop
 // Версія: назву (1.1.0) піднімаємо вручну разом зі змінами. Номер збірки = кількість комітів у git:
 // росте з кожною зміною і однаковий локально й у CI, тож новіший APK завжди встановлюється поверх старішого.
 // Можна перевизначити змінною BELLA_BUILD_NUMBER.
-val appVersionName = "1.23.2"
+val appVersionName = "1.27.0"
 val buildNumber: Int = System.getenv("BELLA_BUILD_NUMBER")?.toIntOrNull()
     ?: try { providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }.standardOutput.asText.get().trim().toInt() } catch (e: Exception) { 1 }
 
 android {
     namespace = "ua.bella.finance"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         applicationId = "ua.bella.finance"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = buildNumber
         versionName = appVersionName
         buildConfigField("String", "BUILD_DATE", "\"${LocalDate.now()}\"")
@@ -49,25 +49,39 @@ android {
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: стискає й прибирає невикористаний код — APK у кілька разів менший і трохи швидший старт
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
+    // Robolectric для знімків екранів (ScreenshotTest): потрібні ресурси застосунку в юніт-тестах
+    testOptions { unitTests {
+        isIncludeAndroidResources = true
+        // справжній рендер вікон для знімків (captureToImage) у Robolectric
+        all { it.systemProperty("robolectric.pixelCopyRenderMode", "hardware") }
+    } }
 }
 dependencies {
-    val bom = platform("androidx.compose:compose-bom:2024.09.00")
+    val bom = platform("androidx.compose:compose-bom:2025.06.01")
     implementation(bom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.fragment:fragment-ktx:1.8.3")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.fragment:fragment-ktx:1.8.8")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.biometric:biometric:1.1.0")
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("androidx.work:work-runtime-ktx:2.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     testImplementation("junit:junit:4.13.2")
+    // знімки екранів без емулятора: Robolectric малює Compose справжнім рушієм Android (Native Graphics)
+    testImplementation("org.robolectric:robolectric:4.15.1")
+    testImplementation(bom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

@@ -32,7 +32,10 @@ class GroupingTest {
     }
 
     @Test fun everyScreenHasHelpSection() {
-        assertEquals(listOf(0, 2, 4, 7, 9, 9, 8), Screen.values().map { helpSectionFor(it) }.let { listOf(it[0], it[1], it[2], it[3], it[4], it[5], it[6]) })
+        // розділ довідки — саме про цей екран (раніше після додавання розділів індекси з'їхали: «Калькулятор» відкривав «Нагадування»)
+        val title = mapOf(Screen.Home to "Головна", Screen.Acc to "Капітал та Рахунки", Screen.Bud to "Бюджет", Screen.Inv to "Інвестиції",
+            Screen.Goals to "Цілі та пасивний дохід", Screen.Pass to "Цілі та пасивний дохід", Screen.Calc to "Калькулятор ОВДП")
+        Screen.values().forEach { s -> assertEquals(s.name, title[s], HELP[helpSectionFor(s)].second.first) }
     }
 
     @Test fun returnedDebtIsRemoved() {

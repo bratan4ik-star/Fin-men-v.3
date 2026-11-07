@@ -80,4 +80,38 @@ class ImporterTest {
         assertEquals("expense", Importer.classifyType("Таксі", "Uklon", -90.0))
         assertEquals("income", Importer.classifyType("Надходження", "Зарплата", 100.0))
     }
+
+    @Test fun detectDuplicates_matchesExactKey() {
+        val existing = listOf(Tx("АТБ Маркет", "Харчування", "expense", 250.0, "2026-11-01", key = "k123"))
+        val incoming = listOf(Tx("АТБ", "Харчування", "expense", 250.0, "2026-11-01", key = "k123"))
+        val items = detectDuplicates(incoming, existing)
+        assertEquals(1, items.size)
+        assertTrue("Must be flagged as duplicate by key", items[0].isDuplicate)
+        org.junit.Assert.assertFalse("Duplicate should be unselected by default", items[0].selected)
+    }
+
+    @Test fun detectDuplicates_fuzzyMatchesSameDateAmountAndDesc() {
+        val existing = listOf(Tx("Сільпо супермаркет", "Харчування", "expense", 720.50, "2026-11-02"))
+        val incoming = listOf(
+            Tx("Сільпо", "Харчування", "expense", 720.50, "2026-11-02"),
+            Tx("Аптека", "Здоров'я", "expense", 150.0, "2026-11-02")
+        )
+        val items = detectDuplicates(incoming, existing)
+        assertEquals(2, items.size)
+        assertTrue("Silpo should match existing Silpo transaction", items[0].isDuplicate)
+        org.junit.Assert.assertFalse("Apteka should be recognized as a new transaction", items[1].isDuplicate)
+        assertTrue("New transaction should be selected by default", items[1].selected)
+    }
+
+    @Test fun detectDuplicates_catchesDuplicatesWithinSameFile() {
+        val existing = emptyList<Tx>()
+        val incoming = listOf(
+            Tx("Кава", "Харчування", "expense", 65.0, "2026-11-03", key = "line1"),
+            Tx("Кава", "Харчування", "expense", 65.0, "2026-11-03", key = "line1")
+        )
+        val items = detectDuplicates(incoming, existing)
+        assertEquals(2, items.size)
+        org.junit.Assert.assertFalse("First line is new", items[0].isDuplicate)
+        assertTrue("Second identical line in same file is a duplicate", items[1].isDuplicate)
+    }
 }

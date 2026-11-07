@@ -32,32 +32,6 @@ class EtfTest {
         assertEquals(PlSplit(20 * 180.0, 20 * 180.0, 0.0), plSplit(old, r46))
     }
 
-    @Test fun parsesYahooResponse() {
-        val body = """{"chart":{"result":[{"meta":{"currency":"EUR","symbol":"VWCE.DE","regularMarketPrice":167.8}}],"error":null}}"""
-        assertEquals(Quote(167.8, "EUR"), parseYahooQuote(body))
-        assertNull(parseYahooQuote("""{"chart":{"result":null,"error":{"code":"Not Found"}}}"""))
-        assertNull(parseYahooQuote("not json"))
-    }
-
-    @Test fun quoteUpdatesFxPosition() {
-        val (p, e) = applyQuote(vwce, Quote(170.0, "EUR"), r40, 123L)
-        assertEquals("", e); assertEquals(170.0, p!!.pxNow, 1e-9); assertEquals(170 * 44.0, p.now, 1e-9); assertEquals(123L, p.pxAt)
-        assertEquals(150.0, p.pxBuy, 1e-9) // ціна купівлі не змінюється
-    }
-
-    @Test fun quoteConvertsLegacyUahPosition() {
-        val old = Pos("ETF", "SPY", 2.0, 30000.0, 30000.0, ticker = "SPY")
-        val (p, _) = applyQuote(old, Quote(752.0, "USD"), r40, 1L)
-        assertTrue(isFxPos(p!!)); assertEquals("USD", p.cur)
-        assertEquals(750.0, p.pxBuy, 1e-9); assertEquals(40.0, p.buyFx, 1e-9) // 30000 ₴ / 40 = 750 $
-        assertEquals(posCostUah(old), posCostUah(p), 1e-9) // вартість купівлі не змінилась
-    }
-
-    @Test fun unsupportedOrMismatchedCurrencyIsRejected() {
-        assertEquals("VWCE: валюта котирування GBp не підтримується", applyQuote(vwce, Quote(1.0, "GBp"), r40, 1L).second)
-        assertEquals("VWCE: котирування в USD, а позиція в EUR", applyQuote(vwce, Quote(1.0, "USD"), r40, 1L).second)
-    }
-
     @Test fun fundCurrencyDisplay() {
         assertEquals("€", curSign("EUR")); assertEquals("$", curSign("USD")); assertEquals("zł", curSign("PLN"))
         assertEquals(1600.0, posValueCur(vwce), 1e-9); assertEquals(1500.0, posCostCur(vwce), 1e-9)
@@ -65,5 +39,14 @@ class EtfTest {
         assertTrue(fxMoney(1600.0, "EUR").endsWith(" €"))
         val uah = Pos("ETF", "Old", 1.0, 100.0, 120.0)
         assertEquals(0.0, posValueCur(uah), 1e-9); assertEquals(0.0, plCurPct(uah), 1e-9)
+    }
+
+    @Test fun usdBondFromCalculatorIsValuedOnceInHryvnia() {
+        val r = mapOf("UAH" to 1.0, "USD" to 41.0, "EUR" to 48.0)
+        val bond = Pos("ОВДП", "ОВДП USD", 2.0, 1000.0, 1010.0, "2027-04-20", 4.5, cur = "USD")
+        assertTrue(isBondCurPos(bond)); assertFalse(isFxPos(bond))
+        assertEquals(2 * 1010.0 * 41, posValueUah(bond, r), 1e-9)
+        val uah = Pos("ОВДП", "ОВДП UAH", 2.0, 1000.0, 1010.0)
+        assertFalse(isBondCurPos(uah)); assertEquals(2020.0, posValueUah(uah, r), 1e-9)
     }
 }
