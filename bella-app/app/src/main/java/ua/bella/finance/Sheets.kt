@@ -18,6 +18,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -351,15 +353,10 @@ private fun SettingsList(vm: BellaViewModel) {
     val openCopy = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.readBackup(uri) }
     val saveXlsx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri -> if (uri != null) vm.exportXlsx(uri) }
     SettingRow(Icons.Outlined.TableChart, "Експорт у Excel (.xlsx)", "Операції, по місяцях і по категоріях", trailing = true) { saveXlsx.launch(xlsxFileName(TODAY)) }
-    SettingRow(Icons.Outlined.Backup, "Зберегти резервну копію", "Файл JSON з усіма даними (без PIN, не шифрується)", trailing = true) { saveCopy.launch(backupFileName(TODAY)) }
+    SettingRow(Icons.Outlined.Backup, "Зберегти резервну копію", "Файл JSON з усіма даними (без PIN)" + if (vm.backupPwOn) " · зашифровано паролем" else " · не зашифровано", trailing = true) { saveCopy.launch(backupFileName(TODAY)) }
     SettingRow(Icons.Outlined.Restore, "Відновити з копії", "Замінює поточні дані даними з файлу", trailing = true) { openCopy.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
-    vm.pendingRestore?.let { b ->
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            T("Відновити дані з копії" + (if (b.createdAt.isNotEmpty()) " від ${b.createdAt.replace('T', ' ')}" else "") + "?", 13.sp, weight = FontWeight.Medium)
-            T("У копії: операцій ${b.state.data.txs.size}, рахунків ${b.state.data.accs.size}, позицій ${b.state.data.pos.size}. Поточні дані можна буде повернути кнопкою «Скасувати». PIN не зміниться.", 11.sp, C.n500)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Не відновлювати", false, Modifier.weight(1f)) { vm.cancelRestore() }; Btn("Відновити", true, Modifier.weight(1f)) { vm.confirmRestore() } }
-        }
-    }
+    RestorePrompts(vm)
+    BackupPasswordRow(vm)
     AutoBackupRows(vm)
     if (vm.backupMsg.isNotEmpty()) T(vm.backupMsg, 12.sp, if (vm.backupMsg.startsWith("Не ") || vm.backupMsg.startsWith("Це не")) C.neg else C.n500)
     SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
@@ -370,6 +367,48 @@ private fun SettingsList(vm: BellaViewModel) {
     SettingRow(if (vm.light) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Тема", if (vm.light) "Світла" else "Темна") { vm.toggleTheme() }
     SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
     T("Bella Finance ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_DATE}", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
+}
+
+/** Підтвердження відновлення; для зашифрованої копії — спершу пароль. Також на екрані відновлення. */
+@Composable
+fun RestorePrompts(vm: BellaViewModel) {
+    vm.pendingEnc?.let { env ->
+        var pw by remember(env) { mutableStateOf("") }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            T("Копія зашифрована паролем" + (if (env.createdAt.isNotEmpty()) " · від ${env.createdAt.replace('T', ' ')}" else ""), 13.sp, weight = FontWeight.Medium)
+            Field("Пароль копії", pw, password = true) { pw = it }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Btn("Скасувати", false, Modifier.weight(1f)) { vm.cancelRestore() }
+                Btn(if (vm.backupBusy) "Перевірка…" else "Відкрити", true, Modifier.weight(1f)) { if (!vm.backupBusy) vm.unlockBackup(pw) }
+            }
+        }
+    }
+    vm.pendingRestore?.let { b ->
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(C.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            T("Відновити дані з копії" + (if (b.createdAt.isNotEmpty()) " від ${b.createdAt.replace('T', ' ')}" else "") + "?", 13.sp, weight = FontWeight.Medium)
+            T("У копії: операцій ${b.state.data.txs.size}, рахунків ${b.state.data.accs.size}, позицій ${b.state.data.pos.size}. Поточні дані можна буде повернути кнопкою «Скасувати». PIN не зміниться.", 11.sp, C.n500)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Btn("Не відновлювати", false, Modifier.weight(1f)) { vm.cancelRestore() }; Btn("Відновити", true, Modifier.weight(1f)) { vm.confirmRestore() } }
+        }
+    }
+}
+
+/** Шифрування копій паролем: і ручної, і щотижневої автокопії. */
+@Composable
+private fun BackupPasswordRow(vm: BellaViewModel) {
+    var edit by remember { mutableStateOf(false) }
+    var p1 by remember { mutableStateOf("") }; var p2 by remember { mutableStateOf("") }
+    SettingRow(Icons.Outlined.Password, "Шифрувати копію паролем", if (vm.backupPwOn) "Увімкнено: ручні копії й автокопії шифруються (AES-256)" else "Вимкнено: копії зберігаються відкритим JSON") {
+        if (vm.backupPwOn) vm.clearBackupPassword() else edit = !edit
+    }
+    if (edit && !vm.backupPwOn) Column(Modifier.padding(start = 32.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Field("Пароль (щонайменше 6 символів)", p1, password = true) { p1 = it }
+        Field("Повторіть пароль", p2, password = true) { p2 = it }
+        T("Без пароля зашифровану копію не відновити — запишіть його. Пароль зберігається на цьому телефоні зашифрованим, щоб робити автокопії.", 11.sp, C.n500)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Btn("Скасувати", false, Modifier.weight(1f)) { edit = false; p1 = ""; p2 = "" }
+            Btn("Увімкнути", true, Modifier.weight(1f)) { if (vm.setBackupPassword(p1, p2)) { edit = false; p1 = ""; p2 = "" } }
+        }
+    }
 }
 
 /** Автокопія раз на тиждень у вибрану папку (8 останніх) і нагадування про виплати ОВДП. */
@@ -433,7 +472,7 @@ private fun SecurityList(vm: BellaViewModel) {
         }
         SettingRow(Icons.Outlined.Lock, "Заблокувати зараз", "") { vm.lockNow() }
     }
-    T("PIN зберігається лише як хеш на цьому пристрої. Відбиток пальця працює через системний BiometricPrompt.", 11.sp, C.n500)
+    T("PIN зберігається лише як хеш PBKDF2 (120 000 ітерацій, випадкова сіль) на цьому пристрої. Після 5 хибних спроб — пауза 30 с, далі вдвічі довше (до 15 хв), і перезапуск її не знімає. Відбиток пальця працює через системний BiometricPrompt.", 11.sp, C.n500)
 }
 
 private val HELP = listOf(
@@ -448,8 +487,9 @@ private val HELP = listOf(
     Icons.Outlined.NotificationsActive to ("Нагадування про ОВДП" to "Налаштування, Нагадування про ОВДП. Сповіщення приходить за 3 дні до виплати купона чи погашення і в день виплати, близько 9:00. Дати беруться з позиції: для позицій з калькулятора — від дати погашення з кроком виплат, для інших — від «наступної виплати» кожні 6 місяців. Суми орієнтовні."),
     Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються."),
     Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),
-    Icons.Outlined.VerifiedUser to ("Безпека" to "Налаштування, Безпека: PIN-код із 4 цифр, відбиток пальця, автоблокування та ручне блокування. Після 5 хибних спроб потрібно зачекати 30 секунд."),
-    Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Автокопія щотижня: виберіть папку на телефоні (наприклад, Documents/Bella), і раз на тиждень туди зберігатиметься копія bella-auto-РРРР-ММ-ДД.json; лишаються 8 найновіших. Щоб копії були і в хмарі, синхронізуйте цю папку з Google Drive окремою програмою або час від часу копіюйте файл. Відновлення — «Відновити з копії». Налаштування, Стерти дані видаляє все без можливості відновлення."),
+    Icons.Outlined.VerifiedUser to ("Безпека" to "Налаштування, Безпека: PIN-код із 4 цифр, відбиток пальця, автоблокування та ручне блокування. PIN зберігається лише як хеш PBKDF2 (120 000 ітерацій, випадкова сіль). Після 5 хибних спроб потрібно зачекати 30 секунд, кожна наступна хибна спроба подвоює паузу (до 15 хвилин); перезапуск застосунку паузу не знімає. Усі дані на телефоні зашифровані ключем із захищеного сховища Android (AES-256). Скриншоти й запис екрана в застосунку заборонені, а в «Недавніх програмах» замість вмісту — порожнє вікно."),
+    Icons.Outlined.NewReleases to ("Що нового" to "1.26.0 — безпека: дані на телефоні зашифровані (AES-256, ключ у захищеному сховищі Android), PIN на PBKDF2 зі стійким блокуванням після хибних спроб, заборона скриншотів, виключення з хмарних копій Google, шифрування резервних копій паролем, екран відновлення, якщо дані не розшифровуються. Функції не змінились, наявні дані переносяться автоматично. 1.25 — календар, розподіл і реінвестування ОВДП. 1.24 — валюти GBP і CHF, графіки й картка IBKR без Yahoo, менший APK."),
+    Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Автокопія щотижня: виберіть папку на телефоні (наприклад, Documents/Bella), і раз на тиждень туди зберігатиметься копія bella-auto-РРРР-ММ-ДД.json; лишаються 8 найновіших. Щоб копії були і в хмарі, синхронізуйте цю папку з Google Drive окремою програмою або час від часу копіюйте файл. Відновлення — «Відновити з копії». «Шифрувати копію паролем» шифрує і ручні копії, і автокопії (AES-256, ключ із пароля): без пароля такий файл не відкрити, тож запишіть його. Старі відкриті копії відновлюються як і раніше. Дані застосунку не потрапляють у хмарну копію Google і не переносяться системою на новий телефон — для перенесення використовуйте резервну копію. Якщо після скидання захищеного сховища дані не розшифровуються, застосунок нічого не стирає, а пропонує відновити їх з автокопії чи файлу. Налаштування, Стерти дані видаляє все без можливості відновлення."),
 )
 
 @Composable

@@ -52,7 +52,11 @@ object Jobs {
     }
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private fun state(ctx: Context): Persisted? = try { prefs(ctx).getString("state", null)?.let { json.decodeFromString<Persisted>(it) } } catch (_: Exception) { null }
+    /** Збережений стан (розшифрований). Лише читання: міграцію відкритого «state» робить сам застосунок. Помилка — null, і нічого не пишеться. */
+    private fun state(ctx: Context): Persisted? = try {
+        val r = StateStore.load(PrefsKV.of(ctx), KeystoreKeys.stateCipher, { t -> try { json.decodeFromString<Persisted>(t); true } catch (_: Exception) { false } }, migrate = false)
+        (r as? StateLoad.Ok)?.let { json.decodeFromString<Persisted>(it.json) }
+    } catch (_: Exception) { null }
 
     // ---------- автокопія ----------
     fun autoDir(ctx: Context): Uri? = prefs(ctx).getString("autoDir", null)?.let(Uri::parse)
@@ -70,6 +74,8 @@ object Jobs {
         val dir = autoDir(ctx) ?: return if (force) "Спершу виберіть папку для автокопій" else null
         if (!force && !autoBackupDue(autoAt(ctx), System.currentTimeMillis())) return null
         val st = state(ctx) ?: return "Немає даних для копії"
+        // пароль копії (якщо задано) зберігається зашифрованим; не прочитався — копію не робимо, щоб не записати відкритий файл
+        val pw = if (BackupPassword.isSet(ctx)) BackupPassword.get(ctx) ?: return "Не вдалося прочитати пароль автокопії. Задайте його ще раз у Налаштуваннях." else null
         return try {
             val r = ctx.contentResolver
             val parent = DocumentsContract.buildDocumentUriUsingTree(dir, DocumentsContract.getTreeDocumentId(dir))
@@ -77,13 +83,21 @@ object Jobs {
             val children = listChildren(ctx, dir)
             children[name]?.let { DocumentsContract.deleteDocument(r, it) }
             val doc = DocumentsContract.createDocument(r, parent, "application/json", name) ?: return "Не вдалося створити файл автокопії"
-            r.openOutputStream(doc, "wt")?.use { it.write(makeBackup(st, LocalDateTime.now().withNano(0).toString()).toByteArray(Charsets.UTF_8)) } ?: return "Не вдалося записати автокопію"
+            r.openOutputStream(doc, "wt")?.use { it.write(makeBackup(st, LocalDateTime.now().withNano(0).toString(), pw).toByteArray(Charsets.UTF_8)) } ?: return "Не вдалося записати автокопію"
             val all = listChildren(ctx, dir)
             autoBackupsToDelete(all.keys.toList()).forEach { n -> all[n]?.let { try { DocumentsContract.deleteDocument(r, it) } catch (_: Exception) {} } }
             prefs(ctx).edit().putLong("autoAt", System.currentTimeMillis()).apply()
             "Автокопію збережено: $name"
         } catch (_: Exception) { "Немає доступу до папки автокопій. Виберіть її ще раз." }
     }
+
+    /** Текст найновішої автокопії в папці (для екрана відновлення) або null. */
+    fun latestAutoBackupText(ctx: Context): String? = try {
+        val dir = autoDir(ctx) ?: return null
+        val all = listChildren(ctx, dir)
+        val name = all.keys.filter { it.startsWith(AUTO_PREFIX) && it.endsWith(".json") }.maxOrNull() ?: return null
+        ctx.contentResolver.openInputStream(all.getValue(name))?.use { it.readBytes().toString(Charsets.UTF_8) }
+    } catch (_: Exception) { null }
 
     private fun listChildren(ctx: Context, tree: Uri): Map<String, Uri> {
         val q = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))

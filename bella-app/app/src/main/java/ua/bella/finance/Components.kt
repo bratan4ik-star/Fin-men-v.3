@@ -83,13 +83,14 @@ fun <K> Seg(options: List<Pair<K, String>>, value: K, modifier: Modifier = Modif
 }
 
 @Composable
-fun Field(label: String, value: String, modifier: Modifier = Modifier, hint: String = "", numeric: Boolean = false, onChange: (String) -> Unit) {
+fun Field(label: String, value: String, modifier: Modifier = Modifier, hint: String = "", numeric: Boolean = false, password: Boolean = false, onChange: (String) -> Unit) {
     Column(modifier) {
         T(label, 12.sp, C.n500, modifier = Modifier.padding(bottom = 4.dp))
         OutlinedTextField(
             value, onChange, Modifier.fillMaxWidth(), singleLine = true, textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = C.text),
             placeholder = { if (hint.isNotEmpty()) T(hint, 14.sp, C.n600) },
-            keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text), shape = RoundedCornerShape(8.dp),
+            keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else if (numeric) KeyboardType.Decimal else KeyboardType.Text, autoCorrectEnabled = !password), shape = RoundedCornerShape(8.dp),
+            visualTransformation = if (password) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = C.accent, unfocusedBorderColor = C.divider, cursorColor = C.accent, focusedContainerColor = C.surface, unfocusedContainerColor = C.surface),
         )
     }

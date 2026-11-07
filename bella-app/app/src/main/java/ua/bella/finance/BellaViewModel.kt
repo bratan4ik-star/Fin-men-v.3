@@ -22,7 +22,16 @@ import java.time.LocalDate
 class BellaViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("bella", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val loaded: Persisted = try { prefs.getString("state", null)?.let { json.decodeFromString<Persisted>(it) } ?: Persisted() } catch (e: Exception) { Persisted() }
+    private val kv = PrefsKV(prefs)
+    private fun validState(t: String) = try { json.decodeFromString<Persisted>(t); true } catch (_: Exception) { false }
+    /** Стан зашифрований ключем з AndroidKeyStore (StateStore.kt); відкритий «state» зі старих версій мігрує при першому запуску. */
+    private val stateLoad: StateLoad = try { StateStore.load(kv, KeystoreKeys.stateCipher, ::validState) } catch (e: Exception) { StateLoad.Failed("Сховище даних недоступне: ${e.javaClass.simpleName}") }
+    private val loaded: Persisted = (stateLoad as? StateLoad.Ok)?.let { try { json.decodeFromString<Persisted>(it.json) } catch (_: Exception) { null } } ?: Persisted()
+    /**
+     * Не null — збережені дані є, але прочитати їх не вдалося (ключ у Keystore втрачено або дані пошкоджено).
+     * Тоді показується екран відновлення і нічого не записується, щоб не затерти дані порожнім станом.
+     */
+    var storeBroken by mutableStateOf((stateLoad as? StateLoad.Failed)?.reason); private set
 
     var data by mutableStateOf(ensureAccIds(loaded.data)); private set
     var cur by mutableStateOf(loaded.cur); private set
@@ -70,10 +79,11 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var entry by mutableStateOf("")
     var tmp = ""
     var kerr by mutableStateOf("")
-    // лічильник помилок PIN і час блокування зберігаються, тож перезапуск застосунку блокування не знімає
-    private var fails = prefs.getInt("pinFails", 0)
-    private var until = prefs.getLong("pinUntil", 0L)
-    private fun saveLock() { prefs.edit().putInt("pinFails", fails).putLong("pinUntil", until).apply() }
+    // лічильник помилок PIN і час блокування зберігаються в SharedPreferences, тож перезапуск блокування не знімає
+    private var lock = PinLockStore.load(kv)
+    /** PBKDF2 рахується у фоні: поки триває перевірка, натискання ігноруються. */
+    var pinBusy by mutableStateOf(false); private set
+    private fun lockMsg(): String = pinLockLeft(lock, System.currentTimeMillis()).let { if (it > 0) pinLockText(it) else "" }
     var hiddenAt = 0L
 
     /** Читає ratesTick, щоб екрани перемальовувались після оновлення курсів. */
@@ -102,13 +112,50 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Копія, прочитана з файлу й готова до відновлення (чекає підтвердження). */
     var pendingRestore by mutableStateOf<Backup?>(null); private set
 
+    /** Копія, зашифрована паролем: чекає введення пароля. */
+    var pendingEnc by mutableStateOf<EncryptedBackup?>(null); private set
+    var backupBusy by mutableStateOf(false); private set
+    /** Копії (ручна й автокопія) шифруються паролем, збереженим зашифровано на цьому телефоні. */
+    var backupPwOn by mutableStateOf(BackupPassword.isSet(app)); private set
+
     fun exportBackup(uri: Uri) {
-        val text = makeBackup(snapshot(), java.time.LocalDateTime.now().withNano(0).toString())
+        val snap = snapshot(); val at = java.time.LocalDateTime.now().withNano(0).toString()
+        val pw = if (backupPwOn) BackupPassword.get(getApplication()) ?: run { backupMsg = "Не вдалося прочитати пароль копії. Задайте його ще раз."; return } else null
+        backupBusy = true
         viewModelScope.launch {
             val ok = withContext(Dispatchers.IO) {
-                try { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } != null } catch (_: Exception) { false }
+                try { val text = makeBackup(snap, at, pw); getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray(Charsets.UTF_8)) } != null } catch (_: Exception) { false }
             }
-            backupMsg = if (ok) "Копію збережено: операцій ${data.txs.size}, рахунків ${data.accs.size}" else "Не вдалося записати файл копії"
+            backupBusy = false
+            backupMsg = if (ok) "Копію збережено" + (if (pw != null) " (зашифровано паролем)" else "") + ": операцій ${snap.data.txs.size}, рахунків ${snap.data.accs.size}" else "Не вдалося записати файл копії"
+        }
+    }
+    /** Пароль копій: не коротший за 6 символів, двічі однаковий. */
+    fun setBackupPassword(p1: String, p2: String): Boolean {
+        if (p1.length < 6) { backupMsg = "Пароль копії — щонайменше 6 символів"; return false }
+        if (p1 != p2) { backupMsg = "Паролі не збігаються"; return false }
+        if (!BackupPassword.set(getApplication(), p1)) { backupMsg = "Не вдалося зберегти пароль на пристрої"; return false }
+        backupPwOn = true; backupMsg = "Копії шифруватимуться паролем. Запам'ятайте його: без пароля копію не відкрити."; return true
+    }
+    fun clearBackupPassword() { BackupPassword.clear(getApplication()); backupPwOn = false; backupMsg = "Копії більше не шифруються паролем" }
+    /** Розпізнає файл копії: відкритий — одразу до підтвердження, зашифрований — спершу пароль. */
+    fun readBackupText(text: String?) {
+        pendingRestore = null; pendingEnc = null
+        when (val f = text?.let { readBackupFile(it) } ?: BackupFile.Invalid) {
+            is BackupFile.Plain -> { pendingRestore = f.backup; backupMsg = "" }
+            is BackupFile.Encrypted -> { pendingEnc = f.env; backupMsg = "" }
+            BackupFile.Invalid -> backupMsg = "Це не копія Bella Finance або файл пошкоджено"
+        }
+    }
+    fun unlockBackup(password: String) {
+        val env = pendingEnc ?: return
+        if (password.isEmpty()) { backupMsg = "Введіть пароль копії"; return }
+        backupBusy = true
+        viewModelScope.launch {
+            val b = withContext(Dispatchers.Default) { decryptBackup(env, password) }
+            backupBusy = false
+            if (b == null) backupMsg = "Невірний пароль або файл пошкоджено"
+            else { pendingEnc = null; pendingRestore = b; backupMsg = "" }
         }
     }
     /** «Бюджет → Звіт»: 0 — по місяцях, 1 — календарний рік, 2 — останні 12 місяців; repYear — вибраний рік. */
@@ -142,12 +189,51 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             val text = withContext(Dispatchers.IO) {
                 try { getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } } catch (_: Exception) { null }
             }
-            val b = text?.let { parseBackup(it) }
-            if (b == null) backupMsg = "Це не копія Bella Finance або файл пошкоджено"
-            else { pendingRestore = b; backupMsg = "" }
+            readBackupText(text)
         }
     }
-    fun cancelRestore() { pendingRestore = null }
+    fun cancelRestore() { pendingRestore = null; pendingEnc = null }
+    /** Екран відновлення: найновіша автокопія з вибраної папки. */
+    fun restoreFromAuto() {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) { Jobs.latestAutoBackupText(getApplication()) }
+            if (text == null) backupMsg = "Автокопію не знайдено. Виберіть файл копії вручну." else readBackupText(text)
+        }
+    }
+    /** Екран відновлення: ще раз спробувати прочитати збережені дані (напр. після оновлення системи). */
+    fun retryLoad() {
+        val r = try { StateStore.load(kv, KeystoreKeys.stateCipher, ::validState) } catch (e: Exception) { StateLoad.Failed(e.javaClass.simpleName) }
+        val p = (r as? StateLoad.Ok)?.let { try { json.decodeFromString<Persisted>(it.json) } catch (_: Exception) { null } }
+        if (p == null) { backupMsg = "Дані все ще не читаються"; return }
+        applyPersisted(p, withSec = true); storeBroken = null; backupMsg = ""
+    }
+    var freshAsk by mutableStateOf(false); private set
+    /** Екран відновлення: почати з порожніми даними (з підтвердженням). Нерозшифрований запис не видаляється, а відкладається. */
+    fun startFresh() {
+        if (!freshAsk) { freshAsk = true; return }
+        freshAsk = false
+        prepareStoreAfterFailure()
+        storeBroken = null
+        data = AppData(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), demo = false)
+        persist()
+    }
+    /**
+     * Перед першим записом після збою: нерозшифрований запис відкладається (не перезаписується), а ключ, що не працює
+     * для шифрування, замінюється новим — інакше відновлені дані не збереглися б.
+     */
+    private fun prepareStoreAfterFailure() {
+        StateStore.setAsideBroken(kv)
+        val works = try { KeystoreKeys.stateCipher.let { c -> c.decrypt(c.encrypt("check")) == "check" } } catch (_: Exception) { false }
+        if (!works) KeystoreKeys.delete(KeystoreKeys.STATE)
+    }
+    private fun applyPersisted(p: Persisted, withSec: Boolean) {
+        p.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
+        ratesDate = p.ratesDate; ratesAt = p.ratesAt; ratesTick++
+        cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibkr.restore(p)
+        month = p.month.coerceAtLeast(0)
+        if (withSec) sec = p.sec
+        data = ensureAccIds(p.data)
+    }
     /** Замінює дані копією. Поточні дані лишаються в «Скасувати», PIN цього телефону не змінюється. */
     fun confirmRestore() {
         val b = pendingRestore ?: return
@@ -156,6 +242,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         ratesDate = p.ratesDate; ratesAt = p.ratesAt; ratesTick++
         cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibkr.restore(p)
         month = p.month.coerceAtLeast(0)
+        if (storeBroken != null) prepareStoreAfterFailure()
+        storeBroken = null  // відновлення з копії знімає екран відновлення
         commit(p.data)
         pendingRestore = null
         backupMsg = "Дані відновлено з копії" + if (b.createdAt.isNotEmpty()) " від ${b.createdAt.replace('T', ' ')}" else ""
@@ -168,13 +256,17 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
      * найновіший. after виконується після запису (напр. перевірка лімітів читає вже збережений стан).
      */
     private fun persist(after: (() -> Unit)? = null) {
+        if (storeBroken != null) return  // дані не прочиталися: нічого не записуємо, доки користувач не відновить їх
         val t = System.currentTimeMillis()
         try { hist = upsertHist(hist, TODAY, Totals(this).net) } catch (_: Exception) {}
         val snap = snapshot(); val seq = ++saveSeq
         saveScope.launch {
             if (seq == saveSeq) try {
-                prefs.edit().putString("state", json.encodeToString(snap)).putLong("savedAt", t).commit()
-                withContext(Dispatchers.Main) { savedAt = t }
+                // лише зашифровано; якщо Keystore недоступний — попередній запис лишається, відкритий текст не пишеться
+                if (StateStore.save(kv, KeystoreKeys.stateCipher, json.encodeToString(snap))) {
+                    prefs.edit().putLong("savedAt", t).commit()
+                    withContext(Dispatchers.Main) { savedAt = t }
+                }
             } catch (_: Exception) {}
             after?.invoke()
         }
@@ -185,6 +277,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     private val saveScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
     init {
+        if (kmode == KMode.Unlock) kerr = lockMsg()
         loaded.rates.forEach { (c, v) -> if (c != "UAH" && v > 0 && RATES.containsKey(c)) RATES[c] = v }
         if (System.currentTimeMillis() - loaded.ratesAt > 6 * 3600_000L) refreshRates()
         // щомісячні виплати депозитів, що настали (зокрема пропущені, поки застосунок не відкривали)
@@ -660,32 +753,50 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun setBio(b: Boolean) = saveSec(sec.copy(bio = b))
     fun setAuto(m: Int) = saveSec(sec.copy(autoMin = m))
     fun startPin(mode: KMode, act: String) { sheet = Sheet.None; kmode = mode; kact = act; entry = ""; kerr = "" }
-    fun lockNow() { sheet = Sheet.None; kmode = KMode.Unlock; entry = ""; kerr = "" }
+    fun lockNow() { sheet = Sheet.None; kmode = KMode.Unlock; entry = ""; kerr = lockMsg() }
     fun cancelPin() { kmode = KMode.None; entry = ""; kerr = ""; tmp = "" }
-    fun unlockByBio() { kmode = KMode.None; entry = ""; kerr = "" }
+    fun unlockByBio() { lock = PinLock(); PinLockStore.save(kv, lock); kmode = KMode.None; entry = ""; kerr = "" }
     fun onStopped() { hiddenAt = System.currentTimeMillis() }
-    fun onStarted() { runRecurring(); refreshNotifyState(); ibkr.autoSync(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = ""; sheet = Sheet.None } }
+    fun onStarted() { runRecurring(); refreshNotifyState(); ibkr.autoSync(); if (sec.hash.isNotEmpty() && hiddenAt > 0 && kmode == KMode.None && System.currentTimeMillis() - hiddenAt >= sec.autoMin * 60000L) { kmode = KMode.Unlock; entry = ""; kerr = lockMsg(); sheet = Sheet.None } }
     fun backspace() { entry = entry.dropLast(1) }
     fun press(d: String) {
-        if (kmode == KMode.None) return
-        val now = System.currentTimeMillis()
-        if (now < until) { kerr = "Забагато спроб. Зачекайте ${(until - now + 999) / 1000} с"; return }
+        if (kmode == KMode.None || pinBusy) return
+        val checking = kmode == KMode.Unlock || kmode == KMode.Old
+        val left = pinLockLeft(lock, System.currentTimeMillis())
+        if (checking && left > 0) { kerr = pinLockText(left); entry = ""; return }
         val v = entry + d
         if (v.length < 4) { entry = v; kerr = ""; return }
-        entry = v; val h = hashPin(v); val m = kmode
+        entry = v; val m = kmode
         when (m) {
-            KMode.Unlock, KMode.Old -> if (h == sec.hash) {
-                fails = 0; until = 0L; saveLock()
-                if (m == KMode.Unlock) { kmode = KMode.None; entry = ""; kerr = "" }
-                else if (kact == "disable") { saveSec(Security("", false, sec.autoMin)); kmode = KMode.None; entry = ""; kerr = "" }
-                else { kmode = KMode.New; entry = ""; kerr = "" }
-            } else {
-                fails++; entry = ""
-                if (fails >= 5) { kerr = "Забагато спроб. Зачекайте 30 с"; until = now + 30000; fails = 0 } else kerr = "Невірний PIN. Спроба $fails з 5"
-                saveLock()
+            KMode.Unlock, KMode.Old -> {
+                pinBusy = true; val stored = sec.hash
+                viewModelScope.launch {
+                    val chk = withContext(Dispatchers.Default) { verifyPin(v, stored) }
+                    // старий SHA-256 хеш після успішного входу перезаписується в новому форматі
+                    val upgraded = if (chk.ok && chk.upgrade) withContext(Dispatchers.Default) { hashPin(v) } else null
+                    pinBusy = false
+                    if (chk.ok) {
+                        lock = PinLock(); PinLockStore.save(kv, lock)
+                        if (upgraded != null) saveSec(sec.copy(hash = upgraded))
+                        if (m == KMode.Unlock) { kmode = KMode.None; entry = ""; kerr = "" }
+                        else if (kact == "disable") { saveSec(Security("", false, sec.autoMin)); kmode = KMode.None; entry = ""; kerr = "" }
+                        else { kmode = KMode.New; entry = ""; kerr = "" }
+                    } else {
+                        val now = System.currentTimeMillis()
+                        lock = pinFailed(lock, now); PinLockStore.save(kv, lock); entry = ""
+                        val l = pinLockLeft(lock, now)
+                        kerr = if (l > 0) pinLockText(l) else "Невірний PIN. Спроба ${lock.fails} з $PIN_MAX_FAILS"
+                    }
+                }
             }
             KMode.New -> { tmp = v; kmode = KMode.Confirm; entry = ""; kerr = "" }
-            KMode.Confirm -> if (v == tmp) { saveSec(sec.copy(hash = h)); kmode = KMode.None; entry = ""; kerr = ""; tmp = "" } else { kmode = KMode.New; entry = ""; tmp = ""; kerr = "PIN не збігається. Створіть заново" }
+            KMode.Confirm -> if (v == tmp) {
+                pinBusy = true
+                viewModelScope.launch {
+                    val h = withContext(Dispatchers.Default) { hashPin(v) }
+                    pinBusy = false; saveSec(sec.copy(hash = h)); kmode = KMode.None; entry = ""; kerr = ""; tmp = ""
+                }
+            } else { kmode = KMode.New; entry = ""; tmp = ""; kerr = "PIN не збігається. Створіть заново" }
             else -> {}
         }
     }
