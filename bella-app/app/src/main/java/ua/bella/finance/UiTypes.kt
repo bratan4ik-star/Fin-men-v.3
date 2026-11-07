@@ -17,6 +17,8 @@ data class Form(
     // операція: дата, рахунок, для переказу — рахунок і сума зарахування; txIdx — індекс операції, що редагується
     val tDate: String = "", val tAcc: String = "", val tToAcc: String = "", val tToAmt: String = "", val txIdx: Int = -1,
     val pMonthly: Boolean = false, val pPayAcc: String = "", val cashF: Boolean = false,
+    // ОВДП: купони в дохід автоматично на рахунок pPayAcc
+    val pAuto: Boolean = false,
     // ETF: валюта ціни, курс купівлі (₴ за 1 одиницю валюти)
     val pCur: String = "UAH", val pFx: String = "",
     // ОВДП: випуск, вибраний з довідника НБУ (null — дані введено вручну)

@@ -443,7 +443,9 @@ fun InvScreen(vm: BellaViewModel) {
                                     if (fxPlausible(p.buyFx, RATES[p.cur] ?: 0.0)) T("ціна ${fx(p.pxNow)}" + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
                                     else T("Курс купівлі ${fmt2(p.buyFx)} ₴ за 1 ${p.cur} схожий на помилку (НБУ ${fmt2(RATES[p.cur] ?: 0.0)}), тому вартість купівлі в гривнях неправильна. Торкніться позиції й виправте «Курс купівлі» або очистіть його.", 11.sp, C.neg, maxLines = 4)
                                 }
-                                T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
+                                val payTo = if (p.autoCpn) vm.data.accs.firstOrNull { it.id == p.payAcc }?.name else null
+                                if (ovdpRedeemed(p, TODAY)) T("Погашено ${ddmmyy(p.mat)}" + (payTo?.let { " · номінал на «$it»" } ?: ""), 11.sp, C.n500)
+                                else T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null, payTo?.let { "купони → «$it»" }).joinToString(" · "), 11.sp, C.n500)
                             }
                         }
                     }
@@ -598,6 +600,8 @@ fun CalcScreen(vm: BellaViewModel) {
             }
 
             if (tab == 0) {
+                // увесь довідник НБУ з пошуком і фільтрами
+                Btn("Вибрати випуск з довідника НБУ", false, Modifier.fillMaxWidth(), Icons.Outlined.Search) { vm.openOvdpPick(forCalc = true) }
                 // Швидкі пресети випусків
                 val live = remember(vm.nbu) { registryPresets(vm.nbu, java.time.LocalDate.parse(TODAY)) }
                 OvdpPresetsRow(s.isin, live.ifEmpty { activeOvdpPresets(java.time.LocalDate.parse(TODAY)) },

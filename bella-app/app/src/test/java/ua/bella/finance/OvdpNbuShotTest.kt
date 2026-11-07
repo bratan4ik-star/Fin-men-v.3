@@ -115,4 +115,37 @@ class OvdpNbuShotTest {
         rule.runOnUiThread { vm.closeSheet() }
         assertEquals("закриття вибору повертає до форми", Sheet.PosE, vm.sheet); assertNull(vm.form.pBond?.takeIf { it.cur == "USD" })
     }
+
+    @Test fun autoCouponsToAccount() {
+        val vm = androidx.lifecycle.ViewModelProvider(rule.activity)[BellaViewModel::class.java]
+        val b = registry().bonds.first { it.isin == "UA4000239149" }
+        rule.runOnUiThread { vm.seedNbu(registry()); vm.openPos(); vm.openOvdpPick(); vm.pickBond(b) }
+        val acc = vm.defaultPayAcc("UAH")
+        rule.runOnUiThread { vm.form = vm.form.copy(pQty = "10", pBuy = "985", pAuto = true, pPayAcc = acc) }
+        show(vm) { PosForm(vm, false) }
+        shot("14-ovdp-auto-coupons")
+        rule.runOnUiThread { vm.submit() }
+        val p = vm.data.pos.last()
+        assertTrue(p.autoCpn); assertEquals(TODAY, p.autoFrom); assertEquals(acc, p.payAcc)
+        // без рахунку не зберігається
+        rule.runOnUiThread { vm.openPos(); vm.form = vm.form.copy(pName = "ОВДП X", pQty = "1", pBuy = "1000", pAuto = true, pPayAcc = "немає") }
+        val n = vm.data.pos.size
+        rule.runOnUiThread { vm.submit() }
+        assertEquals(n, vm.data.pos.size); assertEquals("Виберіть рахунок для купонів", vm.formErr)
+    }
+
+    @Test fun calculatorPicksFromRegistry() {
+        val vm = androidx.lifecycle.ViewModelProvider(rule.activity)[BellaViewModel::class.java]
+        val b = registry().bonds.first { it.isin == "UA4000236541" }
+        rule.runOnUiThread { vm.seedNbu(registry()); vm.go(Screen.Calc); vm.openOvdpPick(forCalc = true) }
+        assertEquals(Sheet.OvdpPick, vm.sheet)
+        rule.runOnUiThread { vm.pickBond(b) }
+        assertEquals(Sheet.None, vm.sheet)
+        val c = vm.calcIn
+        assertEquals("UA4000236541", c.isin); assertEquals("USD", c.cur); assertEquals("1000", c.nom); assertEquals("4.17", c.coupon); assertEquals(6, c.freq); assertEquals("2027-02-04", c.mat)
+        assertTrue(c.sellD <= c.mat)
+        // закриття вибору з калькулятора просто закриває вікно
+        rule.runOnUiThread { vm.openOvdpPick(forCalc = true); vm.closeSheet() }
+        assertEquals(Sheet.None, vm.sheet)
+    }
 }
