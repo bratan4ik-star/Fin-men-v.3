@@ -45,7 +45,7 @@ ETF у валюті фонду показуються в ній же: варті
 Вибір дати: усі поля дати (дата операції, термін боргу, дедлайн цілі, дати позиції й депозиту, фільтр за датою, калькулятор ОВДП) мають кнопку календаря: дату можна вибрати, кнопки «Сьогодні» й «Очистити», або ввести вручну як раніше (`DatePick.kt`).
 
 ## Збірка
-Потрібні JDK 17 і Android SDK 34 (шлях до SDK: `ANDROID_HOME` або `sdk.dir` у `local.properties`). Відкрийте папку в Android Studio або з терміналу:
+Потрібні JDK 17 і Android SDK 36 (шлях до SDK: `ANDROID_HOME` або `sdk.dir` у `local.properties`). Відкрийте папку в Android Studio або з терміналу:
 
 ```
 ./gradlew :app:testDebugUnitTest   # юніт-тести
@@ -136,7 +136,7 @@ Interactive Brokers (1.21.0): синхронізація через Flex Web Ser
 - **Знімки екранів у CI**: `ScreenshotTest` (Robolectric, Native Graphics) малює основні екрани й вікно графіків IBKR на демо-даних; PNG — в артефакті `bella-app-screenshots`. Знімки виявили TWR −149%, коли поповнення датоване днем раніше за вартість рахунку: таке поповнення тепер переноситься в дохідність наступного дня.
 - **Картка «Рахунок IBKR»** угорі «Інвестицій»: вартість, результат і TWR за місяць, торкання відкриває графіки.
 - **R8** для release: APK 12,6 → 2,4 МБ; правила зберігають класи kotlinx.serialization (формат стану й копій не змінився) — `app/proguard-rules.pro`.
-- **Бібліотеки**: AGP 8.11.1, Kotlin 2.1.21, Compose BOM 2025.06.01, AndroidX, kotlinx-serialization 1.8.1; compileSdk і targetSdk 35.
+- **Бібліотеки**: AGP 8.11.1, Kotlin 2.1.21, Compose BOM 2025.06.01, AndroidX, kotlinx-serialization 1.8.1; compileSdk і targetSdk 36.
 - **Yahoo Finance прибрано повністю**: немає котирувань і історії цін з Yahoo, тікерів у формі, «Ціна з біржі» й «Оновити ціни з біржі». Ціни ETF з IBKR — markPrice з Flex-звіту; історія цін для графіка — з розділу Flex «Prior Period Positions» і ціни на дату кожного звіту, накопичується до 5 років (`Persisted.ibPx`, `mergeIbPrices`). Ручні ETF оновлюються вручну. Поле `ticker` лишилось у даних лише для зіставлення старих ручних позицій з IBKR.
 - **Без `!!`**: `rateOf()` дає курс 1 для невідомої валюти замість падіння.
 - **Код**: стан і логіка IBKR — `IbkrController.kt`, типи інтерфейсу — `UiTypes.kt`.
