@@ -578,6 +578,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                 commit(s.copy(accs = s.accs.mapIndexed { i, a -> if (i == f.editIdx) a.copy(name = f.name.trim(), bal = parseNum(f.bal), sav = f.sav, cash = f.cashF, card = f.card.ifEmpty { a.card }) else a })); closeSheet()
             }
             Sheet.Import -> importCommit()
+            Sheet.Reclass -> { val ch = reclassifyImported(s.txs); if (ch.isNotEmpty()) commit(applyReclass(s, ch)); reclass = emptyList(); closeSheet() }
             Sheet.PosE -> {
                 val o = s.pos.getOrNull(f.editIdx) ?: run { closeSheet(); return }
                 val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
@@ -910,6 +911,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             impItems = impItems.mapIndexed { i, itm -> if (i == index) itm.copy(selected = !itm.selected) else itm }
         }
     }
+
+    /** Перекласифікація імпортованих операцій: попередній перегляд змін перед застосуванням. */
+    var reclass by mutableStateOf<List<ReclassChange>>(emptyList()); private set
+    fun openReclass() { reclass = reclassifyImported(data.txs); sheet = Sheet.Reclass }
 
     /** Картка з виписки (останні 4 цифри) → id рахунку, який вона позначає; «» — створити новий рахунок. */
     var impCardLink by mutableStateOf<Map<String, String>>(emptyMap()); private set
