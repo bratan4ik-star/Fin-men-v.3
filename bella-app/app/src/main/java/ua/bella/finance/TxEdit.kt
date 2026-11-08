@@ -121,3 +121,7 @@ fun bulkDelete(d: AppData, idx: Set<Int>): AppData {
     d.txs.forEachIndexed { i, t -> if (i in idx) accs = applyTxEffect(accs, t, -1.0) }
     return d.copy(txs = d.txs.filterIndexed { i, _ -> i !in idx }, accs = accs)
 }
+
+/** Записує номер картки з діалогу виписки в обраний рахунок: link = (останні 4 цифри → id рахунку; «» — без змін). */
+fun linkCards(accs: List<Account>, link: Map<String, String>): List<Account> =
+    accs.map { a -> link.entries.firstOrNull { it.value.isNotEmpty() && it.value == a.id }?.let { a.copy(card = it.key) } ?: a }

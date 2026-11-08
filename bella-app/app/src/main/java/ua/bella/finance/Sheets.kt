@@ -646,6 +646,22 @@ private fun ImportForm(vm: BellaViewModel) {
                     Ico(if (vm.impAcc) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp)
                     T("Оновити рахунки за залишками карток (${r.accs.size})", 12.sp)
                 }
+                // картки з виписки без збігу: це новий рахунок чи один з наявних (наприклад, депозит)
+                vm.impUnmatched().forEach { n ->
+                    val last = n.card.takeLast(4)
+                    val opts = listOf("Створити новий рахунок (${n.cur})") + vm.data.accs.map { "${it.name} · ${it.cur}" }
+                    val chosen = vm.impCardLink[last] ?: ""
+                    val sel = if (chosen.isEmpty()) 0 else vm.data.accs.indexOfFirst { it.id == chosen } + 1
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(C.surface).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        T("Картка •$last — це ваш рахунок?", 13.sp, weight = FontWeight.Medium)
+                        T("Оберіть рахунок, який вона позначає, або створіть новий. Наявний рахунок не перейменовується і його валюта не змінюється.", 11.sp, C.n500)
+                        Dropdown("Рахунок для картки •$last", opts, sel.coerceAtLeast(0)) { i ->
+                            vm.setCardLink(last, if (i == 0) "" else vm.data.accs[i - 1].id)
+                        }
+                    }
+                }
+                val matched = r.accs.filter { n -> vm.impUnmatched().none { it.card == n.card } }
+                if (matched.isNotEmpty()) T("Картки, що вже є в рахунках: " + matched.joinToString { "•" + it.card.takeLast(4) }, 11.sp, C.n500)
             }
 
             // Список операцій для перегляду з можливістю індивідуального вибору

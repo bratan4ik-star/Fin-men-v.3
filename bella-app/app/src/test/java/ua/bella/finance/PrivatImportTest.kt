@@ -123,4 +123,16 @@ class PrivatImportTest {
         assertEquals("dep", merged.single().id); assertTrue(merged.single().sav)
         assertEquals(503024.11, merged.single().bal, 1e-9)   // залишок без згоди не змінюється
     }
+
+    @Test fun unmatchedCardLinkedToChosenAccountThenMatchedByNumber() {
+        // користувач у діалозі позначив картку 7174 як свій наявний рахунок «Картка Моно»
+        val mono = Account("Картка Моно", "UAH", 100.0, id = "mono")
+        val linked = linkCards(listOf(mono), mapOf("7174" to "mono"))
+        assertEquals("7174", linked.single().card)
+        val r = parse(row("02.11.2026 02:00:00", "Розваги", "5169 **** **** 7174", "Онлайн", "-10.00"))
+        val merged = mergeImportedAccs(linked, r.accs)
+        assertEquals(listOf("Картка Моно"), merged.map { it.name })   // не перейменовано, дубля немає
+        // порожній вибір — рахунок не змінюється
+        assertEquals(linked, linkCards(linked, mapOf("7174" to "")))
+    }
 }

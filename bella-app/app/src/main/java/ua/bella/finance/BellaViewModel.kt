@@ -887,7 +887,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 } catch (e: Throwable) { ImportResult(emptyList(), emptyList(), 0, "Не вдалося прочитати файл (${e.javaClass.simpleName}: ${e.message?.take(80) ?: "—"})") }
             }
-            impResult = r
+            impResult = r; impCardLink = emptyMap()
             val existing = if (data.demo && r.accs.isNotEmpty()) emptyList() else data.txs
             impItems = detectDuplicates(r.txs, existing)
             impSkipDuplicates = true
@@ -908,6 +908,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             impItems = impItems.mapIndexed { i, itm -> if (i == index) itm.copy(selected = !itm.selected) else itm }
         }
     }
+
+    /** Картка з виписки (останні 4 цифри) → id рахунку, який вона позначає; «» — створити новий рахунок. */
+    var impCardLink by mutableStateOf<Map<String, String>>(emptyMap()); private set
+    /** Картки з виписки без збігу з наявними рахунками (за полем card). */
+    fun impUnmatched(): List<Account> = (impResult?.accs ?: emptyList()).filter { n -> data.accs.none { it.card.isNotEmpty() && it.card.takeLast(4) == n.card.takeLast(4) } }
+    fun setCardLink(card: String, accId: String) { impCardLink = impCardLink + (card to accId) }
 
     fun toggleSkipDuplicates(skip: Boolean) {
         impSkipDuplicates = skip
@@ -942,7 +948,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val txs = selectedTxs + keep
         var nd = s.copy(txs = txs, demo = s.demo && !rep)
         if (rep) nd = nd.copy(pos = emptyList(), goals = emptyList(), debts = emptyList())
-        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(s.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
+        // картка, вибрана в діалозі, стає номером картки цього рахунку (далі зіставлення вже за номером)
+        nd = nd.copy(accs = linkCards(nd.accs, impCardLink))
+        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(nd.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
         commit(nd); tab = 1; sheet = Sheet.None
         month = data.txs.map { it.date.take(7) }.distinct().sorted().size - 1
         persist()
