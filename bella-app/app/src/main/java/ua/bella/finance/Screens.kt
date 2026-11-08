@@ -504,7 +504,7 @@ fun InvScreen(vm: BellaViewModel) {
     }
 }
 private val CashC = Color(0xFF4ADE80)
-private fun fmtQty(q: Double) = if (q == Math.floor(q)) q.toLong().toString() else q.toString()
+internal fun fmtQty(q: Double) = if (q == Math.floor(q)) q.toLong().toString() else q.toString()
 
 // ================= ЦІЛІ =================
 @Composable
@@ -594,7 +594,7 @@ fun CalcScreen(vm: BellaViewModel) {
         TopBar("ОВДП та Інвестиції", vm)
         Page {
             // Перемикач режимів: Калькулятор, Календар виплат, Розподіл ОВДП, або Реінвестування
-            Seg(listOf(0 to "Калькулятор", 1 to "Календар", 2 to "Розподіл", 3 to "Реінвест"), tab) {
+            Seg(listOf(0 to "Калькулятор", 1 to "Календар", 2 to "Розподіл", 3 to "Реінвест", 4 to "Порівняти"), tab) {
                 tab = it
                 vm.calcTab = it
             }
@@ -744,9 +744,12 @@ fun CalcScreen(vm: BellaViewModel) {
             } else if (tab == 2) {
                 // Вкладка 2: Кругова діаграма розподілу ОВДП (за валютою та термінами погашення)
                 OvdpDistributionSection(vm)
-            } else {
+            } else if (tab == 3) {
                 // Вкладка 3: Симулятор складного відсотка при реінвестуванні купонів ОВДП
                 OvdpReinvestmentSection(vm)
+            } else {
+                // Вкладка 4: порівняння 2–3 випусків за графіком НБУ
+                OvdpCompareTab(vm)
             }
         }
     }

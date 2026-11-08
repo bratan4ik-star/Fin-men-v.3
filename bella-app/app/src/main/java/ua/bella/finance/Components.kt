@@ -73,11 +73,13 @@ fun Btn(text: String, primary: Boolean, modifier: Modifier = Modifier, icon: Ima
 /** Сегментований вибір («чіпси» прототипу). */
 @Composable
 fun <K> Seg(options: List<Pair<K, String>>, value: K, modifier: Modifier = Modifier, onPick: (K) -> Unit) {
+    // багато пунктів (5+): ширина пропорційна довжині підпису й шрифт трохи менший, щоб довгі підписи не обрізались
+    val many = options.size > 4
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, C.divider, RoundedCornerShape(8.dp)).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         options.forEach { (k, l) ->
             val sel = k == value
-            Box(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(if (sel) C.accent800 else Color.Transparent).clickable { onPick(k) }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                T(l, 12.sp, if (sel) C.accent300 else C.n500, maxLines = 1)
+            Box(Modifier.weight(if (many) l.length.coerceAtLeast(4).toFloat() else 1f).clip(RoundedCornerShape(6.dp)).background(if (sel) C.accent800 else Color.Transparent).clickable { onPick(k) }.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                T(l, if (many) 11.sp else 12.sp, if (sel) C.accent300 else C.n500, maxLines = 1)
             }
         }
     }

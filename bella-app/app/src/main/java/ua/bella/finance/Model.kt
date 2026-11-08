@@ -106,6 +106,8 @@ data class Persisted(
     val ibPx: Map<String, List<HistPoint>> = emptyMap(),
     /** Довідник ОВДП з відкритих даних НБУ (кеш, OvdpRegistry.kt): зберігається разом зі станом, тобто зашифровано. */
     val nbu: OvdpRegistry = OvdpRegistry(),
+    /** Податок на дохід ОВДП для «Порівняти ОВДП», % (зараз 0 — ПДФО для фізосіб не сплачується). */
+    val ovdpTax: Double = 0.0,
 )
 
 object DemoData {

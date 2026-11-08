@@ -47,6 +47,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var ratesBusy by mutableStateOf(false); private set
     var ratesMsg by mutableStateOf(""); private set
 
+    /** Податок на дохід ОВДП для «Порівняти ОВДП», % — зберігається (на випадок змін у законі). Оголошено до init: його читає snapshot(). */
+    var ovdpTax by mutableStateOf(loaded.ovdpTax); private set
+
     // довідник ОВДП НБУ (OvdpRegistry.kt)
     var nbu by mutableStateOf(loaded.nbu); private set
     var nbuBusy by mutableStateOf(false); private set
@@ -114,7 +117,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Interactive Brokers: синхронізація й історія для графіків (IbkrController.kt). */
     val ibkr = IbkrController(app, viewModelScope, loaded, { data }, { commit(it) }, { persist() })
 
-    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibkr.nav, ibkr.flows, ibkr.base, ibkr.px, nbu)
+    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibkr.nav, ibkr.flows, ibkr.base, ibkr.px, nbu, ovdpTax)
 
     // ---------- резервна копія ----------
     var backupMsg by mutableStateOf(""); private set
@@ -241,6 +244,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibkr.restore(p)
         month = p.month.coerceAtLeast(0)
         if (p.nbu.updatedAt > nbu.updatedAt) nbu = p.nbu
+        ovdpTax = p.ovdpTax
         if (withSec) sec = p.sec
         data = ensureAccIds(p.data)
     }
@@ -730,11 +734,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun togglePosCheck() { posCheck = !posCheck; if (posCheck && registryDue(nbu, System.currentTimeMillis())) refreshNbu() }
 
     /** Кнопка «Вибрати випуск» у формі ОВДП. Довідник завантажується, якщо його ще немає або він застарів. */
-    /** Вибір відкрито з калькулятора ОВДП: вибраний випуск заповнює калькулятор. */
+    /** Куди йде вибраний випуск: форма позиції, калькулятор (forCalc) або «Порівняти» (forCompare). */
     private var pickForCalc = false
-    fun openOvdpPick(forCalc: Boolean = false) {
-        pickForCalc = forCalc
-        pickBack = if (forCalc) Sheet.None else if (sheet == Sheet.PosE) Sheet.PosE else Sheet.Pos
+    private var pickForCmp = false
+    fun openOvdpPick(forCalc: Boolean = false, forCompare: Boolean = false) {
+        pickForCalc = forCalc; pickForCmp = forCompare
+        pickBack = if (forCalc || forCompare) Sheet.None else if (sheet == Sheet.PosE) Sheet.PosE else Sheet.Pos
         pickQ = ""; pickTerm = null; pickCur = null; nbuMsg = ""
         sheet = Sheet.OvdpPick
         if (registryDue(nbu, System.currentTimeMillis())) refreshNbu()
@@ -743,6 +748,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Вибір випуску заповнює ISIN, валюту, номінал, купон, погашення й графік; кількість і ціну вводить користувач. */
     fun pickBond(b: NbuBond) {
         val today = LocalDate.parse(TODAY)
+        if (pickForCmp) { cmpAdd(b); sheet = Sheet.None; return }
         if (pickForCalc) {
             // калькулятор: ISIN, валюта, номінал, купон, періодичність, погашення й дата розміщення; ціну й кількість — вводить користувач
             calcIn = calcIn.copy(isin = b.isin, cur = b.cur, nom = if (b.nom % 1.0 == 0.0) b.nom.toLong().toString() else b.nom.toString(), coupon = b.rate.toString(),
@@ -795,6 +801,48 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val f = form
         form = f.copy(pRate = b.rate.toString(), pMat = b.mat, pNext = nextCoupon(b, LocalDate.parse(TODAY)).ifEmpty { f.pNext },
             pBond = if (f.pCur == b.cur) b else null)
+    }
+
+    // ---------- порівняти ОВДП (OvdpCompare.kt, OvdpCompareUi.kt) ----------
+    /** Випуск у порівнянні: повна ціна за 1 шт (у валюті випуску, як введено) і звідки взято. */
+    data class CmpEntry(val bond: NbuBond, val price: String = "", val from: String = "")
+    var cmp by mutableStateOf(listOf<CmpEntry>()); private set
+    var cmpAmount by mutableStateOf("100000")
+    var cmpDate by mutableStateOf(TODAY)
+    /** Припущена ставка реінвестування (частка); null — дохідність найкоротшого варіанту. */
+    var cmpRate by mutableStateOf<Double?>(null)
+    var cmpMsg by mutableStateOf(""); private set
+    fun setOvdpTax(v: String) { val t = parseNum(v).coerceIn(0.0, 100.0); if (t != ovdpTax) { ovdpTax = t; persist() } }
+
+    fun cmpAdd(b: NbuBond, price: String = "", from: String = "") {
+        cmpMsg = when {
+            cmp.any { it.bond.isin == b.isin } -> "${b.isin} уже в порівнянні"
+            cmp.size >= 3 -> "Порівнювати можна до 3 випусків"
+            else -> { cmp = cmp + CmpEntry(b, price, from); cmpRate = null; "" }
+        }
+    }
+    fun cmpRemove(i: Int) { cmp = cmp.filterIndexed { j, _ -> j != i }; cmpRate = null; cmpMsg = "" }
+    fun cmpSetPrice(i: Int, v: String) { cmp = cmp.mapIndexed { j, e -> if (j == i) e.copy(price = v) else e } }
+    /** Позиції ОВДП, чий випуск є в довіднику НБУ (їх можна додати в порівняння). */
+    fun cmpPositions(): List<Pos> = data.pos.filter { it.group == "ОВДП" && it.qty > 0 && nbuIndex.containsKey(posIsin(it)) }
+    /** Додати з моїх позицій: ціна — поточна ціна позиції за 1 шт у валюті випуску. */
+    fun cmpAddPosition(p: Pos) {
+        val b = nbuIndex[posIsin(p)] ?: return
+        val px = if (isBondCurPos(p) || p.cur == b.cur) p.now else p.now / rateOf(b.cur)
+        cmpAdd(b, if (px > 0) fmtPlain(px) else "", p.name)
+    }
+    fun cmpSettle(): LocalDate = cmpDate.takeIf { isIsoDate(it) }?.let { LocalDate.parse(it) } ?: LocalDate.parse(TODAY)
+    fun cmpResults(): List<CmpResult> =
+        compareOvdp(cmp.map { CmpPick(it.bond, parseNum(it.price)) }, parseNum(cmpAmount), cmpSettle(), RATES.toMap(), ovdpTax)
+    /** «Додати в портфель»: форма нової позиції з випуском, кількістю й ціною з порівняння. */
+    fun cmpToPortfolio(r: CmpResult) {
+        val leg = r.legs.singleOrNull() ?: return
+        val b = nbuIndex[leg.isin] ?: cmp.firstOrNull { it.bond.isin == leg.isin }?.bond ?: return
+        openPos()
+        // ціна у формі: валютна — у валюті випуску, гривнева — у валюті перегляду (як у формі)
+        val px = if (b.cur == "UAH") leg.price / rate else leg.price
+        form = form.copy(group = "ОВДП", pName = "ОВДП ${b.isin}", pCur = b.cur, pRate = b.rate.toString(), pMat = b.mat,
+            pNext = nextCoupon(b, LocalDate.parse(TODAY)), pBond = b, pQty = leg.qty.toString(), pBuy = fmtPlain(px))
     }
 
     // ---------- калькулятор ----------
