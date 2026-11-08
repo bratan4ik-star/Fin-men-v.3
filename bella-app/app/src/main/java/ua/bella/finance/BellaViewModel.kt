@@ -76,6 +76,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var impResult by mutableStateOf<ImportResult?>(null); private set
     var impBusy by mutableStateOf(false); private set
     var impAcc by mutableStateOf(true)
+    /** Оновлювати залишки рахунків з виписки — лише за згодою користувача (за замовчуванням ні). */
+    var impBal by mutableStateOf(false)
     var impItems by mutableStateOf<List<ImportItem>>(emptyList()); private set
     var impSkipDuplicates by mutableStateOf(true)
 
@@ -950,7 +952,16 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (rep) nd = nd.copy(pos = emptyList(), goals = emptyList(), debts = emptyList())
         // картка, вибрана в діалозі, стає номером картки цього рахунку (далі зіставлення вже за номером)
         nd = nd.copy(accs = linkCards(nd.accs, impCardLink))
-        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(nd.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
+        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(nd.accs, applyOv(r.accs), updateBal = impBal)); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
+        // прив'язка операцій до рахунків за номером картки (ключ операції містить картку другим полем)
+        val byCard = nd.accs.filter { it.card.isNotEmpty() }.associate { it.card.takeLast(4) to it.id }
+        // лише нові операції з виписки; старі не чіпаємо
+        val linkedNew = selectedTxs.map { t ->
+            val card = t.key.split("|").getOrNull(1)?.takeLast(4).orEmpty()
+            val id = byCard[card]
+            if (t.acc.isEmpty() && !id.isNullOrEmpty()) t.copy(acc = id) else t
+        }
+        nd = nd.copy(txs = linkedNew + keep)
         commit(nd); tab = 1; sheet = Sheet.None
         month = data.txs.map { it.date.take(7) }.distinct().sorted().size - 1
         persist()
