@@ -876,7 +876,15 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                         ?: return@withContext ImportResult(emptyList(), emptyList(), 0, "Не вдалося відкрити файл «$name» (немає доступу)")
                     val bytes = ins.use { it.readBytes() }
                     if (bytes.isEmpty()) ImportResult(emptyList(), emptyList(), 0, "Файл порожній")
-                    else Importer.parseBytes(bytes, rate, rules)
+                    else {
+                        // курс на дату операції: спершу розбір без архіву, далі архів НБУ за період (по валютах виписки)
+                        val first = Importer.parseBytes(bytes, rate, rules)
+                        val dates = first.txs.map { it.date }.sorted()
+                        val curs = (RATES.keys - "UAH").toList()
+                        val archive = HashMap<String, MutableMap<String, Double>>()
+                        if (dates.isNotEmpty()) for (c in curs) fetchNbuHistory(c, dates.first(), dates.last()).forEach { (d, v) -> archive.getOrPut(d) { HashMap() }[c] = v }
+                        if (archive.isEmpty()) first else Importer.parseBytes(bytes, rate, rules, archive)
+                    }
                 } catch (e: Throwable) { ImportResult(emptyList(), emptyList(), 0, "Не вдалося прочитати файл (${e.javaClass.simpleName}: ${e.message?.take(80) ?: "—"})") }
             }
             impResult = r

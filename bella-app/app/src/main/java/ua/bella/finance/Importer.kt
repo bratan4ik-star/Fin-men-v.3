@@ -18,7 +18,24 @@ data class ImportItem(
     val selected: Boolean = !isDuplicate
 )
 
-data class ImportResult(val txs: List<Tx>, val accs: List<Account>, val bad: Int, val error: String = "") {
+/** Підсумок виписки до імпорту: великі суми видно одразу (доходи / витрати / інвестиції / перекази). */
+data class ImportTotals(val income: Double, val expense: Double, val invest: Double, val ownTransfers: Double, val peerTransfers: Double)
+
+/** Категорії переказів між людьми: вони не доходи й не витрати, їх показуємо окремим рядком. */
+val PEER_CATS = setOf("Перекази людям", "Перекази на картки (перевірити)", "Перекази від людей")
+
+fun importTotals(txs: List<Tx>): ImportTotals {
+    fun s(p: (Tx) -> Boolean) = txs.filter(p).sumOf { it.amt }
+    return ImportTotals(
+        income = s { it.type == "income" && it.cat !in PEER_CATS },
+        expense = s { it.type == "expense" && it.cat !in PEER_CATS },
+        invest = s { it.type == "transfer" && it.cat == "Інвестиції" },
+        ownTransfers = s { it.type == "transfer" && it.cat != "Інвестиції" },
+        peerTransfers = s { it.cat in PEER_CATS },
+    )
+}
+
+data class ImportResult(val txs: List<Tx>, val accs: List<Account>, val bad: Int, val error: String = "", val approxRates: Int = 0) {
     val info: String get() {
         if (error.isNotEmpty()) return error
         if (txs.isEmpty()) return "Не вдалося розпізнати рядки"
@@ -26,6 +43,7 @@ data class ImportResult(val txs: List<Tx>, val accs: List<Account>, val bad: Int
         return "Операцій: ${txs.size} · ${ddmmyyyy(ds.first())} – ${ddmmyyyy(ds.last())}" +
             (if (accs.isNotEmpty()) " · карток: ${accs.size}" else "") + (if (bad > 0) " · пропущено: $bad" else "")
     }
+    val totals: ImportTotals get() = importTotals(txs)
     val info2: String get() {
         val tr = txs.count { it.type == "transfer" }
         return if (tr > 0) "Між власними картками та заощадженнями: $tr. Вони не рахуються доходом чи витратою." else ""
@@ -300,11 +318,50 @@ object Importer {
         )
     }
 
-    private fun readRows(rows: List<Map<String, String>>, rules: List<CatRule>): ImportResult? {
+    private val INVEST_RE = Regex("облігац|ovdp|овдп|інвестиційний капітал|\\bicu\\b|interactive brokers|ibkr", RegexOption.IGNORE_CASE)
+    private val REDEEM_RE = Regex("номінал|погашен", RegexOption.IGNORE_CASE)
+    private val COUPON_RE = Regex("купон|відсот|%", RegexOption.IGNORE_CASE)
+    private val ZNYSH_RE = Regex("знищ|znysh", RegexOption.IGNORE_CASE)
+    private val DV_RE = Regex("(?<!\\p{L})(дв|dv)(?!\\p{L})|додатков", RegexOption.IGNORE_CASE)
+    private val SALARY_RE = Regex("hroshove|грошове забезпечення|зарплата", RegexOption.IGNORE_CASE)
+
+    /**
+     * Виписка ПриватБанку: інвестиції — не витрати, спецдоходи за коментарем, перекази людям і на картки.
+     * Повертає (тип, категорія) або null, якщо правило не спрацювало (тоді — звичайна класифікація).
+     */
+    fun classifyPrivat(cat: String, desc: String, a: Double): Pair<String, String>? {
+        if (INVEST_RE.containsMatchIn(desc) || INVEST_RE.containsMatchIn(cat)) {
+            val coupon = a > 0 && COUPON_RE.containsMatchIn(desc) && !REDEEM_RE.containsMatchIn(desc)
+            if (!coupon) return "transfer" to "Інвестиції"
+        }
+        if (a > 0) {
+            if (cat == "Зарахування переказу" || cat == "Перекази") return "income" to "Перекази від людей"
+            val c = when {
+                ZNYSH_RE.containsMatchIn(desc) -> "За знищену техніку"
+                DV_RE.containsMatchIn(desc) -> "Бойові (ДВ)"
+                SALARY_RE.containsMatchIn(desc) -> "Грошове забезпечення"
+                desc.contains("Соціальні", ignoreCase = true) -> "Соціальні виплати"
+                else -> null
+            }
+            if (c != null) return "income" to c
+        } else if (cat == "Перекази") {
+            return "expense" to (if (desc.trim().equals("На картку", ignoreCase = true)) "Перекази на картки (перевірити)" else "Перекази людям")
+        }
+        return null
+    }
+
+    /** Курс на дату операції: з архіву НБУ, інакше поточний (тоді [approx] = true). */
+    fun rateOn(cur: String, iso: String, archive: Map<String, Map<String, Double>>): Pair<Double, Boolean> {
+        if (cur == "UAH") return 1.0 to false
+        archive[iso]?.get(cur)?.let { return it to false }
+        return (RATES[cur] ?: 1.0) to true
+    }
+
+    internal fun readRows(rows: List<Map<String, String>>, rules: List<CatRule>, archive: Map<String, Map<String, Double>> = emptyMap()): ImportResult? {
         val hi = rows.indexOfFirst { findCols(it) != null }
         if (hi < 0) return null
         val c = findCols(rows[hi]) ?: return null
-        val txs = mutableListOf<Tx>(); val accs = mutableListOf<Account>(); val seen = HashSet<String>(); var bad = 0
+        val txs = mutableListOf<Tx>(); val accs = mutableListOf<Account>(); val seen = HashSet<String>(); var bad = 0; var approx = 0
         rows.drop(hi + 1).forEach { r ->
             fun g(col: String?) = col?.let { r[it] } ?: ""
             val dRaw = g(c.date); val iso = toIso(dRaw)
@@ -315,22 +372,28 @@ object Importer {
             if (iso == null || a == null || a == 0.0) { bad++; return@forEach }
             val card = g(c.card); val cur = g(c.cur).uppercase().ifEmpty { "UAH" }; val cat = g(c.cat)
             val desc = g(c.desc).ifEmpty { cat }.ifEmpty { "Операція" }
-            val type = classifyType(cat, desc, a)
-            val c1 = if (type == "income" && cat.startsWith("Зарахування")) "Надходження" else (CMAP[cat] ?: cat.ifEmpty { "Інше" })
-            // правило користувача важливіше за категорію банку (перекази не чіпаємо)
-            val c2 = if (type == "transfer") c1 else ruleFor(desc, rules) ?: c1
-            txs.add(Tx(desc, c2, type, Math.abs(a) * (RATES[cur] ?: 1.0), iso, "$dRaw|$card|$a|$desc"))
-            if (card.isNotEmpty() && seen.add(card)) {
+            val special = classifyPrivat(cat, desc, a)
+            val (type, c1) = special ?: run {
+                val t = classifyType(cat, desc, a)
+                t to (if (t == "income" && cat.startsWith("Зарахування")) "Надходження" else (CMAP[cat] ?: cat.ifEmpty { "Інше" }))
+            }
+            // правило користувача важливіше за категорію банку; перекази й спецкатегорії не чіпаємо
+            val c2 = if (type == "transfer" || special != null) c1 else ruleFor(desc, rules) ?: c1
+            val (rate, isApprox) = rateOn(cur, iso, archive)
+            if (isApprox) approx++
+            txs.add(Tx(desc, c2, type, Math.abs(a) * rate, iso, "$dRaw|$card|$a|$desc", accAmt = Math.abs(a)))
+            val last4 = card.takeLast(4)
+            if (last4.isNotEmpty() && seen.add(last4)) {
                 val bc = g(c.balCur).uppercase().ifEmpty { cur }
-                accs.add(Account("Картка •" + card.takeLast(4), if (RATES.containsKey(bc)) bc else if (RATES.containsKey(cur)) cur else "UAH", num(g(c.bal)) ?: 0.0))
+                accs.add(Account("Картка •$last4", if (RATES.containsKey(bc)) bc else if (RATES.containsKey(cur)) cur else "UAH", num(g(c.bal)) ?: 0.0, card = last4))
             }
         }
-        return ImportResult(txs, accs, bad)
+        return ImportResult(txs, accs, bad, approxRates = approx)
     }
 
     fun parseXlsx(ins: InputStream): ImportResult = parseXlsx(ins.readBytes())
 
-    fun parseXlsx(bytes: ByteArray, rules: List<CatRule> = DEFAULT_RULES): ImportResult = try {
+    fun parseXlsx(bytes: ByteArray, rules: List<CatRule> = DEFAULT_RULES, archive: Map<String, Map<String, Double>> = emptyMap()): ImportResult = try {
         val files = readZip(bytes)
         val sheets = files.keys.filter { SHEET_NAME.matches(it) }.sortedWith(compareBy({ it.length }, { it }))
         if (sheets.isEmpty()) ImportResult(emptyList(), emptyList(), 0, ERR_NOT_XLSX)
@@ -339,7 +402,7 @@ object Importer {
             var res: ImportResult? = null
             for (s in sheets) {
                 val h = SheetHandler(sst).also { saxParse(files.getValue(s), it) }
-                res = readRows(h.rows, rules)
+                res = readRows(h.rows, rules, archive)
                 if (res != null) break
             }
             res ?: ImportResult(emptyList(), emptyList(), 0, ERR_NO_HEADER)
@@ -351,6 +414,6 @@ object Importer {
     }
 
     /** Точка входу для UI: сама визначає тип (xlsx за сигнатурою, інакше CSV). */
-    fun parseBytes(b: ByteArray, curRate: Double, rules: List<CatRule> = DEFAULT_RULES): ImportResult =
-        if (isZip(b)) parseXlsx(b, rules) else parseCsv(decodeText(b), curRate, rules)
+    fun parseBytes(b: ByteArray, curRate: Double, rules: List<CatRule> = DEFAULT_RULES, archive: Map<String, Map<String, Double>> = emptyMap()): ImportResult =
+        if (isZip(b)) parseXlsx(b, rules, archive) else parseCsv(decodeText(b), curRate, rules)
 }

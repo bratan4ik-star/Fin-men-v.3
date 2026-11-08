@@ -32,7 +32,8 @@ val DEFAULT_RULES = listOf(
     CatRule("зарплат, salary, фріланс", "Зарплата"),
 )
 
-@Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false, val id: String = "")
+/** card — останні 4 цифри картки (для зіставлення з випискою); порожньо для ручних рахунків. */
+@Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false, val id: String = "", val card: String = "")
 /**
  * amt завжди в гривнях. type: income | expense | transfer. key використовується для пошуку повторів при імпорті.
  * acc — id рахунку («» = без рахунку), accAmt — сума у валюті рахунку, що змінила його баланс.
