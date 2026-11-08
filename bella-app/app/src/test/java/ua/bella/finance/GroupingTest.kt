@@ -43,4 +43,10 @@ class GroupingTest {
         assertEquals(listOf("A", "C"), settleDebt(d, 1).map { it.who })
         assertEquals(d, settleDebt(d, 9))
     }
+
+    @Test fun everyHelpSectionIsInExactlyOneGroup() {
+        val all = HELP_GROUPS.flatMap { it.second }
+        assertEquals((0 until HELP.size).toList(), all.sorted())
+        assertEquals(all.size, all.toSet().size)
+    }
 }

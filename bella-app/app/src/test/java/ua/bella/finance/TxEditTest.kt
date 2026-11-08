@@ -91,8 +91,9 @@ class TxEditTest {
         val d = ensureAccIds(base.copy(accs = listOf(Account("A", "UAH", 1.0), Account("B", "UAH", 2.0))))
         assertTrue(d.accs.all { it.id.isNotEmpty() }); assertNotEquals(d.accs[0].id, d.accs[1].id)
         assertTrue(ensureAccIds(d) === d)
-        val old = listOf(Account("Картка •1234", "UAH", 0.0, id = "x"), Account("Моно", "UAH", 0.0, id = "y"))
-        val new = carryAccIds(old, listOf(Account("Monobank •1234", "UAH", 5.0), Account("Моно", "UAH", 7.0), Account("Нова", "UAH", 1.0)))
-        assertEquals(listOf("x", "y", ""), new.map { it.id })
+        // зіставлення лише за номером картки: назва не має значення
+        val old = listOf(Account("Картка •1234", "UAH", 0.0, id = "x", card = "1234"), Account("Моно", "UAH", 0.0, id = "y"))
+        val new = carryAccIds(old, listOf(Account("Monobank •1234", "UAH", 5.0, card = "1234"), Account("Моно", "UAH", 7.0), Account("Нова", "UAH", 1.0, card = "5555")))
+        assertEquals(listOf("x", "", ""), new.map { it.id })
     }
 }

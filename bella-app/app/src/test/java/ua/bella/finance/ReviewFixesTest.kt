@@ -34,11 +34,13 @@ class ReviewFixesTest {
 
     // ---- імпорт не стирає рахунки ----
     @Test fun importKeepsManualAccounts() {
-        val old = listOf(Account("Картка •1234", "UAH", 100.0, id = "c"), Account("Готівка USD", "USD", 500.0, cash = true, id = "u"), Account("Скарбничка", "UAH", 9000.0, sav = true, id = "s"))
-        val imported = listOf(Account("Картка •1234", "UAH", 2500.0), Account("Картка •9999", "UAH", 70.0))
+        val old = listOf(Account("Моя картка", "UAH", 100.0, id = "c", card = "1234"), Account("Готівка USD", "USD", 500.0, cash = true, id = "u"), Account("Скарбничка", "UAH", 9000.0, sav = true, id = "s"))
+        val imported = listOf(Account("Картка •1234", "UAH", 2500.0, card = "1234"), Account("Картка •9999", "UAH", 70.0, card = "9999"))
+        // збіг за номером картки; назва й баланс наявного рахунку не змінюються без згоди
         val r = mergeImportedAccs(old, imported)
-        assertEquals(listOf("Картка •1234", "Готівка USD", "Скарбничка", "Картка •9999"), r.map { it.name })
-        assertEquals(2500.0, r[0].bal, 1e-9); assertEquals("c", r[0].id)
+        assertEquals(listOf("Моя картка", "Готівка USD", "Скарбничка", "Картка •9999"), r.map { it.name })
+        assertEquals(100.0, r[0].bal, 1e-9); assertEquals("c", r[0].id)
+        assertEquals(2500.0, mergeImportedAccs(old, imported, updateBal = true)[0].bal, 1e-9)
         assertEquals(500.0, r[1].bal, 1e-9); assertTrue(r[1].cash)
         assertTrue(r[2].sav)
     }

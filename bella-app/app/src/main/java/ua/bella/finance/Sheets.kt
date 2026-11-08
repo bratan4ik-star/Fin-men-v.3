@@ -91,6 +91,7 @@ private fun AccForm(vm: BellaViewModel) {
     Field("Назва", f.name, hint = "напр. Monobank Чорна") { vm.form = f.copy(name = it) }
     Field("Початковий баланс", f.bal, hint = "0", numeric = true) { vm.form = f.copy(bal = it) }
     Seg(CURRENCIES.map { it to it }, f.cur) { vm.form = f.copy(cur = it) }
+    Field("Останні 4 цифри картки (необов'язково)", f.card, hint = "напр. 1983", numeric = true) { vm.form = f.copy(card = it.filter { c -> c.isDigit() }.takeLast(4)) }
     Row(Modifier.clickable { vm.form = f.copy(cashF = !f.cashF) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Ico(if (f.cashF) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Готівка (показувати в портфелі)", 13.sp)
     }
@@ -271,7 +272,7 @@ internal fun PosForm(vm: BellaViewModel, edit: Boolean) {
     val f = vm.form
     val dep = f.group == "Депозити"
     // обов'язкові поля, що ще порожні, — бурштинові (зникає, щойно заповнено)
-    val miss = posMissing(f, vm.formOrig)
+    val miss = posMissing(f, vm.formOrig, redeemed = edit && vm.data.pos.getOrNull(f.editIdx)?.let { ovdpRedeemed(it, TODAY) } == true)
     Seg(GROUPS.map { it.first to it.first }, f.group) { vm.form = f.copy(group = it) }
     Field(if (dep) "Назва депозиту" else "Назва", f.pName, hint = if (edit) vm.was { it.pName } else if (dep) "напр. Депозит Моно, 12 міс." else "напр. VWCE", need = "name" in miss) { vm.form = f.copy(pName = it) }
     if (dep) {
@@ -324,6 +325,7 @@ internal fun PosForm(vm: BellaViewModel, edit: Boolean) {
         }
     }
     if (dep) T("Дата виплати — коли надійдуть відсотки, дата повернення — коли повернеться сума депозиту. Обидві необов'язкові.", 11.sp, C.n500)
+    if (f.group == "ОВДП") OvdpAutoSection(vm, edit)
     if (miss.isNotEmpty()) T("Заповніть виділені поля: " + miss.mapNotNull { if (it == "buy" && dep) "сума депозиту" else MISSING_LABELS[it] }.joinToString(", "), 12.sp, C.warn)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     if (edit) {
@@ -333,11 +335,33 @@ internal fun PosForm(vm: BellaViewModel, edit: Boolean) {
     }
 }
 
+/** ОВДП: купони в дохід автоматично на вибраний рахунок, номінал при погашенні — переказом на нього ж. */
+@Composable
+private fun OvdpAutoSection(vm: BellaViewModel, edit: Boolean) {
+    val f = vm.form
+    val bc = f.pBond?.cur ?: if (edit && f.pCur != "UAH") f.pCur else "UAH"
+    Row(Modifier.clickable { vm.form = f.copy(pAuto = !f.pAuto, pPayAcc = if (!f.pAuto && vm.data.accs.none { it.id == f.pPayAcc && it.cur == bc }) vm.defaultPayAcc(bc) else f.pPayAcc) }.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Ico(if (f.pAuto) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Купони в дохід автоматично", 13.sp)
+    }
+    if (!f.pAuto) return
+    val accs = vm.data.accs
+    if (accs.isEmpty()) { T("Спершу додайте рахунок у «Капітал та Рахунки»: купони зараховуються на рахунок.", 12.sp, C.warn); return }
+    val sel = accs.indexOfFirst { it.id == f.pPayAcc }
+    Dropdown("Зараховувати на рахунок", accs.map { "${it.name} · ${it.cur}" }, sel.coerceAtLeast(0)) { vm.form = f.copy(pPayAcc = accs[it].id) }
+    val acc = accs.getOrNull(sel)
+    if (acc != null && acc.cur != bc) T("Рахунок у ${acc.cur}, випуск у $bc: суми перераховуються за курсом НБУ на дату зарахування.", 11.sp, C.n500)
+    val since = vm.data.pos.getOrNull(f.editIdx)?.takeIf { edit && it.autoCpn && isIsoDate(it.autoFrom) }?.autoFrom
+    T("У день виплати за графіком НБУ (або за датами позиції) створюється операція «Купон» — дохід на цей рахунок. У день погашення номінал переходить на рахунок переказом (не дохід), а позиція позначається погашеною. " +
+        (if (since != null) "Виплати обробляються з ${ddmmyyyy(since)}." else "Купони до сьогодні не дораховуються — лише наступні."), 11.sp, C.n500)
+}
+
 @Composable
 private fun AccEditForm(vm: BellaViewModel) {
     val f = vm.form; val a = vm.data.accs.getOrNull(f.editIdx)
     Field("Назва", f.name, hint = vm.was { it.name }) { vm.form = f.copy(name = it) }
     Field("Поточний баланс (${a?.cur ?: ""})", f.bal, hint = vm.was { it.bal }, numeric = true) { vm.form = f.copy(bal = it) }
+    Field("Останні 4 цифри картки", f.card, hint = vm.was { it.card }.ifEmpty { "напр. 1983" }, numeric = true) { vm.form = f.copy(card = it.filter { c -> c.isDigit() }.takeLast(4)) }
     T(EDIT_NOTE, 11.sp, C.n500)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     T("Виписка показує залишок на дату останньої операції. Введіть актуальний.", 11.sp, C.n500)
@@ -365,6 +389,8 @@ private fun SettingsList(vm: BellaViewModel) {
     val saveCopy = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> if (uri != null) vm.exportBackup(uri) }
     val openCopy = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.readBackup(uri) }
     val saveXlsx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) { uri -> if (uri != null) vm.exportXlsx(uri) }
+    Label("ДАНІ")
+    SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
     SettingRow(Icons.Outlined.TableChart, "Експорт у Excel (.xlsx)", "Операції, по місяцях і по категоріях", trailing = true) { saveXlsx.launch(xlsxFileName(TODAY)) }
     SettingRow(Icons.Outlined.Backup, "Зберегти резервну копію", "Файл JSON з усіма даними (без PIN)" + if (vm.backupPwOn) " · зашифровано паролем" else " · не зашифровано", trailing = true) { saveCopy.launch(backupFileName(TODAY)) }
     SettingRow(Icons.Outlined.Restore, "Відновити з копії", "Замінює поточні дані даними з файлу", trailing = true) { openCopy.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
@@ -372,13 +398,13 @@ private fun SettingsList(vm: BellaViewModel) {
     BackupPasswordRow(vm)
     AutoBackupRows(vm)
     if (vm.backupMsg.isNotEmpty()) T(vm.backupMsg, 12.sp, if (vm.backupMsg.startsWith("Не ") || vm.backupMsg.startsWith("Це не")) C.neg else C.n500)
-    SettingRow(Icons.Outlined.FileUpload, "Імпорт виписки", "Excel або CSV з банку", trailing = true) { vm.openImport() }
-    SettingRow(Icons.Outlined.VerifiedUser, "Безпека", if (vm.sec.hash.isNotEmpty()) "PIN-код" + (if (vm.sec.bio) " · відбиток пальця" else "") else "Захист вимкнено", trailing = true) { vm.openSheet(Sheet.Security) }
-    UndoList(vm)
     SettingRow(Icons.Outlined.ContentCopy, "Прибрати повтори операцій", if (vm.dupInStore > 0) "Знайдено повторів: ${vm.dupInStore}" else "Повторів немає") { vm.dedupeStore() }
+    UndoList(vm)
+    SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
+    Label("БЕЗПЕКА")
+    SettingRow(Icons.Outlined.VerifiedUser, "Безпека", if (vm.sec.hash.isNotEmpty()) "PIN-код" + (if (vm.sec.bio) " · відбиток пальця" else "") else "Захист вимкнено", trailing = true) { vm.openSheet(Sheet.Security) }
     SettingRow(Icons.AutoMirrored.Outlined.HelpOutline, "Довідка", "Як користуватися функціями", trailing = true) { vm.openHelp(-1) }
     SettingRow(if (vm.light) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, "Тема", if (vm.light) "Світла" else "Темна") { vm.toggleTheme() }
-    SettingRow(Icons.Outlined.Delete, if (vm.eraseAsk) "Натисніть ще раз, щоб стерти" else "Стерти дані", if (vm.eraseAsk) "Усі операції, рахунки, борги, інвестиції та цілі буде видалено" else "Видалити всі операції, рахунки, борги, інвестиції та цілі", C.neg) { vm.erase() }
     T("Bella Finance ${BuildConfig.VERSION_NAME} · збірка ${BuildConfig.VERSION_CODE} · ${BuildConfig.BUILD_DATE}", 11.sp, C.n500, modifier = Modifier.padding(top = 8.dp))
 }
 
@@ -498,27 +524,45 @@ internal val HELP = listOf(
     Icons.Outlined.FileUpload to ("Імпорт виписки" to "Налаштування, Імпорт виписки. Підтримує Excel (.xlsx) з банку та CSV. Перекази між власними картками не рахуються доходом чи витратою. Якщо у файлі є повтори, з'явиться кнопка «Прибрати повтори». Файл читається лише на вашому пристрої."),
     Icons.AutoMirrored.Outlined.TrendingUp to ("Інвестиції" to "Кільцева діаграма вгорі показує структуру портфеля. Групи (ОВДП, Депозити, ETF, Крипто, Готівка) розгортаються дотиком; порожні не показуються. «Позиція» додає нову. Депозит: сума, ставка, дата виплати й повернення, «Повторювати щомісяця» створює відсотки в дохід. ETF: оберіть валюту фонду, вкажіть кількість і ціни; ETF з Interactive Brokers оновлюються самі під час синхронізації. ОВДП: у формі позиції «Вибрати випуск» — список з довідника НБУ, «Звірити ОВДП з НБУ» під кнопками — розбіжності наявних позицій з НБУ (див. «Довідник ОВДП НБУ»). «Найближчі виплати ОВДП» — купони й погашення на 60 днів. Внизу — калькулятор складного відсотка. Interactive Brokers: «Налаштування → Interactive Brokers» — токен і номер Flex-запиту; далі при кожному відкритті застосунку, не частіше раз на годину (і кнопкою «Синхронізувати з IBKR» у групі ETF) оновлюються кількість і ціни ETF, гроші на рахунку («IBKR USD» тощо) і дивіденди."),
     Icons.Outlined.NotificationsActive to ("Нагадування про ОВДП" to "Налаштування, Нагадування про ОВДП. Сповіщення приходить за 3 дні до виплати купона чи погашення і в день виплати, близько 9:00. Якщо ISIN позиції є в довіднику НБУ (випуск вибрано з довідника або ISIN UA4000… є в назві), дати й суми беруться з офіційного графіка виплат: сума на 1 папір × кількість; так само будується календар ОВДП. Інакше дати беруться з позиції, як раніше: для позицій з калькулятора — від дати погашення з кроком виплат, для інших — від «наступної виплати» кожні 6 місяців; такі суми орієнтовні."),
-    Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються. Угорі — випуски з останніх аукціонів НБУ з дохідністю аукціону (це дохідність розміщення, а не ринкова ціна); поки довідник не завантажено — приклади випусків."),
-    Icons.Outlined.TaskAlt to ("Довідник ОВДП НБУ" to "Довідник цінних паперів Депозитарію НБУ (відкриті дані НБУ) завантажується одним запитом раз на 7 днів або кнопкою «Оновити»; у списку лише ще не погашені ОВДП (ISIN UA4000…). Довідник зберігається на телефоні зашифровано разом з іншими даними; без інтернету працює збережений, вгорі видно дату оновлення. У формі позиції ОВДП «Вибрати випуск»: пошук за ISIN, фільтри валюти (UAH, USD, EUR) і строку до погашення; вибір заповнює ISIN, валюту, номінал, купон, дату погашення й графік виплат, а кількість і ціну купівлі вводите самі. Ручне введення лишається. «Дохідність аукціону» — середньозважена дохідність останнього розміщення за результатами аукціонів НБУ; це не ринкова ціна і не ціна банку. «Звірити ОВДП з НБУ» в «Інвестиціях» або «Звірити з НБУ» у формі позиції показує розбіжності (погашення, купон, наступна виплата, номінал, валюта) і пропонує оновити; кількість, ціни й валюта не змінюються, зміну можна скасувати. Для інфляційних випусків і випусків з індексованою вартістю суми купонів у графіку НБУ можуть переглядатися."),
+    Icons.Outlined.Calculate to ("Калькулятор ОВДП" to "Введіть ISIN, номінал, ставку купона, дати, ціну, кількість та періодичність виплат. Для виплати «в кінці» вкажіть початок купона (дату випуску): купон рахується від неї за actual/360, як у довідці брокера. Побачите дохідність (проста річна), графік виплат і розрахунок продажу; продаж у день погашення рахується як погашення. ОВДП для фізичних осіб не оподатковуються. «Вибрати випуск з довідника НБУ» заповнює ISIN, валюту, номінал, купон, періодичність і погашення з довідника. Під кнопкою — випуски з останніх аукціонів НБУ з дохідністю аукціону (це дохідність розміщення, а не ринкова ціна); поки довідник не завантажено — приклади випусків."),
+    Icons.Outlined.TaskAlt to ("Довідник ОВДП НБУ" to "Довідник цінних паперів Депозитарію НБУ (відкриті дані НБУ) завантажується одним запитом раз на 7 днів або кнопкою «Оновити»; у списку лише ще не погашені ОВДП (ISIN UA4000…). Довідник зберігається на телефоні зашифровано разом з іншими даними; без інтернету працює збережений, вгорі видно дату оновлення. У формі позиції ОВДП «Вибрати випуск»: пошук за ISIN, фільтри валюти (UAH, USD, EUR) і строку до погашення; вибір заповнює ISIN, валюту, номінал, купон, дату погашення й графік виплат, а кількість і ціну купівлі вводите самі. Ручне введення лишається. «Купони в дохід автоматично» у формі позиції: у день купона створюється дохід «Купон» на вибраний рахунок, у день погашення номінал переходить на рахунок переказом (не дохід), а позиція позначається погашеною; обробляються лише виплати від дня ввімкнення, тож внесені раніше вручну купони не дублюються. «Дохідність аукціону» — середньозважена дохідність останнього розміщення за результатами аукціонів НБУ; це не ринкова ціна і не ціна банку. «Звірити ОВДП з НБУ» в «Інвестиціях» або «Звірити з НБУ» у формі позиції показує розбіжності (погашення, купон, наступна виплата, номінал, валюта) і пропонує оновити; кількість, ціни й валюта не змінюються, зміну можна скасувати. Для інфляційних випусків і випусків з індексованою вартістю суми купонів у графіку НБУ можуть переглядатися."),
+    Icons.AutoMirrored.Outlined.CompareArrows to ("Порівняти ОВДП" to "«ОВДП та Інвестиції → Порівняти»: 2–3 випуски з довідника НБУ («З довідника») або з ваших позицій («З моїх позицій») на одну суму. Для кожного введіть повну ціну за 1 шт — скільки списують разом із накопиченим купоном; підказка — ціна, що відповідає дохідності останнього аукціону, «підставити» вводить її. Розрахунок — за офіційним графіком виплат НБУ: ціла кількість облігацій і залишок грошей, усі виплати з датами, дохідність до погашення (YTM, як XIRR в Excel, рік — 365 днів), простий річний дохід, дохід до погашення в гривнях і на кожні 100 000 ₴, дата повернення грошей і днів до погашення. Валютні випуски — у валюті й у гривнях за поточним курсом НБУ; курс на дати виплат невідомий, це валютний ризик. Повзунок «Припущена ставка реінвестування» (за замовчуванням — дохідність коротшого) показує підсумок кожного варіанту на дату погашення найдовшого, а «ставка беззбитковості» — за якої ставки підсумки коротшого й довшого однакові. «Драбина» ділить суму порівну між вибраними випусками. Графік показує накопичену вартість у часі. «Додати в портфель» відкриває форму позиції з випуском, кількістю й ціною. Податок: зараз ОВДП для фізосіб не оподатковуються; поле «Податок на дохід ОВДП» — на випадок змін. Це розрахунок, а не порада."),
     Icons.Outlined.Flag to ("Цілі та пасивний дохід" to "«Цілі»: кнопка «+» створює ціль (назва, сума, дедлайн, внесок на місяць). Дотик до картки — редагування й видалення. «+ сума» додає крок, «Внести / зняти» — довільну суму, за бажанням з рахунку. Під смугою видно прогноз, коли досягнете цілі. «Пасивний дохід» показує місячний дохід з інвестицій (депозити після податку 23%) і «Прогноз фінансової незалежності»: коли дохід покриє потрібну суму з урахуванням інфляції."),
     Icons.Outlined.VerifiedUser to ("Безпека" to "Налаштування, Безпека: PIN-код із 4 цифр, відбиток пальця, автоблокування та ручне блокування. PIN зберігається лише як хеш PBKDF2 (120 000 ітерацій, випадкова сіль). Після 5 хибних спроб потрібно зачекати 30 секунд, кожна наступна хибна спроба подвоює паузу (до 15 хвилин); перезапуск застосунку паузу не знімає. Усі дані на телефоні зашифровані ключем із захищеного сховища Android (AES-256). Скриншоти й запис екрана в застосунку заборонені, а в «Недавніх програмах» замість вмісту — порожнє вікно."),
-    Icons.Outlined.NewReleases to ("Що нового" to "1.27.0 — вибір випуску ОВДП з довідника НБУ (пошук за ISIN, фільтри валюти й строку), офіційний графік виплат для нагадувань і календаря, «Звірити з НБУ» для наявних позицій, дохідність останніх аукціонів у калькуляторі; у формі позиції поля, які ще треба заповнити, підсвічені бурштиновим. 1.26.0 — безпека: дані на телефоні зашифровані (AES-256, ключ у захищеному сховищі Android), PIN на PBKDF2 зі стійким блокуванням після хибних спроб, заборона скриншотів, виключення з хмарних копій Google, шифрування резервних копій паролем, екран відновлення, якщо дані не розшифровуються. Функції не змінились, наявні дані переносяться автоматично. 1.25 — календар, розподіл і реінвестування ОВДП. 1.24 — валюти GBP і CHF, графіки й картка IBKR без Yahoo, менший APK."),
+    Icons.Outlined.NewReleases to ("Що нового" to "1.29.2 — бюджет: операції знизу відповідають обраному місяцю, гортання місяців пальцем; налаштування: розділ «Дані» і «Безпека»; довідка згрупована за темами. 1.29.1 — імпорт виписки ПриватБанку: інвестиції не рахуються витратами, доходи за коментарем (ДВ, знищена техніка, грошове забезпечення, соціальні виплати), перекази людям і від людей, рахунки за номером картки з вибором при імпорті, курс НБУ на дату операції, підсумок виписки до імпорту. 1.29.0 — «Порівняти ОВДП»: 2–3 випуски на одну суму за графіком НБУ — дохідність до погашення, дохід, ставка беззбитковості, драбина, графік накопиченої вартості. 1.28.0 — купони ОВДП у дохід автоматично на вибраний рахунок (у день погашення номінал переходить на рахунок, позиція позначається погашеною), вибір випуску з довідника НБУ в калькуляторі. 1.27.0 — вибір випуску ОВДП з довідника НБУ (пошук за ISIN, фільтри валюти й строку), офіційний графік виплат для нагадувань і календаря, «Звірити з НБУ» для наявних позицій, дохідність останніх аукціонів у калькуляторі; у формі позиції поля, які ще треба заповнити, підсвічені бурштиновим. 1.26.0 — безпека: дані на телефоні зашифровані (AES-256, ключ у захищеному сховищі Android), PIN на PBKDF2 зі стійким блокуванням після хибних спроб, заборона скриншотів, виключення з хмарних копій Google, шифрування резервних копій паролем, екран відновлення, якщо дані не розшифровуються. Функції не змінились, наявні дані переносяться автоматично. 1.25 — календар, розподіл і реінвестування ОВДП. 1.24 — валюти GBP і CHF, графіки й картка IBKR без Yahoo, менший APK."),
     Icons.Outlined.Save to ("Збереження даних" to "Дані зберігаються автоматично на цьому пристрої і ніде більше. Налаштування, Автокопія щотижня: виберіть папку на телефоні (наприклад, Documents/Bella), і раз на тиждень туди зберігатиметься копія bella-auto-РРРР-ММ-ДД.json; лишаються 8 найновіших. Щоб копії були і в хмарі, синхронізуйте цю папку з Google Drive окремою програмою або час від часу копіюйте файл. Відновлення — «Відновити з копії». «Шифрувати копію паролем» шифрує і ручні копії, і автокопії (AES-256, ключ із пароля): без пароля такий файл не відкрити, тож запишіть його. Старі відкриті копії відновлюються як і раніше. Довідник ОВДП НБУ в копію не входить: після відновлення він завантажується заново. Дані застосунку не потрапляють у хмарну копію Google і не переносяться системою на новий телефон — для перенесення використовуйте резервну копію. Якщо після скидання захищеного сховища дані не розшифровуються, застосунок нічого не стирає, а пропонує відновити їх з автокопії чи файлу. Налаштування, Стерти дані видаляє все без можливості відновлення."),
+)
+
+/** Довідка за темами. Індекси — позиції в HELP (їх використовує helpSectionFor); кожен розділ рівно в одній групі. */
+internal val HELP_GROUPS = listOf(
+    "Початок" to listOf(0, 1, 2, 3),
+    "Бюджет і операції" to listOf(4, 5, 12),
+    "Імпорт і дані" to listOf(6, 15),
+    "Інвестиції" to listOf(7, 8, 9, 10, 11),
+    "Безпека" to listOf(13),
+    "Про застосунок" to listOf(14),
 )
 
 @Composable
 private fun HelpList(vm: BellaViewModel) {
-    // розділ, що відповідає поточному екрану, показується першим
-    val order = HELP.indices.sortedBy { if (it == vm.helpTop) -1 else it }
-    order.forEach { i ->
-        val (ic, tt) = HELP[i]
-        Column {
-            Row(Modifier.fillMaxWidth().clickable { vm.help = if (vm.help == i) -1 else i }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Ico(ic, C.accent, 20.dp); T(tt.first, 14.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f)); Ico(if (vm.help == i) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
-            }
-            if (vm.help == i) T(tt.second, 12.sp, C.n400, modifier = Modifier.padding(start = 32.dp, bottom = 8.dp))
-            Div()
+    // група з поточним екраном іде першою, а розділ — першим у ній
+    val groups = HELP_GROUPS.sortedBy { (_, idx) -> if (vm.helpTop in idx) -1 else 0 }
+    groups.forEach { (title, idx) ->
+        Label(title.uppercase())
+        idx.sortedBy { if (it == vm.helpTop) -1 else 0 }.forEach { i -> HelpItem(vm, i) }
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun HelpItem(vm: BellaViewModel, i: Int) {
+    val (ic, tt) = HELP[i]
+    Column {
+        Row(Modifier.fillMaxWidth().clickable { vm.help = if (vm.help == i) -1 else i }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Ico(ic, C.accent, 20.dp); T(tt.first, 14.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f)); Ico(if (vm.help == i) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, C.n600, 16.dp)
         }
+        if (vm.help == i) T(tt.second, 12.sp, C.n400, modifier = Modifier.padding(start = 32.dp, bottom = 8.dp))
+        Div()
     }
 }
 
@@ -568,6 +612,17 @@ private fun ImportForm(vm: BellaViewModel) {
 
             val selectedCount = items.count { it.selected }
             val dupCount = items.count { it.isDuplicate }
+
+            // Підсумок до імпорту: великі суми видно одразу
+            val tot = r.totals
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(C.surface).padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                T("Підсумок виписки (₴)", 12.sp, C.n500)
+                T("Доходи: ${vm.m(tot.income)} ${vm.sym}", 13.sp, C.pos)
+                T("Витрати: ${vm.m(tot.expense)} ${vm.sym}", 13.sp, C.neg)
+                T("Інвестиції (ОВДП, облігації, IBKR): ${vm.m(tot.invest)} ${vm.sym}", 13.sp)
+                T("Перекази між своїми: ${vm.m(tot.ownTransfers)} ${vm.sym}", 13.sp, C.n500)
+                T("Перекази людям і від людей: ${vm.m(tot.peerTransfers)} ${vm.sym}", 13.sp, C.n500)
+            }
 
             // Метрики підсумку виписки
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -621,6 +676,30 @@ private fun ImportForm(vm: BellaViewModel) {
                     Ico(if (vm.impAcc) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp)
                     T("Оновити рахунки за залишками карток (${r.accs.size})", 12.sp)
                 }
+                if (vm.impAcc) Row(
+                    Modifier.fillMaxWidth().clickable { vm.impBal = !vm.impBal }.padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Ico(if (vm.impBal) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp)
+                    T("Оновити і баланси рахунків (залишок з виписки)", 12.sp)
+                }
+                // картки з виписки без збігу: це новий рахунок чи один з наявних (наприклад, депозит)
+                vm.impUnmatched().forEach { n ->
+                    val last = n.card.takeLast(4)
+                    val opts = listOf("Створити новий рахунок (${n.cur})") + vm.data.accs.map { "${it.name} · ${it.cur}" }
+                    val chosen = vm.impCardLink[last] ?: ""
+                    val sel = if (chosen.isEmpty()) 0 else vm.data.accs.indexOfFirst { it.id == chosen } + 1
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(C.surface).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        T("Картка •$last — це ваш рахунок?", 13.sp, weight = FontWeight.Medium)
+                        T("Оберіть рахунок, який вона позначає, або створіть новий. Наявний рахунок не перейменовується і його валюта не змінюється.", 11.sp, C.n500)
+                        Dropdown("Рахунок для картки •$last", opts, sel.coerceAtLeast(0)) { i ->
+                            vm.setCardLink(last, if (i == 0) "" else vm.data.accs[i - 1].id)
+                        }
+                    }
+                }
+                val matched = r.accs.filter { n -> vm.impUnmatched().none { it.card == n.card } }
+                if (matched.isNotEmpty()) T("Картки, що вже є в рахунках: " + matched.joinToString { "•" + it.card.takeLast(4) }, 11.sp, C.n500)
             }
 
             // Список операцій для перегляду з можливістю індивідуального вибору

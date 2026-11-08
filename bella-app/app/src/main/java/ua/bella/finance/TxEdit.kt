@@ -24,12 +24,16 @@ fun ensureAccIds(d: AppData): AppData {
 }
 
 /** Переносить id старих рахунків на нові (імпорт перебудовує список): збіг за назвою або за останніми 4 символами. */
+/**
+ * Зіставлення імпортованих рахунків з наявними — ЛИШЕ за номером картки (останні 4 цифри поля card).
+ * Назва не важлива: рахунок, перейменований користувачем, не дублюється, а картка без збігу стає новим рахунком.
+ */
 fun carryAccIds(old: List<Account>, new: List<Account>): List<Account> {
     val taken = mutableSetOf<String>()
     return new.map { n ->
         if (n.id.isNotEmpty()) { taken += n.id; return@map n }
-        val m = old.firstOrNull { it.id.isNotEmpty() && it.id !in taken && it.name == n.name }
-            ?: old.firstOrNull { it.id.isNotEmpty() && it.id !in taken && it.name.takeLast(4) == n.name.takeLast(4) }
+        val last = n.card.takeLast(4)
+        val m = if (last.isEmpty()) null else old.firstOrNull { it.id.isNotEmpty() && it.id !in taken && it.card.takeLast(4) == last }
         if (m != null) { taken += m.id; n.copy(id = m.id) } else n
     }
 }
@@ -90,10 +94,16 @@ fun buildTx(inp: TxInput, accs: List<Account>, rates: Map<String, Double>, viewR
  * (збіг за id, назвою або останніми 4 символами) або додаються як нові; решта рахунків
  * (готівка, створені вручну) лишаються разом із позначками «Готівка» і «Заощадження».
  */
-fun mergeImportedAccs(old: List<Account>, imported: List<Account>): List<Account> {
+/**
+ * Імпорт не перейменовує наявний рахунок і не змінює його валюту. Залишок оновлюється лише за згодою
+ * ([updateBal]); номер картки записується, якщо його ще не було.
+ */
+fun mergeImportedAccs(old: List<Account>, imported: List<Account>, updateBal: Boolean = false): List<Account> {
     val withIds = carryAccIds(old, imported)
     val byId = withIds.filter { it.id.isNotEmpty() }.associateBy { it.id }
-    val kept = old.map { o -> byId[o.id]?.let { n -> o.copy(name = n.name, cur = n.cur, bal = n.bal) } ?: o }
+    val kept = old.map { o ->
+        byId[o.id]?.let { n -> o.copy(bal = if (updateBal) n.bal else o.bal, card = o.card.ifEmpty { n.card }) } ?: o
+    }
     val oldIds = old.map { it.id }.toSet()
     return kept + withIds.filter { it.id.isEmpty() || it.id !in oldIds }
 }
@@ -111,3 +121,7 @@ fun bulkDelete(d: AppData, idx: Set<Int>): AppData {
     d.txs.forEachIndexed { i, t -> if (i in idx) accs = applyTxEffect(accs, t, -1.0) }
     return d.copy(txs = d.txs.filterIndexed { i, _ -> i !in idx }, accs = accs)
 }
+
+/** Записує номер картки з діалогу виписки в обраний рахунок: link = (останні 4 цифри → id рахунку; «» — без змін). */
+fun linkCards(accs: List<Account>, link: Map<String, String>): List<Account> =
+    accs.map { a -> link.entries.firstOrNull { it.value.isNotEmpty() && it.value == a.id }?.let { a.copy(card = it.key) } ?: a }

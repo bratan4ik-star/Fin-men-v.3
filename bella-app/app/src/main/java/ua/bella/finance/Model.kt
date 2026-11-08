@@ -32,7 +32,8 @@ val DEFAULT_RULES = listOf(
     CatRule("зарплат, salary, фріланс", "Зарплата"),
 )
 
-@Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false, val id: String = "")
+/** card — останні 4 цифри картки (для зіставлення з випискою); порожньо для ручних рахунків. */
+@Serializable data class Account(val name: String, val cur: String, val bal: Double, val cash: Boolean = false, val sav: Boolean = false, val id: String = "", val card: String = "")
 /**
  * amt завжди в гривнях. type: income | expense | transfer. key використовується для пошуку повторів при імпорті.
  * acc — id рахунку («» = без рахунку), accAmt — сума у валюті рахунку, що змінила його баланс.
@@ -51,6 +52,11 @@ val DEFAULT_RULES = listOf(
     val cur: String = "UAH", val pxBuy: Double = 0.0, val pxNow: Double = 0.0, val buyFx: Double = 0.0, val ticker: String = "", val pxAt: Long = 0L,
     /** Звідки позиція: «» — введена вручну, «ibkr» — синхронізується з Interactive Brokers (символ IBKR — ibSym). */
     val src: String = "", val ibSym: String = "",
+    /**
+     * ОВДП: купони в дохід автоматично на рахунок payAcc (OvdpPayouts.kt). autoFrom — з якої дати ще не оброблено
+     * виплати (при ввімкненні — сьогодні: раніші купони не дораховуються).
+     */
+    val autoCpn: Boolean = false, val autoFrom: String = "",
 )
 /** Ціль: суми в гривнях; deadline — РРРР-ММ-ДД або «». */
 @Serializable data class Goal(val name: String, val saved: Double, val target: Double, val icon: String, val step: Double, val deadline: String = "",
@@ -101,6 +107,8 @@ data class Persisted(
     val ibPx: Map<String, List<HistPoint>> = emptyMap(),
     /** Довідник ОВДП з відкритих даних НБУ (кеш, OvdpRegistry.kt): зберігається разом зі станом, тобто зашифровано. */
     val nbu: OvdpRegistry = OvdpRegistry(),
+    /** Податок на дохід ОВДП для «Порівняти ОВДП», % (зараз 0 — ПДФО для фізосіб не сплачується). */
+    val ovdpTax: Double = 0.0,
 )
 
 object DemoData {

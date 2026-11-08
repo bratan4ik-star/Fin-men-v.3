@@ -47,6 +47,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var ratesBusy by mutableStateOf(false); private set
     var ratesMsg by mutableStateOf(""); private set
 
+    /** Податок на дохід ОВДП для «Порівняти ОВДП», % — зберігається (на випадок змін у законі). Оголошено до init: його читає snapshot(). */
+    var ovdpTax by mutableStateOf(loaded.ovdpTax); private set
+
     // довідник ОВДП НБУ (OvdpRegistry.kt)
     var nbu by mutableStateOf(loaded.nbu); private set
     var nbuBusy by mutableStateOf(false); private set
@@ -73,6 +76,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var impResult by mutableStateOf<ImportResult?>(null); private set
     var impBusy by mutableStateOf(false); private set
     var impAcc by mutableStateOf(true)
+    /** Оновлювати залишки рахунків з виписки — лише за згодою користувача (за замовчуванням ні). */
+    var impBal by mutableStateOf(false)
     var impItems by mutableStateOf<List<ImportItem>>(emptyList()); private set
     var impSkipDuplicates by mutableStateOf(true)
 
@@ -114,7 +119,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Interactive Brokers: синхронізація й історія для графіків (IbkrController.kt). */
     val ibkr = IbkrController(app, viewModelScope, loaded, { data }, { commit(it) }, { persist() })
 
-    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibkr.nav, ibkr.flows, ibkr.base, ibkr.px, nbu)
+    private fun snapshot() = Persisted(data, cur, month, form.from, form.to, ov, light, sec, RATES.toMap(), ratesDate, ratesAt, hist, ibkr.nav, ibkr.flows, ibkr.base, ibkr.px, nbu, ovdpTax)
 
     // ---------- резервна копія ----------
     var backupMsg by mutableStateOf(""); private set
@@ -241,6 +246,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         cur = p.cur; ov = p.ov; light = p.light; hist = p.hist; ibkr.restore(p)
         month = p.month.coerceAtLeast(0)
         if (p.nbu.updatedAt > nbu.updatedAt) nbu = p.nbu
+        ovdpTax = p.ovdpTax
         if (withSec) sec = p.sec
         data = ensureAccIds(p.data)
     }
@@ -296,6 +302,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         if (storeBroken == null && android.os.Build.FINGERPRINT != "robolectric" && registryDue(nbu, System.currentTimeMillis())) refreshNbu(auto = true)
         // щомісячні виплати депозитів, що настали (зокрема пропущені, поки застосунок не відкривали)
         processDepositPayouts(data, todayIso(), RATES).let { if (it !== data) { data = it; persist() } }
+        // купони й погашення ОВДП з автозарахуванням, що настали (зокрема поки застосунок не відкривали)
+        processOvdpPayouts(data, todayIso(), RATES, nbuIndex).let { if (it !== data) { data = it; persist() } }
         processRecurring(data, TODAY, RATES).let { if (it !== data) { data = it; persist() } }
         // знімок капіталу за сьогодні, навіть якщо змін не було
         if (hist.lastOrNull()?.d != TODAY) persist()
@@ -317,7 +325,10 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             val r1 = step.reg
             // поки йшов запит, довідник могли замінити (відновлення з копії) — тоді новіший не перезаписуємо
             if (r1 == null || nbu !== old) { nbuBusy = false; if (!auto) nbuMsg = step.msg; return@launch }
-            nbu = r1; nbuMsg = step.msg + " Завантажуються результати аукціонів…"; persist()
+            nbu = r1; nbuMsg = step.msg + " Завантажуються результати аукціонів…"
+            // з'явився офіційний графік — купони з автозарахуванням рахуються за ним
+            processOvdpPayouts(data, todayIso(), RATES, nbuIndex).let { if (it !== data) data = it }
+            persist()
             // етап 2: аукціони за вівторки, що ще не переглядались (вперше — за рік)
             val (r2, err) = withContext(Dispatchers.IO) { try { scanAuctions(r1, today) { httpGetText(it) } } catch (_: Exception) { r1 to true } }
             nbuBusy = false
@@ -473,7 +484,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Підпис рахунку для рядка операції: «Monobank» або «Monobank → Готівка USD». */
     fun accLabel(t: Tx): String {
         val a = data.accs.firstOrNull { it.id == t.acc }?.name ?: ""
-        if (t.type == "transfer") { val b = data.accs.firstOrNull { it.id == t.toAcc }?.name ?: ""; return if (a.isEmpty() && b.isEmpty()) "" else "$a → $b" }
+        if (t.type == "transfer") { val b = data.accs.firstOrNull { it.id == t.toAcc }?.name ?: ""
+            // погашення ОВДП: номінал надходить з інвестицій, рахунку списання немає
+            return if (a.isEmpty() && b.isEmpty()) "" else if (a.isEmpty()) "Інвестиції → $b" else "$a → $b" }
         return a
     }
     /** Будує позицію з форми. ETF у валюті: ціни у валюті фонду, курс купівлі — введений або поточний курс НБУ. */
@@ -495,9 +508,19 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val b = parseNum(f.pBuy) * k; val nw = (parseNum(f.pNow).takeIf { it != 0.0 } ?: parseNum(f.pBuy)) * k
         val calc = if (nb == null) old?.calc else (old?.calc ?: CalcExtra(nb.isin, nb.nom, bondFreqMonths(nb), "", "", todayIso(), nb.cur))
             .copy(isin = nb.isin, nom = nb.nom, freq = bondFreqMonths(nb), cur = nb.cur)
-        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), calc, monthly, if (monthly) f.pPayAcc else "", ticker = ticker,
-            cur = bondCur, src = old?.src ?: "", ibSym = old?.ibSym ?: "")
+        // ОВДП з купонами в дохід: при ввімкненні виплати обробляються з сьогодні (раніші не дораховуються)
+        val auto = f.group == "ОВДП" && f.pAuto
+        val autoFrom = if (!auto) "" else old?.takeIf { it.autoCpn && isIsoDate(it.autoFrom) }?.autoFrom ?: todayIso()
+        return Pos(f.group, f.pName.trim(), q, b, if (old == null) b else nw, f.pMat.trim(), parseNum(f.pRate), f.pNext.trim(), calc, monthly, if (monthly || auto) f.pPayAcc else "", ticker = ticker,
+            cur = bondCur, src = old?.src ?: "", ibSym = old?.ibSym ?: "", autoCpn = auto, autoFrom = autoFrom)
     }
+
+    /** Щомісячні відсотки депозитів і купони/погашення ОВДП з автозарахуванням, що вже настали. */
+    private fun processPayouts(d: AppData): AppData = processOvdpPayouts(processDepositPayouts(d, todayIso(), RATES), todayIso(), RATES, nbuIndex)
+    /** ОВДП з купонами в дохід потребує рахунку зарахування. */
+    private fun autoAccError(p: Pos): String = if (p.autoCpn && data.accs.none { it.id == p.payAcc && it.id.isNotEmpty() }) "Виберіть рахунок для купонів" else ""
+    /** Рахунок за замовчуванням для купонів: перший у валюті облігації, інакше перший. */
+    fun defaultPayAcc(cur: String): String = (data.accs.firstOrNull { it.cur == cur && !it.cash } ?: data.accs.firstOrNull { it.cur == cur } ?: data.accs.firstOrNull())?.id ?: ""
 
     /** Для депозиту кількість не вводиться: 1, якщо поле порожнє. */
     private fun posQty(f: Form): Double = parseNum(f.pQty).let { if (it <= 0 && f.group == "Депозити" && f.pQty.isBlank()) 1.0 else it }
@@ -505,8 +528,8 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val (t, err) = buildTx(TxInput(f.tType, parseNum(f.tAmt), if (f.tType == "transfer") "Перекази" else f.tCat, f.tDesc.trim(), f.tDate.trim(), f.tAcc, f.tToAcc, parseNum(f.tToAmt), key), data.accs, RATES, rate)
         formErr = err; return t
     }
-    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pFx = "", pBond = null); posCheck = false; nbuMsg = ""; sheet = Sheet.Pos }
-    fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, cashF = a.cash, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); formOrig = form; sheet = Sheet.AccE }
+    fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pFx = "", pBond = null, pAuto = false); posCheck = false; nbuMsg = ""; sheet = Sheet.Pos }
+    fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, cashF = a.cash, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString(), card = a.card); formOrig = form; sheet = Sheet.AccE }
     fun editPos(i: Int) {
         val p = data.pos[i]; fun c(v: Double) = ((v / rate) * 100).let { Math.round(it) / 100.0 }.toString()
         fun r2(v: Double) = (Math.round(v * 10000) / 10000.0).toString()
@@ -514,7 +537,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         form = form.copy(editIdx = i, group = p.group, pName = p.name, pQty = p.qty.toString(),
             pBuy = if (fx) r2(p.pxBuy) else if (bond) r2(p.buy) else c(p.buy), pNow = if (fx) r2(p.pxNow) else if (bond) r2(p.now) else c(p.now),
             pFx = if (fx) r2(p.buyFx) else "", pCur = if (fx || bond) p.cur else "UAH",
-            pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc, pBond = null); formOrig = form; formErr = ""; posCheck = false; nbuMsg = ""; sheet = Sheet.PosE
+            pRate = p.rate.toString(), pMat = p.mat, pNext = p.next, pMonthly = p.monthly, pPayAcc = p.payAcc.ifEmpty { defaultPayAcc(if (bond) p.cur else "UAH") }, pBond = null, pAuto = p.autoCpn); formOrig = form; formErr = ""; posCheck = false; nbuMsg = ""; sheet = Sheet.PosE
     }
     /** Довідка з будь-якого екрана: відкривається на розділі, що відповідає поточному екрану. */
     fun openHelp(section: Int = helpSectionFor(screen)) { help = section; helpTop = section; sheet = Sheet.Help }
@@ -535,7 +558,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                     commit(addTx(ids, Tx("Переказ: ${fa.name} → ${ta.name}", "Перекази", "transfer", amt * rateOf(fa.cur), todayIso(), "", fid, amt, tid, conv))); closeSheet()
                 }
             }
-            Sheet.Acc -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else { commit(s.copy(accs = s.accs + Account(f.name.trim(), f.cur, parseNum(f.bal), cash = f.cashF))); closeSheet() }
+            Sheet.Acc -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else { commit(s.copy(accs = s.accs + Account(f.name.trim(), f.cur, parseNum(f.bal), cash = f.cashF, card = f.card))); closeSheet() }
             Sheet.Debt -> { val v = parseNum(f.amt) * rate; formErr = when { f.who.isBlank() -> "Вкажіть особу або опис"; v <= 0 -> "Вкажіть суму більше нуля"; f.due.isNotBlank() && !isIsoDate(f.due.trim()) -> "Термін у форматі РРРР-ММ-ДД"; else -> "" }; if (formErr.isEmpty()) { commit(s.copy(debts = s.debts + Debt(f.who.trim(), f.kindOwedToMe, v, false, f.due.trim()))); closeSheet() } }
             Sheet.DebtE -> {
                 val old = s.debts.getOrNull(f.dIdx) ?: run { closeSheet(); return }
@@ -552,23 +575,25 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             Sheet.AccE -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else if (s.accs.getOrNull(f.editIdx) != null) {
                 val old = s.accs[f.editIdx]
                 ov = ov + (old.name.takeLast(4) to Override(f.name.trim(), old.cur, parseNum(f.bal), f.sav))
-                commit(s.copy(accs = s.accs.mapIndexed { i, a -> if (i == f.editIdx) a.copy(name = f.name.trim(), bal = parseNum(f.bal), sav = f.sav, cash = f.cashF) else a })); closeSheet()
+                commit(s.copy(accs = s.accs.mapIndexed { i, a -> if (i == f.editIdx) a.copy(name = f.name.trim(), bal = parseNum(f.bal), sav = f.sav, cash = f.cashF, card = f.card.ifEmpty { a.card }) else a })); closeSheet()
             }
             Sheet.Import -> importCommit()
             Sheet.PosE -> {
                 val o = s.pos.getOrNull(f.editIdx) ?: run { closeSheet(); return }
                 val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
                 val np = posFromForm(f, q, monthly, o)
-                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }; if (formErr.isNotEmpty()) return
+                // погашена автоматично ОВДП лишається з кількістю 0 — її можна перейменувати чи змінити рахунок
+                val redeemed = ovdpRedeemed(o, TODAY) && q == 0.0
+                formErr = posFormError(f.group, f.pName, if (redeemed) 1.0 else q, if (redeemed) Math.max(np.buy, 1.0) else np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }.ifEmpty { autoAccError(np) }; if (formErr.isNotEmpty()) return
                 open = open + f.group
-                commit(processDepositPayouts(s.copy(pos = s.pos.mapIndexed { i, x -> if (i == f.editIdx) np else x }), todayIso(), RATES)); closeSheet()
+                commit(processPayouts(s.copy(pos = s.pos.mapIndexed { i, x -> if (i == f.editIdx) np else x }))); closeSheet()
             }
             Sheet.Pos -> {
                 val q = posQty(f); val monthly = f.group == "Депозити" && f.pMonthly
                 val np = posFromForm(f, q, monthly, null)
-                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }; if (formErr.isNotEmpty()) return
+                formErr = posFormError(f.group, f.pName, q, np.buy, monthly, parseNum(f.pRate), f.pNext, f.pMat).ifEmpty { fxFormError(np, RATES) }.ifEmpty { autoAccError(np) }; if (formErr.isNotEmpty()) return
                 open = open + f.group
-                commit(processDepositPayouts(s.copy(pos = s.pos + np), todayIso(), RATES)); closeSheet()
+                commit(processPayouts(s.copy(pos = s.pos + np))); closeSheet()
             }
             Sheet.Tx -> {
                 val t = txFromForm(f, "") ?: return
@@ -711,8 +736,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     fun togglePosCheck() { posCheck = !posCheck; if (posCheck && registryDue(nbu, System.currentTimeMillis())) refreshNbu() }
 
     /** Кнопка «Вибрати випуск» у формі ОВДП. Довідник завантажується, якщо його ще немає або він застарів. */
-    fun openOvdpPick() {
-        pickBack = if (sheet == Sheet.PosE) Sheet.PosE else Sheet.Pos
+    /** Куди йде вибраний випуск: форма позиції, калькулятор (forCalc) або «Порівняти» (forCompare). */
+    private var pickForCalc = false
+    private var pickForCmp = false
+    fun openOvdpPick(forCalc: Boolean = false, forCompare: Boolean = false) {
+        pickForCalc = forCalc; pickForCmp = forCompare
+        pickBack = if (forCalc || forCompare) Sheet.None else if (sheet == Sheet.PosE) Sheet.PosE else Sheet.Pos
         pickQ = ""; pickTerm = null; pickCur = null; nbuMsg = ""
         sheet = Sheet.OvdpPick
         if (registryDue(nbu, System.currentTimeMillis())) refreshNbu()
@@ -721,6 +750,13 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     /** Вибір випуску заповнює ISIN, валюту, номінал, купон, погашення й графік; кількість і ціну вводить користувач. */
     fun pickBond(b: NbuBond) {
         val today = LocalDate.parse(TODAY)
+        if (pickForCmp) { cmpAdd(b); sheet = Sheet.None; return }
+        if (pickForCalc) {
+            // калькулятор: ISIN, валюта, номінал, купон, періодичність, погашення й дата розміщення; ціну й кількість — вводить користувач
+            calcIn = calcIn.copy(isin = b.isin, cur = b.cur, nom = if (b.nom % 1.0 == 0.0) b.nom.toLong().toString() else b.nom.toString(), coupon = b.rate.toString(),
+                freq = bondFreqMonths(b), mat = b.mat, issue = b.issue, sellD = if (calcIn.sellD.isBlank() || calcIn.sellD > b.mat) b.mat else calcIn.sellD)
+            sheet = Sheet.None; return
+        }
         if (pickBack == Sheet.PosE) {
             val o = data.pos.getOrNull(form.editIdx)
             val oc = o?.let { if (isBondCurPos(it)) it.cur else "UAH" } ?: "UAH"
@@ -769,6 +805,48 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             pBond = if (f.pCur == b.cur) b else null)
     }
 
+    // ---------- порівняти ОВДП (OvdpCompare.kt, OvdpCompareUi.kt) ----------
+    /** Випуск у порівнянні: повна ціна за 1 шт (у валюті випуску, як введено) і звідки взято. */
+    data class CmpEntry(val bond: NbuBond, val price: String = "", val from: String = "")
+    var cmp by mutableStateOf(listOf<CmpEntry>()); private set
+    var cmpAmount by mutableStateOf("100000")
+    var cmpDate by mutableStateOf(TODAY)
+    /** Припущена ставка реінвестування (частка); null — дохідність найкоротшого варіанту. */
+    var cmpRate by mutableStateOf<Double?>(null)
+    var cmpMsg by mutableStateOf(""); private set
+    fun setOvdpTax(v: String) { val t = parseNum(v).coerceIn(0.0, 100.0); if (t != ovdpTax) { ovdpTax = t; persist() } }
+
+    fun cmpAdd(b: NbuBond, price: String = "", from: String = "") {
+        cmpMsg = when {
+            cmp.any { it.bond.isin == b.isin } -> "${b.isin} уже в порівнянні"
+            cmp.size >= 3 -> "Порівнювати можна до 3 випусків"
+            else -> { cmp = cmp + CmpEntry(b, price, from); cmpRate = null; "" }
+        }
+    }
+    fun cmpRemove(i: Int) { cmp = cmp.filterIndexed { j, _ -> j != i }; cmpRate = null; cmpMsg = "" }
+    fun cmpSetPrice(i: Int, v: String) { cmp = cmp.mapIndexed { j, e -> if (j == i) e.copy(price = v) else e } }
+    /** Позиції ОВДП, чий випуск є в довіднику НБУ (їх можна додати в порівняння). */
+    fun cmpPositions(): List<Pos> = data.pos.filter { it.group == "ОВДП" && it.qty > 0 && nbuIndex.containsKey(posIsin(it)) }
+    /** Додати з моїх позицій: ціна — поточна ціна позиції за 1 шт у валюті випуску. */
+    fun cmpAddPosition(p: Pos) {
+        val b = nbuIndex[posIsin(p)] ?: return
+        val px = if (isBondCurPos(p) || p.cur == b.cur) p.now else p.now / rateOf(b.cur)
+        cmpAdd(b, if (px > 0) fmtPlain(px) else "", p.name)
+    }
+    fun cmpSettle(): LocalDate = cmpDate.takeIf { isIsoDate(it) }?.let { LocalDate.parse(it) } ?: LocalDate.parse(TODAY)
+    fun cmpResults(): List<CmpResult> =
+        compareOvdp(cmp.map { CmpPick(it.bond, parseNum(it.price)) }, parseNum(cmpAmount), cmpSettle(), RATES.toMap(), ovdpTax)
+    /** «Додати в портфель»: форма нової позиції з випуском, кількістю й ціною з порівняння. */
+    fun cmpToPortfolio(r: CmpResult) {
+        val leg = r.legs.singleOrNull() ?: return
+        val b = nbuIndex[leg.isin] ?: cmp.firstOrNull { it.bond.isin == leg.isin }?.bond ?: return
+        openPos()
+        // ціна у формі: валютна — у валюті випуску, гривнева — у валюті перегляду (як у формі)
+        val px = if (b.cur == "UAH") leg.price / rate else leg.price
+        form = form.copy(group = "ОВДП", pName = "ОВДП ${b.isin}", pCur = b.cur, pRate = b.rate.toString(), pMat = b.mat,
+            pNext = nextCoupon(b, LocalDate.parse(TODAY)), pBond = b, pQty = leg.qty.toString(), pBuy = fmtPlain(px))
+    }
+
     // ---------- калькулятор ----------
     fun posToCalc() {
         val f = form; sheet = Sheet.None; screen = Screen.Calc
@@ -800,10 +878,18 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                         ?: return@withContext ImportResult(emptyList(), emptyList(), 0, "Не вдалося відкрити файл «$name» (немає доступу)")
                     val bytes = ins.use { it.readBytes() }
                     if (bytes.isEmpty()) ImportResult(emptyList(), emptyList(), 0, "Файл порожній")
-                    else Importer.parseBytes(bytes, rate, rules)
+                    else {
+                        // курс на дату операції: спершу розбір без архіву, далі архів НБУ за період (по валютах виписки)
+                        val first = Importer.parseBytes(bytes, rate, rules)
+                        val dates = first.txs.map { it.date }.sorted()
+                        val curs = (RATES.keys - "UAH").toList()
+                        val archive = HashMap<String, MutableMap<String, Double>>()
+                        if (dates.isNotEmpty()) for (c in curs) fetchNbuHistory(c, dates.first(), dates.last()).forEach { (d, v) -> archive.getOrPut(d) { HashMap() }[c] = v }
+                        if (archive.isEmpty()) first else Importer.parseBytes(bytes, rate, rules, archive)
+                    }
                 } catch (e: Throwable) { ImportResult(emptyList(), emptyList(), 0, "Не вдалося прочитати файл (${e.javaClass.simpleName}: ${e.message?.take(80) ?: "—"})") }
             }
-            impResult = r
+            impResult = r; impCardLink = emptyMap()
             val existing = if (data.demo && r.accs.isNotEmpty()) emptyList() else data.txs
             impItems = detectDuplicates(r.txs, existing)
             impSkipDuplicates = true
@@ -824,6 +910,12 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             impItems = impItems.mapIndexed { i, itm -> if (i == index) itm.copy(selected = !itm.selected) else itm }
         }
     }
+
+    /** Картка з виписки (останні 4 цифри) → id рахунку, який вона позначає; «» — створити новий рахунок. */
+    var impCardLink by mutableStateOf<Map<String, String>>(emptyMap()); private set
+    /** Картки з виписки без збігу з наявними рахунками (за полем card). */
+    fun impUnmatched(): List<Account> = (impResult?.accs ?: emptyList()).filter { n -> data.accs.none { it.card.isNotEmpty() && it.card.takeLast(4) == n.card.takeLast(4) } }
+    fun setCardLink(card: String, accId: String) { impCardLink = impCardLink + (card to accId) }
 
     fun toggleSkipDuplicates(skip: Boolean) {
         impSkipDuplicates = skip
@@ -858,7 +950,18 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         val txs = selectedTxs + keep
         var nd = s.copy(txs = txs, demo = s.demo && !rep)
         if (rep) nd = nd.copy(pos = emptyList(), goals = emptyList(), debts = emptyList())
-        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(s.accs, applyOv(r.accs))); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
+        // картка, вибрана в діалозі, стає номером картки цього рахунку (далі зіставлення вже за номером)
+        nd = nd.copy(accs = linkCards(nd.accs, impCardLink))
+        if (impAcc && r.accs.isNotEmpty()) { nd = nd.copy(accs = if (rep) applyOv(r.accs) else mergeImportedAccs(nd.accs, applyOv(r.accs), updateBal = impBal)); form = form.copy(from = 0, to = Math.min(1, r.accs.size - 1)) }
+        // прив'язка операцій до рахунків за номером картки (ключ операції містить картку другим полем)
+        val byCard = nd.accs.filter { it.card.isNotEmpty() }.associate { it.card.takeLast(4) to it.id }
+        // лише нові операції з виписки; старі не чіпаємо
+        val linkedNew = selectedTxs.map { t ->
+            val card = t.key.split("|").getOrNull(1)?.takeLast(4).orEmpty()
+            val id = byCard[card]
+            if (t.acc.isEmpty() && !id.isNullOrEmpty()) t.copy(acc = id) else t
+        }
+        nd = nd.copy(txs = linkedNew + keep)
         commit(nd); tab = 1; sheet = Sheet.None
         month = data.txs.map { it.date.take(7) }.distinct().sorted().size - 1
         persist()

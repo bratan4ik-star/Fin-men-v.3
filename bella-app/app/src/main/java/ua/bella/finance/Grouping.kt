@@ -20,7 +20,7 @@ fun groupDebts(debts: List<Debt>): List<DebtGroup> = listOf(true to "Мені в
 /** Індекс розділу довідки (HELP у Sheets.kt) для екрана: 0 Головна, 2 Капітал, 4 Бюджет, 7 Інвестиції, 8 ОВДП, 9 Цілі й пасивний дохід. */
 fun helpSectionFor(s: Screen): Int = when (s) {
     // індекси розділів HELP (Sheets.kt); відповідність назвам перевіряє GroupingTest
-    Screen.Home -> 0; Screen.Acc -> 2; Screen.Bud -> 4; Screen.Inv -> 7; Screen.Calc -> 9; Screen.Goals, Screen.Pass -> 11
+    Screen.Home -> 0; Screen.Acc -> 2; Screen.Bud -> 4; Screen.Inv -> 7; Screen.Calc -> 9; Screen.Goals, Screen.Pass -> 12
 }
 
 /** Борг повернено: прибирає його зі списку (за індексом); інші не змінюються. */

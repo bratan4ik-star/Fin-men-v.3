@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -228,7 +230,13 @@ fun BudgetScreen(vm: BellaViewModel) {
     val daysLeft = if (isLast) dim - TODAY.substring(8, 10).toInt() + 1 else dim
     val cats = mt.filter { it.type == "expense" }.groupBy { it.cat }.mapValues { e -> e.value.sumOf { it.amt } }
     val savePct = if (inc > 0) Math.max(0.0, nb / inc * 100) else 0.0
-    Column(Modifier.fillMaxSize()) {
+    // гортання пальцем вліво/вправо — інший місяць (як стрілки)
+    var swipe by remember { mutableStateOf(0f) }
+    Column(Modifier.fillMaxSize().pointerInput(mi) {
+        detectHorizontalDragGestures(onDragStart = { swipe = 0f }, onDragEnd = {
+            if (swipe < -120f) vm.setMonth(mi + 1) else if (swipe > 120f) vm.setMonth(mi - 1)
+        }) { _, d -> swipe += d }
+    }) {
         TopBar("Бюджет", vm) { CurPicker(vm); IconBtn(Icons.Outlined.Add) { vm.openTx() } }
         Page {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -269,7 +277,7 @@ fun BudgetScreen(vm: BellaViewModel) {
                 } }
                     SmartAnalyticsSection(vm, mt)
                 }
-                1 -> OpsTab(vm)
+                1 -> OpsTab(vm, mk)
                 2 -> Column {
                     Seg(listOf(0 to "Місяці", 1 to "Рік", 2 to "12 міс."), vm.repMode) { vm.repMode = it }
                     Spacer(Modifier.height(14.dp))
@@ -333,10 +341,10 @@ fun BudgetScreen(vm: BellaViewModel) {
 @Composable private fun Stat(l: String, v: String, c: Color, m: Modifier) = Column(m) { T(l, 11.sp, C.n500, maxLines = 1); T(v, 14.sp, c, FontWeight.Medium, maxLines = 1) }
 
 @Composable
-private fun OpsTab(vm: BellaViewModel) {
+private fun OpsTab(vm: BellaViewModel, month: String) {
     val f = vm.filters; val q = f.q.trim().lowercase(); val rt = vm.rate
     val mn = f.min.takeIf { it.isNotEmpty() }?.let { parseNum(it) }; val mx = f.max.takeIf { it.isNotEmpty() }?.let { parseNum(it) }
-    val found0 = vm.data.txs.withIndex().filter { (_, it) -> f.acc == "*" || it.acc == f.acc || (f.acc.isNotEmpty() && it.toAcc == f.acc) }.filter { (_, it) -> (f.tf == "all" || it.type == f.tf) && (q.isEmpty() || it.desc.lowercase().contains(q) || it.cat.lowercase().contains(q)) && (f.dateFrom.isEmpty() || it.date >= f.dateFrom) && (f.dateTo.isEmpty() || it.date <= f.dateTo) && (mn == null || it.amt / rt >= mn) && (mx == null || it.amt / rt <= mx) }
+    val found0 = vm.data.txs.withIndex().filter { (_, it) -> it.date.startsWith(month) }.filter { (_, it) -> f.acc == "*" || it.acc == f.acc || (f.acc.isNotEmpty() && it.toAcc == f.acc) }.filter { (_, it) -> (f.tf == "all" || it.type == f.tf) && (q.isEmpty() || it.desc.lowercase().contains(q) || it.cat.lowercase().contains(q)) && (f.dateFrom.isEmpty() || it.date >= f.dateFrom) && (f.dateTo.isEmpty() || it.date <= f.dateTo) && (mn == null || it.amt / rt >= mn) && (mx == null || it.amt / rt <= mx) }
         .let { l -> when (f.sort) { "dateA" -> l.sortedBy { it.value.date }; "amtD" -> l.sortedByDescending { it.value.amt }; "amtA" -> l.sortedBy { it.value.amt }; else -> l.sortedByDescending { it.value.date } } }
     val found = found0.map { it.value }
     val fi = found.filter { it.type == "income" }.sumOf { it.amt }; val fe = found.filter { it.type == "expense" }.sumOf { it.amt }
@@ -362,7 +370,7 @@ private fun OpsTab(vm: BellaViewModel) {
         }
         Seg(listOf("all" to "Усі", "expense" to "Витрати", "income" to "Доходи", "transfer" to "Перекази"), f.tf) { vm.filters = f.copy(tf = it) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            T("За весь період · знайдено: ${found.size}" + (if (found.size > 100) " (перші 100)" else "") + " · −${vm.m(fe)} · +${vm.m(fi)} ${vm.sym}", 11.sp, C.n500, modifier = Modifier.weight(1f))
+            T("${monthLabel(month)} · знайдено: ${found.size}" + (if (found.size > 100) " (перші 100)" else "") + " · −${vm.m(fe)} · +${vm.m(fi)} ${vm.sym}", 11.sp, C.n500, modifier = Modifier.weight(1f))
             if (found.isNotEmpty() || vm.selMode) T(if (vm.selMode) "Готово" else "Вибрати", 13.sp, C.accent400, modifier = Modifier.clickable { vm.toggleSelMode() }.padding(vertical = 6.dp))
         }
         if (vm.selMode) BulkBar(vm, found0.take(100).map { it.index })
@@ -443,7 +451,9 @@ fun InvScreen(vm: BellaViewModel) {
                                     if (fxPlausible(p.buyFx, RATES[p.cur] ?: 0.0)) T("ціна ${fx(p.pxNow)}" + " · у гривні: ціна ${sg(sp.price)} · курс ${sg(sp.fx)}", 11.sp, C.n500, maxLines = 2)
                                     else T("Курс купівлі ${fmt2(p.buyFx)} ₴ за 1 ${p.cur} схожий на помилку (НБУ ${fmt2(RATES[p.cur] ?: 0.0)}), тому вартість купівлі в гривнях неправильна. Торкніться позиції й виправте «Курс купівлі» або очистіть його.", 11.sp, C.neg, maxLines = 4)
                                 }
-                                T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null).joinToString(" · "), 11.sp, C.n500)
+                                val payTo = if (p.autoCpn) vm.data.accs.firstOrNull { it.id == p.payAcc }?.name else null
+                                if (ovdpRedeemed(p, TODAY)) T("Погашено ${ddmmyy(p.mat)}" + (payTo?.let { " · номінал на «$it»" } ?: ""), 11.sp, C.n500)
+                                else T(listOfNotNull(if (p.mat.isNotEmpty()) (if (p.group == "Депозити") "Повернення " else "До ") + ddmmyy(p.mat) else "Без погашення", if (p.rate != 0.0) "${p.rate}% річних" else "без виплат", if (p.next.isNotEmpty()) "виплата ${ddmmyy(p.next)}" else null, if (p.monthly) "щомісяця" else null, payTo?.let { "купони → «$it»" }).joinToString(" · "), 11.sp, C.n500)
                             }
                         }
                     }
@@ -502,7 +512,7 @@ fun InvScreen(vm: BellaViewModel) {
     }
 }
 private val CashC = Color(0xFF4ADE80)
-private fun fmtQty(q: Double) = if (q == Math.floor(q)) q.toLong().toString() else q.toString()
+internal fun fmtQty(q: Double) = if (q == Math.floor(q)) q.toLong().toString() else q.toString()
 
 // ================= ЦІЛІ =================
 @Composable
@@ -592,12 +602,14 @@ fun CalcScreen(vm: BellaViewModel) {
         TopBar("ОВДП та Інвестиції", vm)
         Page {
             // Перемикач режимів: Калькулятор, Календар виплат, Розподіл ОВДП, або Реінвестування
-            Seg(listOf(0 to "Калькулятор", 1 to "Календар", 2 to "Розподіл", 3 to "Реінвест"), tab) {
+            Seg(listOf(0 to "Калькулятор", 1 to "Календар", 2 to "Розподіл", 3 to "Реінвест", 4 to "Порівняти"), tab) {
                 tab = it
                 vm.calcTab = it
             }
 
             if (tab == 0) {
+                // увесь довідник НБУ з пошуком і фільтрами
+                Btn("Вибрати випуск з довідника НБУ", false, Modifier.fillMaxWidth(), Icons.Outlined.Search) { vm.openOvdpPick(forCalc = true) }
                 // Швидкі пресети випусків
                 val live = remember(vm.nbu) { registryPresets(vm.nbu, java.time.LocalDate.parse(TODAY)) }
                 OvdpPresetsRow(s.isin, live.ifEmpty { activeOvdpPresets(java.time.LocalDate.parse(TODAY)) },
@@ -740,9 +752,12 @@ fun CalcScreen(vm: BellaViewModel) {
             } else if (tab == 2) {
                 // Вкладка 2: Кругова діаграма розподілу ОВДП (за валютою та термінами погашення)
                 OvdpDistributionSection(vm)
-            } else {
+            } else if (tab == 3) {
                 // Вкладка 3: Симулятор складного відсотка при реінвестуванні купонів ОВДП
                 OvdpReinvestmentSection(vm)
+            } else {
+                // Вкладка 4: порівняння 2–3 випусків за графіком НБУ
+                OvdpCompareTab(vm)
             }
         }
     }
