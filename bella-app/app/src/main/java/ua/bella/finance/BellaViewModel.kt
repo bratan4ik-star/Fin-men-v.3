@@ -527,7 +527,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
         formErr = err; return t
     }
     fun openPos() { formErr = ""; formOrig = null; form = form.copy(pName = "", pQty = "", pBuy = "", pRate = "", pMat = "", pNext = "", group = "ОВДП", pMonthly = false, pPayAcc = data.accs.firstOrNull()?.id ?: "", pCur = "UAH", pFx = "", pBond = null, pAuto = false); posCheck = false; nbuMsg = ""; sheet = Sheet.Pos }
-    fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, cashF = a.cash, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString()); formOrig = form; sheet = Sheet.AccE }
+    fun editAcc(i: Int) { val a = data.accs[i]; form = form.copy(editIdx = i, sav = a.sav, cashF = a.cash, name = a.name, bal = (Math.round(a.bal * 100) / 100.0).toString(), card = a.card); formOrig = form; sheet = Sheet.AccE }
     fun editPos(i: Int) {
         val p = data.pos[i]; fun c(v: Double) = ((v / rate) * 100).let { Math.round(it) / 100.0 }.toString()
         fun r2(v: Double) = (Math.round(v * 10000) / 10000.0).toString()
@@ -556,7 +556,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
                     commit(addTx(ids, Tx("Переказ: ${fa.name} → ${ta.name}", "Перекази", "transfer", amt * rateOf(fa.cur), todayIso(), "", fid, amt, tid, conv))); closeSheet()
                 }
             }
-            Sheet.Acc -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else { commit(s.copy(accs = s.accs + Account(f.name.trim(), f.cur, parseNum(f.bal), cash = f.cashF))); closeSheet() }
+            Sheet.Acc -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else { commit(s.copy(accs = s.accs + Account(f.name.trim(), f.cur, parseNum(f.bal), cash = f.cashF, card = f.card))); closeSheet() }
             Sheet.Debt -> { val v = parseNum(f.amt) * rate; formErr = when { f.who.isBlank() -> "Вкажіть особу або опис"; v <= 0 -> "Вкажіть суму більше нуля"; f.due.isNotBlank() && !isIsoDate(f.due.trim()) -> "Термін у форматі РРРР-ММ-ДД"; else -> "" }; if (formErr.isEmpty()) { commit(s.copy(debts = s.debts + Debt(f.who.trim(), f.kindOwedToMe, v, false, f.due.trim()))); closeSheet() } }
             Sheet.DebtE -> {
                 val old = s.debts.getOrNull(f.dIdx) ?: run { closeSheet(); return }
@@ -573,7 +573,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             Sheet.AccE -> if (f.name.isBlank()) formErr = "Вкажіть назву рахунку" else if (s.accs.getOrNull(f.editIdx) != null) {
                 val old = s.accs[f.editIdx]
                 ov = ov + (old.name.takeLast(4) to Override(f.name.trim(), old.cur, parseNum(f.bal), f.sav))
-                commit(s.copy(accs = s.accs.mapIndexed { i, a -> if (i == f.editIdx) a.copy(name = f.name.trim(), bal = parseNum(f.bal), sav = f.sav, cash = f.cashF) else a })); closeSheet()
+                commit(s.copy(accs = s.accs.mapIndexed { i, a -> if (i == f.editIdx) a.copy(name = f.name.trim(), bal = parseNum(f.bal), sav = f.sav, cash = f.cashF, card = f.card.ifEmpty { a.card }) else a })); closeSheet()
             }
             Sheet.Import -> importCommit()
             Sheet.PosE -> {

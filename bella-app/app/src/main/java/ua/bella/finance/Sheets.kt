@@ -91,6 +91,7 @@ private fun AccForm(vm: BellaViewModel) {
     Field("Назва", f.name, hint = "напр. Monobank Чорна") { vm.form = f.copy(name = it) }
     Field("Початковий баланс", f.bal, hint = "0", numeric = true) { vm.form = f.copy(bal = it) }
     Seg(CURRENCIES.map { it to it }, f.cur) { vm.form = f.copy(cur = it) }
+    Field("Останні 4 цифри картки (необов'язково)", f.card, hint = "напр. 1983", numeric = true) { vm.form = f.copy(card = it.filter { c -> c.isDigit() }.takeLast(4)) }
     Row(Modifier.clickable { vm.form = f.copy(cashF = !f.cashF) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Ico(if (f.cashF) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank, C.accent, 20.dp); T("Готівка (показувати в портфелі)", 13.sp)
     }
@@ -360,6 +361,7 @@ private fun AccEditForm(vm: BellaViewModel) {
     val f = vm.form; val a = vm.data.accs.getOrNull(f.editIdx)
     Field("Назва", f.name, hint = vm.was { it.name }) { vm.form = f.copy(name = it) }
     Field("Поточний баланс (${a?.cur ?: ""})", f.bal, hint = vm.was { it.bal }, numeric = true) { vm.form = f.copy(bal = it) }
+    Field("Останні 4 цифри картки", f.card, hint = vm.was { it.card }.ifEmpty { "напр. 1983" }, numeric = true) { vm.form = f.copy(card = it.filter { c -> c.isDigit() }.takeLast(4)) }
     T(EDIT_NOTE, 11.sp, C.n500)
     if (vm.formErr.isNotEmpty()) T(vm.formErr, 12.sp, C.neg)
     T("Виписка показує залишок на дату останньої операції. Введіть актуальний.", 11.sp, C.n500)

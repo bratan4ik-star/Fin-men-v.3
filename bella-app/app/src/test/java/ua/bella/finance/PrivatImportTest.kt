@@ -113,4 +113,14 @@ class PrivatImportTest {
         assertEquals(mapOf("2026-11-02" to 41.5, "2026-11-03" to 41.6), parseNbuHistory(body, "USD"))
         assertTrue(parseNbuHistory("не json", "USD").isEmpty())
     }
+
+    @Test fun cardLinkedToDepositIsMatchedNotDuplicated() {
+        // картка, прив'язана до депозиту в застосунку (поле card), імпорт не створює другий рахунок
+        val deposit = Account("Депозит", "UAH", 503024.11, sav = true, id = "dep", card = "1983")
+        val r = parse(row("06.11.2026 19:58:22", "Зарахування", card, "Соціальні виплати", "1553.32", bal = "503024.11"))
+        val merged = mergeImportedAccs(listOf(deposit), r.accs)
+        assertEquals(listOf("Депозит"), merged.map { it.name })
+        assertEquals("dep", merged.single().id); assertTrue(merged.single().sav)
+        assertEquals(503024.11, merged.single().bal, 1e-9)   // залишок без згоди не змінюється
+    }
 }
