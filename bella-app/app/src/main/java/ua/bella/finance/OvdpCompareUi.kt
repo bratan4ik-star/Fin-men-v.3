@@ -55,7 +55,7 @@ fun OvdpCompareTab(vm: BellaViewModel) {
     if (vm.cmp.size < 3) {
         var showPos by remember { mutableStateOf(false) }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Btn("З довідника", false, Modifier.weight(1f), Icons.Outlined.Search) { vm.openOvdpPick(forCompare = true) }
+            Btn("Вибрати з довідника НБУ", false, Modifier.weight(1f), Icons.Outlined.Search) { vm.openOvdpPick(forCompare = true) }
             Btn("З моїх позицій", false, Modifier.weight(1f), Icons.Outlined.AccountBalanceWallet) { showPos = !showPos }
         }
         if (showPos) {
