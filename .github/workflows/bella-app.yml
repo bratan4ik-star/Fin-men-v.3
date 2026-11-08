@@ -33,14 +33,24 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Кеш Gradle між запусками: залежності й сам дистрибутив Gradle wrapper (~/.gradle/wrapper/dists),
+      # щоб збій завантаження з services.gradle.org (504) не зупиняв збірку. Пишуть кеш main і ручні запуски,
+      # PR лише читають. Gradle wrapper JAR перевіряється на справжність (validate-wrappers, за замовчуванням).
       - name: Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic # відкритий кеш на actions/cache, без пропрієтарного компонента
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+          gradle-home-cache-includes: |
+            caches
+            notifications
+            wrapper/dists
 
       # Тести й debug-APK одним запуском Gradle: один старт JVM і одна конфігурація проєкту.
+      # scripts/gradlew-retry.sh повторює запуск до 3 разів (пауза 30–60 с) лише при мережевому збої
+      # (завантаження Gradle чи залежностей: 5xx, тайм-аут); падіння тестів і компіляції не повторюються.
       - name: Юніт-тести й debug-APK
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug
+        run: scripts/gradlew-retry.sh --no-daemon :app:testDebugUnitTest :app:assembleDebug
 
 
       # Підписаний release збирається, лише коли задано секрети BELLA_KEYSTORE_BASE64, BELLA_STORE_PASSWORD, BELLA_KEY_ALIAS
@@ -55,9 +65,10 @@ jobs:
           BELLA_KEY_PASSWORD: ${{ secrets.BELLA_KEY_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then echo "Секрети підпису не задано, release пропущено"; exit 0; fi
+          # ключ видаляється й тоді, коли збірка впала
+          trap 'rm -f "$RUNNER_TEMP/bella-release.jks"' EXIT
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/bella-release.jks"
-          BELLA_KEYSTORE="$RUNNER_TEMP/bella-release.jks" ./gradlew --no-daemon :app:assembleRelease
-          rm -f "$RUNNER_TEMP/bella-release.jks"
+          BELLA_KEYSTORE="$RUNNER_TEMP/bella-release.jks" scripts/gradlew-retry.sh --no-daemon :app:assembleRelease
 
       - name: Завантажити APK
         uses: actions/upload-artifact@v7
