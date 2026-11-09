@@ -966,7 +966,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             val id = byCard[card]
             if (t.acc.isEmpty() && !id.isNullOrEmpty()) t.copy(acc = id) else t
         }
-        nd = nd.copy(txs = linkedNew + keep)
+        nd = nd.copy(txs = linkSavingsTransfers(linkedNew, nd.accs) + keep)
         commit(nd); tab = 1; sheet = Sheet.None
         month = data.txs.map { it.date.take(7) }.distinct().sorted().size - 1
         persist()

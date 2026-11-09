@@ -42,4 +42,22 @@ class ReclassTest {
         assertEquals(100.0, after.txs.single().amt, 1e-9)
         assertEquals("transfer", after.txs.single().type)
     }
+
+    @Test fun savingsTransfersGetTheSavingsAccount() {
+        val card = Account("Картка", "UAH", 1000.0, id = "c", card = "1983")
+        val sav = Account("Скарбничка", "UAH", 500.0, sav = true, id = "s")
+        val out = Tx("Скарбничка", "Заощадження", "transfer", 300.0, "2026-10-01", "2026-10-01|x|-300|Скарбничка", "c", 300.0)
+        val inn = Tx("Зі Скарбнички", "Заощадження", "transfer", 200.0, "2026-10-02", "2026-10-02|x|200|Зі Скарбнички", "c", 200.0)
+        val manual = Tx("Переказ", "Заощадження", "transfer", 50.0, "2026-10-03")
+        val r = linkSavingsTransfers(listOf(out, inn, manual), listOf(card, sav))
+        assertEquals("s", r[0].toAcc); assertEquals("c", r[0].acc)
+        assertEquals("s", r[1].acc); assertEquals("c", r[1].toAcc)
+        assertEquals(manual, r[2])   // ручні не чіпаємо
+    }
+
+    @Test fun noSavingsAccountLeavesTransfersAlone() {
+        val card = Account("Картка", "UAH", 1000.0, id = "c", card = "1983")
+        val out = Tx("Скарбничка", "Заощадження", "transfer", 300.0, "2026-10-01", "2026-10-01|x|-300|Скарбничка", "c", 300.0)
+        assertEquals(listOf(out), linkSavingsTransfers(listOf(out), listOf(card)))
+    }
 }
