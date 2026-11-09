@@ -34,3 +34,23 @@ fun reclassifyImported(txs: List<Tx>): List<ReclassChange> = txs.mapIndexedNotNu
 /** Застосовує зміни через replaceTx (баланси коригуються, якщо операція прив'язана до рахунку). */
 fun applyReclass(d: AppData, changes: List<ReclassChange>): AppData =
     changes.fold(d) { acc, c -> replaceTx(acc, c.index, c.new) }
+
+/**
+ * Переказ на депозит/Скарбничку: операції «Заощадження» з виписки отримують другий рахунок (toAcc).
+ * Напрямок — за знаком суми з ключа: від'ємна — з картки на накопичувальний рахунок, додатна — навпаки.
+ * Накопичувальний рахунок — sav = true; якщо їх кілька, беремо той, чия назва збігається з описом (Скарбничка/Депозит).
+ * Вже заповнені toAcc не змінюються. Баланси тут не змінюються (імпорт їх не перераховує).
+ */
+fun linkSavingsTransfers(txs: List<Tx>, accs: List<Account>): List<Tx> {
+    val savings = accs.filter { it.sav && it.id.isNotEmpty() }
+    if (savings.isEmpty()) return txs
+    return txs.map { t ->
+        if (t.type != "transfer" || t.cat != "Заощадження" || t.toAcc.isNotEmpty() || t.acc.isEmpty()) return@map t
+        val target = savings.singleOrNull() ?: savings.firstOrNull { a ->
+            val d = t.desc.lowercase(); val n = a.name.lowercase()
+            (d.contains("скарб") && n.contains("скарб")) || (d.contains("депозит") && n.contains("депоз"))
+        } ?: return@map t
+        val amount = t.key.split("|").getOrNull(2)?.toDoubleOrNull() ?: return@map t
+        if (amount < 0) t.copy(toAcc = target.id) else t.copy(toAcc = t.acc, acc = target.id)
+    }
+}
