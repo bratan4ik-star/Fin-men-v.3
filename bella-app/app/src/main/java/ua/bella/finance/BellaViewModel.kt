@@ -76,6 +76,9 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
     var impResult by mutableStateOf<ImportResult?>(null); private set
     var impBusy by mutableStateOf(false); private set
     var impAcc by mutableStateOf(true)
+    /** Накопичувальний рахунок для переказів «Заощадження», яким не знайдено збігу (коли накопичувальних кілька). */
+    var impSavingsAcc by mutableStateOf(""); private set
+    fun chooseImpSavingsAcc(id: String) { impSavingsAcc = id }
     /** Оновлювати залишки рахунків з виписки — лише за згодою користувача (за замовчуванням ні). */
     var impBal by mutableStateOf(false)
     var impItems by mutableStateOf<List<ImportItem>>(emptyList()); private set
@@ -966,7 +969,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
             val id = byCard[card]
             if (t.acc.isEmpty() && !id.isNullOrEmpty()) t.copy(acc = id) else t
         }
-        nd = nd.copy(txs = linkSavingsTransfers(linkedNew, nd.accs) + keep)
+        nd = nd.copy(txs = linkSavingsTransfers(linkedNew, nd.accs, fallbackId = impSavingsAcc) + keep)
         commit(nd); tab = 1; sheet = Sheet.None
         month = data.txs.map { it.date.take(7) }.distinct().sorted().size - 1
         persist()
@@ -1078,7 +1081,7 @@ class BellaViewModel(app: Application) : AndroidViewModel(app) {
 
     // Наприкінці класу: на цей момент усі поля вже ініціалізовані.
     init {
-        try { Jobs.schedule(ctx) } catch (_: Exception) {}
+        try { Jobs.schedule(ctx); Jobs.scheduleRegistry(ctx) } catch (_: Exception) {}
         viewModelScope.launch {
             val m = withContext(Dispatchers.IO) { try { Jobs.runAutoBackup(ctx) } catch (_: Exception) { null } }
             if (m != null) autoMsg = m; autoAt = Jobs.autoAt(ctx)
