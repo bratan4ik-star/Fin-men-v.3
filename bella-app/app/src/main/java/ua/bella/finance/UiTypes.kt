@@ -2,7 +2,7 @@ package ua.bella.finance
 
 /* Типи стану інтерфейсу: вікна, екрани, поля форм і фільтри (раніше — на початку BellaViewModel.kt). */
 
-enum class Sheet { None, OvdpPick, OvdpCheck, IbkrCharts, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Ibkr, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
+enum class Sheet { None, Reclass, OvdpPick, OvdpCheck, IbkrCharts, Transfer, Acc, Debt, DebtE, Tx, TxE, Rec, Rule, Ibkr, Cats, Goal, GoalE, GoalMove, Pos, PosE, AccE, Settings, Security, Help, Import }
 enum class KMode { None, Unlock, Old, New, Confirm }
 
 /** Усі поля форм у шитах (відповідають полям state у прототипі). */
