@@ -185,7 +185,7 @@ object Importer {
             if (d == null || a == null || a == 0.0) { bad++; return@forEach }
             val desc = p.drop(1).dropLast(1).joinToString(" ").trim()
             val c = ruleFor(desc, rules); val inc = a > 0
-            out.add(Tx(desc, c ?: if (inc) "Зарплата" else "Інше", if (inc) "income" else "expense", Math.abs(a) * curRate, d, "$d|$desc|$a"))
+            out.add(Tx(desc, c ?: if (inc) "Зарплата" else "Інше", if (inc) "income" else "expense", Math.abs(a) * curRate, d, "$d|${desc.replace('|', '/')}|$a"))
         }
         return ImportResult(out, emptyList(), bad)
     }
@@ -324,6 +324,9 @@ object Importer {
     private val ZNYSH_RE = Regex("знищ|znysh", RegexOption.IGNORE_CASE)
     private val DV_RE = Regex("(?<!\\p{L})(дв|dv)(?!\\p{L})|додатков", RegexOption.IGNORE_CASE)
     private val SALARY_RE = Regex("hroshove|грошове забезпечення|зарплата", RegexOption.IGNORE_CASE)
+    private val INTEREST_RE = Regex("% за депозитом|купон|відсот", RegexOption.IGNORE_CASE)
+    /** Переказ від людини латиницею: «SEMCHII ANDRII», «VIKTOR CHICHIHIN, KYIV», необов'язково з префіксом «від». */
+    private val LATIN_PERSON_RE = Regex("^(від\\s+)?[A-Z][A-Z'’-]+(\\s+[A-Z][A-Z'’-]+)+(,\\s*[A-Z][A-Z \\-]+)?$")
 
     /**
      * Виписка ПриватБанку: інвестиції — не витрати, спецдоходи за коментарем, перекази людям і на картки.
@@ -335,7 +338,9 @@ object Importer {
             if (!coupon) return "transfer" to "Інвестиції"
         }
         if (a > 0) {
-            if (cat == "Зарахування переказу" || cat == "Перекази") return "income" to "Перекази від людей"
+            // відсотки й купони з накопичувальних рахунків — окрема категорія (інвестиційний дохід у звіті)
+            if (cat == "Заощадження" && INTEREST_RE.containsMatchIn(desc)) return "income" to "Відсотки та купони"
+            if (cat == "Зарахування переказу" || cat == "Перекази" || LATIN_PERSON_RE.matches(desc.trim())) return "income" to "Перекази від людей"
             val c = when {
                 ZNYSH_RE.containsMatchIn(desc) -> "За знищену техніку"
                 DV_RE.containsMatchIn(desc) -> "Бойові (ДВ)"
@@ -381,7 +386,7 @@ object Importer {
             val c2 = if (type == "transfer" || special != null) c1 else ruleFor(desc, rules) ?: c1
             val (rate, isApprox) = rateOn(cur, iso, archive)
             if (isApprox) approx++
-            txs.add(Tx(desc, c2, type, Math.abs(a) * rate, iso, "$dRaw|$card|$a|$desc", accAmt = Math.abs(a)))
+            txs.add(Tx(desc, c2, type, Math.abs(a) * rate, iso, "$dRaw|$card|$a|${desc.replace('|', '/')}", accAmt = Math.abs(a)))
             val last4 = card.takeLast(4)
             if (last4.isNotEmpty() && seen.add(last4)) {
                 val bc = g(c.balCur).uppercase().ifEmpty { cur }

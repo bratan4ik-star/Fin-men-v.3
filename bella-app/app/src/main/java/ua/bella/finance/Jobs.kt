@@ -13,7 +13,9 @@ import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.NetworkType
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -43,6 +45,26 @@ object Jobs {
             .setInitialDelay(initialDelayMinutes, TimeUnit.MINUTES)
             .build()
         WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("bella-daily", ExistingPeriodicWorkPolicy.UPDATE, req)
+    }
+
+    /** Тижневе оновлення довідника ОВДП НБУ: лише з мережею; при збої — повтор WorkManager-ом. */
+    fun scheduleRegistry(ctx: Context) {
+        val req = PeriodicWorkRequestBuilder<NbuRegistryWorker>(7, TimeUnit.DAYS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("bella-nbu-weekly", ExistingPeriodicWorkPolicy.KEEP, req)
+    }
+
+    /**
+     * Оновлює довідник, якщо він застарів (7 днів). Зберігає лише поле довідника в зашифрованому стані;
+     * повертає true, якщо щось змінилося. Без мережі або при збої — нічого не пише.
+     */
+    fun runRegistryRefresh(ctx: Context, now: Long = System.currentTimeMillis()): Boolean {
+        val st = state(ctx) ?: return false
+        if (!registryDue(st.nbu, now)) return false
+        val (reg, _) = refreshRegistry(st.nbu, LocalDate.now(), now) { nbuGet(it) }
+        if (reg === st.nbu) return false
+        return StateStore.save(PrefsKV.of(ctx), KeystoreKeys.stateCipher, json.encodeToString(st.copy(nbu = reg)))
     }
 
     /** Запуск негайної фонової перевірки через WorkManager (OneTimeWorkRequest). */
@@ -232,6 +254,13 @@ object Jobs {
             "Немає дозволу на надсилання сповіщень"
         }
     }
+}
+
+class NbuRegistryWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result = try {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Jobs.runRegistryRefresh(applicationContext) }
+        Result.success()
+    } catch (_: Exception) { Result.retry() }
 }
 
 class DailyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {

@@ -161,15 +161,7 @@ fun refreshRegistry(old: OvdpRegistry, today: LocalDate, now: Long, get: (String
 }
 
 /** HTTP GET тексту (UTF-8). Лише поза головним потоком. */
-fun httpGetText(url: String, timeoutMs: Int = 30_000): String {
-    val c = URL(url).openConnection() as HttpURLConnection
-    return try {
-        c.connectTimeout = 15_000; c.readTimeout = timeoutMs
-        c.setRequestProperty("Accept", "application/json"); c.setRequestProperty("User-Agent", "BellaFinance/1.0 (Android)")
-        if (c.responseCode != HttpURLConnection.HTTP_OK) throw java.io.IOException("HTTP ${c.responseCode}")
-        c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-    } finally { c.disconnect() }
-}
+fun httpGetText(url: String, timeoutMs: Int = NBU_READ_TIMEOUT_MS): String = nbuGet(url, timeoutMs)
 
 // ---------- вибір і фільтри ----------
 /** Строк до погашення: 0 — до 6 міс, 1 — 6–12 міс, 2 — 1–2 роки, 3 — понад 2 роки. */

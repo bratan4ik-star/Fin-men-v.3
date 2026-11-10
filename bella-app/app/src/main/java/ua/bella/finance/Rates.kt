@@ -31,16 +31,10 @@ fun parseNbuRates(body: String): NbuRates? = try {
     if (out.keys.containsAll(NBU_CODES)) NbuRates(out, date) else null
 } catch (_: Exception) { null }
 
-/** Мережевий запит. Викликати лише поза головним потоком. */
-fun fetchNbuRates(): NbuRates? {
-    val c = URL("https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json").openConnection() as HttpURLConnection
-    return try {
-        c.connectTimeout = 8000; c.readTimeout = 8000
-        c.setRequestProperty("Accept", "application/json")
-        if (c.responseCode != HttpURLConnection.HTTP_OK) null
-        else parseNbuRates(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-    } finally { c.disconnect() }
-}
+/** Мережевий запит курсів з повторами (NbuHttp.kt). Викликати лише поза головним потоком. */
+fun fetchNbuRates(): NbuRates? = try {
+    parseNbuRates(nbuGet("https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json", readTimeoutMs = 30_000))
+} catch (_: Exception) { null }
 
 /** Конвертація між валютами через гривню за мапою курсів (UAH = 1). */
 fun convertAmount(amount: Double, from: String, to: String, rates: Map<String, Double>): Double =
@@ -63,14 +57,8 @@ fun parseNbuHistory(body: String, cur: String): Map<String, Double> = try {
     out
 } catch (_: Exception) { emptyMap() }
 
-/** Мережевий запит архіву за період [startIso, endIso]. Лише поза головним потоком; при збої — порожньо. */
+/** Архів курсів НБУ за період з повторами. Лише поза головним потоком; при збої — порожньо. */
 fun fetchNbuHistory(cur: String, startIso: String, endIso: String): Map<String, Double> = try {
     val s = startIso.replace("-", ""); val e = endIso.replace("-", "")
-    val url = URL("https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${cur.lowercase()}&start=$s&end=$e&sort=exchangedate&order=asc&json")
-    val c = url.openConnection() as HttpURLConnection
-    try {
-        c.connectTimeout = 10000; c.readTimeout = 15000
-        if (c.responseCode != HttpURLConnection.HTTP_OK) emptyMap()
-        else parseNbuHistory(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }, cur)
-    } finally { c.disconnect() }
+    parseNbuHistory(nbuGet("https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?valcode=${cur.lowercase()}&start=$s&end=$e&sort=exchangedate&order=asc&json", readTimeoutMs = 30_000), cur)
 } catch (_: Exception) { emptyMap() }

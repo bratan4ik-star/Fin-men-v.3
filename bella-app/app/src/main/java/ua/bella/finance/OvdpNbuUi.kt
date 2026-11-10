@@ -41,7 +41,7 @@ fun NbuHeader(vm: BellaViewModel) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f)) {
             T("Довідник цінних паперів НБУ", 13.sp, weight = FontWeight.Medium)
-            T(if (r.updatedAt > 0) "Оновлено ${fmtSavedAt(r.updatedAt)} · випусків ${r.bonds.size}" else "Ще не завантажено", 11.sp, C.n500)
+            T(if (r.updatedAt > 0) "Дані станом на ${fmtSavedAt(r.updatedAt)} · випусків ${r.bonds.size}" else "Ще не завантажено", 11.sp, C.n500)
         }
         Btn(if (vm.nbuBusy) "Оновлення…" else "Оновити", false, icon = Icons.Outlined.Refresh) { vm.refreshNbu() }
     }
