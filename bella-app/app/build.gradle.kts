@@ -25,11 +25,11 @@ val buildNumber: Int = System.getenv("BELLA_BUILD_NUMBER")?.toIntOrNull()
 
 android {
     namespace = "ua.bella.finance"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "ua.bella.finance"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = buildNumber
         versionName = appVersionName
         buildConfigField("String", "BUILD_DATE", "\"${LocalDate.now()}\"")
